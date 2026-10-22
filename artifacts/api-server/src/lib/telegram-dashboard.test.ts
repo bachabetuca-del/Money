@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
+import sharp from "sharp";
 import {
   TelegramDashboard, type DashboardApi, type DashboardState,
   type DashboardStore, type DashboardTrade,
@@ -450,4 +451,25 @@ test("loading and incomplete-history status edits the existing dashboard rather 
   assert.match(String(api.photos().at(-1)?.body.media), /History incomplete/);
   assert.ok(api.photos().every(call => call.method === "editMessageMedia"));
   assert.equal((await store.state(settings.chatId))?.messageId, 400);
+});
+
+test("phone cards render safely for sparse history, long names, large amounts and both value sections", async () => {
+  const now = new Date("2026-10-22T18:00:00Z");
+  const cases = [
+    { band: "large" as const, amount: 1250000, game: "New England & Chicago <Overtime>", bet: "Chicago wins" },
+    { band: "medium" as const, amount: 9999.99, game: "New England vs Chicago: Total Points",
+      bet: "New England and Chicago combine for more than 48.5 total points?" },
+  ];
+  for (const item of cases) {
+    const rows = [{ ...trade(summary()), eventTitle: item.game, marketTitle: item.bet,
+      notional: item.amount, price: 0.5, count: item.amount * 2,
+      createdTime: new Date(now.getTime() - 30 * 24 * 60 * 60_000) }];
+    const before = JSON.stringify(rows);
+    const svg = marketCardSvg(rows, item.band === "large" ? 10000 : 5000, undefined, item.band, now);
+    assert.doesNotMatch(svg, /\b(?:NaN|Infinity|undefined)\b/);
+    if (item.game.includes("<")) assert.ok(svg.includes("&lt;Overtime&gt;"));
+    const phone = await sharp(Buffer.from(svg)).resize({ width: 390 }).png().toBuffer();
+    assert.equal((await sharp(phone).metadata()).width, 390);
+    assert.equal(JSON.stringify(rows), before, "Presentation must not mutate the actual trade history");
+  }
 });

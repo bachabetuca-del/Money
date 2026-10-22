@@ -55,19 +55,24 @@ function compactMoney(value: number) {
   return value >= 1000 ? `$${(value / 1000).toFixed(1)}k` : `$${Math.round(value)}`;
 }
 
+const OLD = ["#2F7F88", "#9A6420", "#5B6663"];
+const NEW = ["#4FDDE8", "#FFB13B", "#B4BDBA"];
+
 /** Every qualifying trade contributes to a time bucket; no last-N truncation. */
 export function historyPlotSvg(trades: MarketCardTrade[], now: Date, top: number, bottom: number) {
   const history = bucketHistory(trades, now);
-  const left = 152;
-  const right = 836;
+  const left = 176;
+  const right = 856;
   const column = (right - left) / history.buckets.length;
-  const barWidth = Math.min(72, column * 0.72);
-  const maximum = Math.max(1, ...history.buckets.map(bucket => bucket.total)) * 1.15;
+  const barWidth = Math.min(80, Math.max(4, column * 0.78));
+  const maximum = Math.max(1, ...history.buckets.map(bucket => bucket.total)) * 1.18;
   const grid = [0, 0.5, 1].map(fraction => {
     const y = bottom - fraction * (bottom - top);
-    return `<line x1="${left}" y1="${y}" x2="${right}" y2="${y}" stroke="#334155" stroke-width="2"/>
-      <text x="${left - 18}" y="${y + 10}" text-anchor="end" font-size="27" fill="#94A3B8">${compactMoney(maximum * fraction)}</text>`;
+    return `<line x1="${left}" y1="${y}" x2="${right}" y2="${y}" stroke="${fraction === 0 ? "#6B7C77" : "#2A3B36"}" stroke-width="${fraction === 0 ? 3 : 2}" ${fraction === 0 ? "" : 'stroke-dasharray="3 9"'}/>
+      <text x="${left - 16}" y="${y + 10}" text-anchor="end" font-size="28" font-weight="600" fill="#A9B8B3">${compactMoney(maximum * fraction)}</text>`;
   }).join("");
+  let latestBand = "";
+  let latestLabel = "";
   const bars = history.buckets.map((bucket, index) => {
     const x = left + column * (index + 0.5) - barWidth / 2;
     let used = 0;
@@ -76,22 +81,30 @@ export function historyPlotSvg(trades: MarketCardTrade[], now: Date, top: number
       const height = value / maximum * (bottom - top);
       const y = bottom - used - height;
       used += height;
-      return `<rect x="${x}" y="${y}" width="${barWidth}" height="${height}"
-        fill="${["#61A9BD", "#E98E2E", "#979797"][segment % 3]}" opacity="${segment >= 3 ? 1 : 0.35}"/>`;
+      const color = (segment >= 3 ? NEW : OLD)[segment % 3];
+      return `<rect x="${x}" y="${y}" width="${barWidth}" height="${height}" fill="${color}" stroke="#0C1714" stroke-width="1.5"/>`;
     }).join("");
-    const outline = index === history.latestIndex && bucket.count
-      ? `<rect x="${x - 3}" y="${bottom - used - 3}" width="${barWidth + 6}" height="${used + 6}"
-          fill="none" stroke="#FFFFFF" stroke-width="3" rx="3"/>` : "";
-    return segments + outline;
+    if (index === history.latestIndex && bucket.count) {
+      latestBand = `<rect x="${x - 8}" y="${top - 6}" width="${barWidth + 16}" height="${bottom - top + 6}" rx="8" fill="#F4F1E6" fill-opacity="0.09"/>`;
+      latestLabel = `<rect x="${x - 4}" y="${bottom - used - 4}" width="${barWidth + 8}" height="${used + 4}" fill="none" stroke="#F4F1E6" stroke-width="4" rx="4"/>
+        <text x="${right}" y="${top - 16}" text-anchor="end" font-size="25" font-weight="600" fill="#D9E2DC">Last interval total: ${compactMoney(bucket.total)}</text>`;
+    }
+    return segments;
   }).join("");
-  const labels = [0, 0.5, 1].map(fraction => {
+  const span = history.end - history.start;
+  const longRange = span >= 2 * 24 * 60 * MINUTE;
+  const ticks = longRange || span < 4 * MINUTE ? [0, 0.5, 1] : [0, 0.25, 0.5, 0.75, 1];
+  const labels = ticks.map(fraction => {
     const date = new Date(history.start + (history.end - history.start) * fraction);
     const day = date.toLocaleDateString("en-US", { timeZone: "America/New_York", month: "short", day: "numeric" });
-    const time = date.toLocaleTimeString("en-US", { timeZone: "America/New_York", hour: "numeric", minute: "2-digit", hour12: false });
-    return `<text x="${left + (right - left) * fraction}" y="${bottom + 36}"
-        text-anchor="${fraction === 0 ? "start" : fraction === 1 ? "end" : "middle"}" font-size="24" fill="#CBD5E1">${day}</text>
-      <text x="${left + (right - left) * fraction}" y="${bottom + 65}"
-        text-anchor="${fraction === 0 ? "start" : fraction === 1 ? "end" : "middle"}" font-size="23" fill="#94A3B8">${time}</text>`;
+    const time = date.toLocaleTimeString("en-US", { timeZone: "America/New_York", hour: "numeric", minute: "2-digit",
+      ...(span <= 2 * MINUTE ? { second: "2-digit" as const } : {}), hour12: false });
+    const x = left + (right - left) * fraction;
+    const anchor = fraction === 0 ? "start" : fraction === 1 ? "end" : "middle";
+    const first = fraction === 0 || fraction === 0.5 || fraction === 1;
+    return `<line x1="${x}" y1="${bottom}" x2="${x}" y2="${bottom + 10}" stroke="#6B7C77" stroke-width="2"/>
+      <text x="${x}" y="${bottom + 42}" text-anchor="${anchor}" font-size="27" font-weight="700" fill="#E8EDE9">${longRange ? day : time}</text>
+      ${first ? `<text x="${x}" y="${bottom + 74}" text-anchor="${anchor}" font-size="24" fill="#A9B8B3">${longRange ? time : day}</text>` : ""}`;
   }).join("");
-  return { ...history, svg: grid + bars + labels };
+  return { ...history, svg: grid + latestBand + bars + latestLabel + labels };
 }
