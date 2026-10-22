@@ -195,7 +195,8 @@ export function menuView(selection: Selection, catalog: CatalogMarket[], enabled
   keyboard.inline_keyboard.push([{ text: "Refresh", callback_data: "d:refresh" }]);
   const status = enabled ? "LIVE · checks every 15 seconds" : "PAUSED · saved trade history";
   const caption = `<b>${escapeHtml(title)}</b>\nChoose a button below. Sport → Game → Market.\n` +
-    `<i>${status}. Captured trades ${escapeHtml(activeRange)} only; sections never mix.</i>`;
+    `<i>${status}. Captured trades ${escapeHtml(activeRange)} only; sections never mix.</i>\n` +
+    "Notifications: new trades over $10,000 only. Only the latest notice is kept.";
   return { title, subtitle, items: visible, page, pages, keyboard, caption, status };
 }
 

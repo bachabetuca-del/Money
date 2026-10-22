@@ -10,6 +10,8 @@ import { telegramDashboardStore } from "./telegram-dashboard-store";
 import { shouldCaptureTrade } from "./kalshi-trade-bands";
 import { MarketHistory, type HistoryJob } from "./kalshi-market-history";
 import { marketHistoryStore } from "./kalshi-market-history-store";
+import { liveNotificationTrades, TelegramTradeNotifications } from "./telegram-trade-notifications";
+import { enqueueLiveNotifications, tradeNotificationStore } from "./telegram-trade-notification-store";
 
 const KALSHI_API = "https://external-api.kalshi.com/trade-api/v2";
 const TELEGRAM_API = "https://api.telegram.org";
@@ -125,6 +127,12 @@ const telegramDashboard = new TelegramDashboard(telegramDashboardStore, {
   photo: telegramPhotoRequest,
   context: getTradeContext,
   history: ticker => marketHistory.status(ticker),
+});
+const tradeNotifications = new TelegramTradeNotifications(tradeNotificationStore, {
+  request: telegramRequest, context: getTradeContext,
+}, () => new Date(), (event, detail) => {
+  if (event === "sent") logger.info({ tradeId: detail }, "Telegram trade notification delivered");
+  else logger.warn({ error: detail }, event === "failed" ? "Telegram notification will retry" : "Previous notification cleanup will retry");
 });
 
 async function fetchJson<T>(url: string): Promise<T> {
@@ -469,6 +477,10 @@ async function pollOnce() {
           })
           .onConflictDoNothing();
       }
+      // Historical imports can already have inserted the same trade. The separate
+      // outbox deduplicates notifications independently of graph/history storage.
+      await enqueueLiveNotifications(settings.chatId,
+        liveNotificationTrades(newTrades, lastPollBoundary).map(trade => trade.tradeId));
     }
     if (settings.chatId && botToken()) await telegramDashboard.sync(settings);
     lastPollBoundary = pollStartedAt;
@@ -591,6 +603,12 @@ export function startKalshiMonitor() {
     }).catch(error => logger.warn({ error: error instanceof Error ? error.message : "History worker failed" },
       "Market history worker failed"));
   }, 2000);
+  setInterval(() => {
+    void readSettings().then(async settings => {
+      if (botToken()) await tradeNotifications.tick(settings);
+    }).catch(error => logger.warn({ error: error instanceof Error ? error.message : "Notification worker failed" },
+      "Telegram notification worker failed"));
+  }, 3000);
   void telegramPollingLoop();
   logger.info({ intervalMs: POLL_INTERVAL_MS }, "Kalshi sports monitor started");
 }

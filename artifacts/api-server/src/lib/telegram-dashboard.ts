@@ -137,6 +137,7 @@ export class TelegramDashboard {
           !settings.enabled ? "History loading paused." :
           `Loading history · ${history.scanned.toLocaleString("en-US")} public trades checked; graph is partial.`}` : "") +
         "\nBars sum trade value per interval. Bright portions: last 15 minutes. White outline: latest interval." +
+        "\nNotifications: new trades over $10,000 only; latest notice kept." +
         (settings.enabled ? "\nLive · checks every 15 seconds." : "\nMonitoring paused · saved history.");
       keyboard = chartKeyboard(selection, market.marketUrl, settings.minimumNotional);
     } else {
@@ -170,6 +171,7 @@ export class TelegramDashboard {
       if (messageId === null) {
         const sent = await this.api.photo<{ message_id: number }>("sendPhoto", {
           chat_id: chatId, caption, parse_mode: "HTML", reply_markup: replyMarkup,
+          disable_notification: "true",
         }, png);
         if (!sent.result?.message_id) throw new Error("Telegram did not return a dashboard message ID.");
         messageId = sent.result.message_id;

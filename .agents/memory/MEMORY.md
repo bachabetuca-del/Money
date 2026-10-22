@@ -2,3 +2,4 @@
 - [Single Telegram dashboard](single-telegram-dashboard.md) — sport → game → market navigation; keep one selected graph updating in the same message.
 - [Trade value sections](trade-value-sections.md) — separate $5k–$10k activity from $10k+; no shared trades at the boundary.
 - [Market history and recency](market-history-and-recency.md) — include pre-bot history within the chosen range; distinguish recent executions from newly imported records.
+- [Telegram push notifications](telegram-push-notifications.md) — notify only for fresh individual trades over $10k; keep just the latest short notice alongside the single graph.

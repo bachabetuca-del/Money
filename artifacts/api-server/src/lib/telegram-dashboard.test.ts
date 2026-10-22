@@ -165,6 +165,7 @@ test("concurrent first opens with no old cards create exactly one dashboard", as
   store.cards = [];
   await Promise.all(Array.from({ length: 8 }, () => dashboard.sync(settings)));
   assert.equal(api.calls.filter(c => c.method === "sendPhoto").length, 1);
+  assert.equal(api.calls.find(call => call.method === "sendPhoto")?.body.disable_notification, "true");
   assert.equal(api.photos().length, 1);
 });
 

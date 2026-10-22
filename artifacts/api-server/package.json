@@ -8,7 +8,7 @@
     "build": "node ./build.mjs",
     "start": "node --enable-source-maps ./dist/index.mjs",
     "typecheck": "tsc -p tsconfig.json --noEmit",
-    "test:telegram": "esbuild src/lib/telegram-dashboard.test.ts --bundle --platform=node --format=esm --packages=external --outfile=.local/tests/telegram-dashboard.test.mjs && NODE_ENV=production node --test .local/tests/telegram-dashboard.test.mjs"
+    "test:telegram": "esbuild src/lib/telegram-dashboard.test.ts src/lib/telegram-trade-notifications.test.ts --bundle --platform=node --format=esm --packages=external --outdir=.local/tests --out-extension:.js=.mjs && NODE_ENV=production node --test .local/tests/telegram-*.test.mjs"
   },
   "dependencies": {
     "@workspace/api-zod": "workspace:*",
