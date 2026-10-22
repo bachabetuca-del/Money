@@ -61,6 +61,7 @@ type Settings = {
   enabled: boolean;
   minimumNotional: number;
   chatId: string | null;
+  telegramUpdateOffset?: number | null;
 };
 
 type TelegramResponse<T> = {
@@ -70,6 +71,7 @@ type TelegramResponse<T> = {
 };
 
 type TelegramUpdate = {
+  update_id?: number;
   message?: {
     text?: string;
     chat?: {
@@ -91,6 +93,7 @@ let lastError: string | null = null;
 let lastPollBoundary: number | null = null;
 let pollInProgress = false;
 let monitorStarted = false;
+let telegramPollInProgress = false;
 
 async function fetchJson<T>(url: string): Promise<T> {
   const response = await fetch(url, { signal: AbortSignal.timeout(15_000) });
@@ -222,6 +225,7 @@ async function readSettings(): Promise<Settings> {
     enabled: saved?.enabled ?? false,
     minimumNotional: saved?.minimumNotional ?? DEFAULT_THRESHOLD,
     chatId: saved?.chatId ?? null,
+    telegramUpdateOffset: saved?.telegramUpdateOffset ?? null,
   };
 }
 
@@ -376,11 +380,112 @@ async function pollOnce() {
   }
 }
 
+async function saveTelegramChatId(chatId: string) {
+  await db
+    .insert(kalshiMonitorSettingsTable)
+    .values({
+      id: 1,
+      enabled: false,
+      minimumNotional: DEFAULT_THRESHOLD,
+      chatId,
+    })
+    .onConflictDoUpdate({
+      target: kalshiMonitorSettingsTable.id,
+      set: { chatId, updatedAt: new Date() },
+    });
+}
+
+async function saveTelegramUpdateOffset(offset: number) {
+  await db
+    .insert(kalshiMonitorSettingsTable)
+    .values({
+      id: 1,
+      enabled: false,
+      minimumNotional: DEFAULT_THRESHOLD,
+      chatId: null,
+      telegramUpdateOffset: offset,
+    })
+    .onConflictDoUpdate({
+      target: kalshiMonitorSettingsTable.id,
+      set: { telegramUpdateOffset: offset },
+    });
+}
+
+async function respondToTelegramUpdate(update: TelegramUpdate) {
+  const message = update.message;
+  const text = message?.text?.trim();
+  const chat = message?.chat;
+  if (!text || !/^\/start(?:@\w+)?(?:\s|$)/i.test(text) || !chat) return;
+
+  const chatId = String(chat.id);
+  await saveTelegramChatId(chatId);
+  await telegramRequest("sendMessage", {
+    chat_id: chatId,
+    text: [
+      "Kalshi Sports Alerts is connected to this chat.",
+      "",
+      "Open the dashboard, enable the monitor, and save settings to start receiving alerts. The default threshold is $10,000 per trade.",
+      "",
+      "Alerts use public market trades and do not identify individual buyers.",
+    ].join("\n"),
+    disable_web_page_preview: true,
+  });
+}
+
+async function pollTelegramUpdates(): Promise<boolean> {
+  if (!botToken() || telegramPollInProgress) return false;
+  telegramPollInProgress = true;
+
+  try {
+    const settings = await readSettings();
+    const request: Record<string, unknown> = {
+      limit: 100,
+      timeout: 10,
+      allowed_updates: ["message"],
+    };
+    if (settings.telegramUpdateOffset != null) {
+      request.offset = settings.telegramUpdateOffset;
+    }
+    const result = await telegramRequest<TelegramUpdate[]>("getUpdates", request);
+
+    for (const update of result.result ?? []) {
+      try {
+        await respondToTelegramUpdate(update);
+      } catch (error) {
+        const message =
+          error instanceof Error ? error.message : "Telegram command handling failed.";
+        logger.warn({ error: message }, "Telegram command handling failed");
+      }
+
+      if (typeof update.update_id === "number") {
+        await saveTelegramUpdateOffset(update.update_id + 1);
+      }
+    }
+    return true;
+  } catch (error) {
+    const message =
+      error instanceof Error ? error.message : "Telegram update polling failed.";
+    logger.warn({ error: message }, "Telegram update polling failed");
+    return false;
+  } finally {
+    telegramPollInProgress = false;
+  }
+}
+
+async function telegramPollingLoop() {
+  const successful = await pollTelegramUpdates();
+  setTimeout(
+    () => void telegramPollingLoop(),
+    successful ? 1_000 : 15_000,
+  );
+}
+
 export function startKalshiMonitor() {
   if (monitorStarted) return;
   monitorStarted = true;
   void pollOnce();
   setInterval(() => void pollOnce(), POLL_INTERVAL_MS);
+  void telegramPollingLoop();
   logger.info({ intervalMs: POLL_INTERVAL_MS }, "Kalshi sports monitor started");
 }
 
@@ -440,34 +545,20 @@ export async function saveKalshiSettings(settings: Settings) {
 }
 
 export async function findTelegramChat() {
-  const result = await telegramRequest<TelegramUpdate[]>("getUpdates", {
-    limit: 100,
-    allowed_updates: ["message"],
-  });
-  const updates = result.result ?? [];
-  const startUpdate = [...updates]
-    .reverse()
-    .find((update) => update.message?.text?.trim().startsWith("/start"));
-  const chat = startUpdate?.message?.chat;
-  if (!chat) {
+  const settings = await readSettings();
+  if (!settings.chatId) {
     return {
       found: false,
       chatId: null,
       displayName: null,
-      message:
-        "No recent /start message found. Open your bot in Telegram and send /start, then try again.",
+      message: "No chat is linked yet. Send /start to the bot and wait a moment for its reply.",
     };
   }
-  const displayName =
-    chat.title ??
-    [chat.first_name, chat.last_name].filter(Boolean).join(" ") ??
-    chat.username ??
-    null;
   return {
     found: true,
-    chatId: String(chat.id),
-    displayName: displayName || chat.username || null,
-    message: "Telegram chat found. Save settings to use this destination.",
+    chatId: settings.chatId,
+    displayName: null,
+    message: "Telegram chat linked. Save settings to use this destination.",
   };
 }
 

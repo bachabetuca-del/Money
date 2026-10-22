@@ -1,5 +1,6 @@
 import {
   boolean,
+  bigint,
   integer,
   numeric,
   pgTable,
@@ -18,6 +19,7 @@ export const kalshiMonitorSettingsTable = pgTable("kalshi_monitor_settings", {
     .notNull()
     .default(10000),
   chatId: text("chat_id"),
+  telegramUpdateOffset: bigint("telegram_update_offset", { mode: "number" }),
   updatedAt: timestamp("updated_at", { withTimezone: true })
     .notNull()
     .defaultNow(),

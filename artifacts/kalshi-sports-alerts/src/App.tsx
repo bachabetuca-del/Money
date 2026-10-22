@@ -110,12 +110,18 @@ function Home() {
   const [savedMessage, setSavedMessage] = useState('');
 
   useEffect(() => {
-    if (!dashboard || initialized) return;
-    setEnabled(dashboard.enabled);
-    setMinimumNotional(String(dashboard.minimumNotional));
-    setChatId(dashboard.chatId ?? '');
-    setInitialized(true);
-  }, [dashboard, initialized]);
+    if (!dashboard) return;
+    if (!initialized) {
+      setEnabled(dashboard.enabled);
+      setMinimumNotional(String(dashboard.minimumNotional));
+      setChatId(dashboard.chatId ?? '');
+      setInitialized(true);
+      return;
+    }
+    if (!chatId.trim() && dashboard.chatId) {
+      setChatId(dashboard.chatId);
+    }
+  }, [dashboard, initialized, chatId]);
 
   const minimumValue = Number(minimumNotional);
   const canSave = Number.isFinite(minimumValue) && minimumValue >= 1 && chatId.trim().length > 0;
