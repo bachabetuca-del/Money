@@ -13,6 +13,7 @@ import {
   saveKalshiSettings,
   sendTelegramTest,
 } from "../lib/kalshi-monitor";
+import { isOwnerChat } from "../lib/owner-policy";
 
 const router: IRouter = Router();
 
@@ -37,6 +38,10 @@ router.put("/kalshi/settings", async (req, res): Promise<void> => {
   const parsed = SaveKalshiSettingsBody.safeParse(req.body);
   if (!parsed.success) {
     res.status(400).json({ error: parsed.error.message });
+    return;
+  }
+  if (!isOwnerChat(parsed.data.chatId.trim())) {
+    res.status(400).json({ error: "The Telegram destination is locked to the owner. Change TELEGRAM_OWNER_CHAT_ID in deployment settings to move it." });
     return;
   }
 
@@ -76,6 +81,10 @@ router.post("/kalshi/telegram/test", async (req, res): Promise<void> => {
   const parsed = SendTelegramTestBody.safeParse(req.body);
   if (!parsed.success) {
     res.status(400).json({ error: parsed.error.message });
+    return;
+  }
+  if (!isOwnerChat(parsed.data.chatId.trim())) {
+    res.status(400).json({ error: "Only the owner's Telegram chat can receive this dashboard." });
     return;
   }
   if (!process.env.TELEGRAM_BOT_TOKEN?.trim()) {

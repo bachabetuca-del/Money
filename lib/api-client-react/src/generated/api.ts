@@ -29,6 +29,9 @@ import type {
   HealthStatus,
   KalshiDashboard,
   KalshiSettingsInput,
+  OwnerRequiredResponse,
+  OwnerUnavailableResponse,
+  SignInRequiredResponse,
   TelegramChatLookup,
   TelegramTestInput,
   TelegramTestResult
@@ -196,7 +199,7 @@ export const getGetKalshiDashboardQueryKey = () => {
     }
 
 
-export const getGetKalshiDashboardQueryOptions = <TData = Awaited<ReturnType<typeof getKalshiDashboard>>, TError = ErrorType<unknown>>( options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getKalshiDashboard>>, TError, TData>>, request?: SecondParameter<typeof customFetch>}
+export const getGetKalshiDashboardQueryOptions = <TData = Awaited<ReturnType<typeof getKalshiDashboard>>, TError = ErrorType<SignInRequiredResponse | OwnerRequiredResponse | OwnerUnavailableResponse>>( options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getKalshiDashboard>>, TError, TData>>, request?: SecondParameter<typeof customFetch>}
 ) => {
 
 const {query: queryOptions, request: requestOptions} = options ?? {};
@@ -215,10 +218,10 @@ const {query: queryOptions, request: requestOptions} = options ?? {};
 }
 
 export type GetKalshiDashboardQueryResult = NonNullable<Awaited<ReturnType<typeof getKalshiDashboard>>>
-export type GetKalshiDashboardQueryError = ErrorType<unknown>
+export type GetKalshiDashboardQueryError = ErrorType<SignInRequiredResponse | OwnerRequiredResponse | OwnerUnavailableResponse>
 
 
-export function useGetKalshiDashboard<TData = Awaited<ReturnType<typeof getKalshiDashboard>>, TError = ErrorType<unknown>>(
+export function useGetKalshiDashboard<TData = Awaited<ReturnType<typeof getKalshiDashboard>>, TError = ErrorType<SignInRequiredResponse | OwnerRequiredResponse | OwnerUnavailableResponse>>(
   options: { query:Partial<UseQueryOptions<Awaited<ReturnType<typeof getKalshiDashboard>>, TError, TData>> & Pick<
         DefinedInitialDataOptions<
           Awaited<ReturnType<typeof getKalshiDashboard>>,
@@ -228,7 +231,7 @@ export function useGetKalshiDashboard<TData = Awaited<ReturnType<typeof getKalsh
       >, request?: SecondParameter<typeof customFetch>}
  , queryClient?: QueryClient
   ):  DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
-export function useGetKalshiDashboard<TData = Awaited<ReturnType<typeof getKalshiDashboard>>, TError = ErrorType<unknown>>(
+export function useGetKalshiDashboard<TData = Awaited<ReturnType<typeof getKalshiDashboard>>, TError = ErrorType<SignInRequiredResponse | OwnerRequiredResponse | OwnerUnavailableResponse>>(
   options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getKalshiDashboard>>, TError, TData>> & Pick<
         UndefinedInitialDataOptions<
           Awaited<ReturnType<typeof getKalshiDashboard>>,
@@ -238,7 +241,7 @@ export function useGetKalshiDashboard<TData = Awaited<ReturnType<typeof getKalsh
       >, request?: SecondParameter<typeof customFetch>}
  , queryClient?: QueryClient
   ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
-export function useGetKalshiDashboard<TData = Awaited<ReturnType<typeof getKalshiDashboard>>, TError = ErrorType<unknown>>(
+export function useGetKalshiDashboard<TData = Awaited<ReturnType<typeof getKalshiDashboard>>, TError = ErrorType<SignInRequiredResponse | OwnerRequiredResponse | OwnerUnavailableResponse>>(
   options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getKalshiDashboard>>, TError, TData>>, request?: SecondParameter<typeof customFetch>}
  , queryClient?: QueryClient
   ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
@@ -246,7 +249,7 @@ export function useGetKalshiDashboard<TData = Awaited<ReturnType<typeof getKalsh
  * @summary Get monitor status and recent qualifying sports trades
  */
 
-export function useGetKalshiDashboard<TData = Awaited<ReturnType<typeof getKalshiDashboard>>, TError = ErrorType<unknown>>(
+export function useGetKalshiDashboard<TData = Awaited<ReturnType<typeof getKalshiDashboard>>, TError = ErrorType<SignInRequiredResponse | OwnerRequiredResponse | OwnerUnavailableResponse>>(
   options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getKalshiDashboard>>, TError, TData>>, request?: SecondParameter<typeof customFetch>}
  , queryClient?: QueryClient
  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
@@ -306,7 +309,7 @@ return customFetch<KalshiDashboard>(getSaveKalshiSettingsUrl(),
 
 export const getSaveKalshiSettingsMutationKey = () => ['saveKalshiSettings'] as const;
 
-export const getSaveKalshiSettingsMutationOptions = <TError = ErrorType<ApiError>,
+export const getSaveKalshiSettingsMutationOptions = <TError = ErrorType<ApiError | SignInRequiredResponse | OwnerRequiredResponse | OwnerUnavailableResponse>,
     TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof saveKalshiSettings>>, TError,SaveKalshiSettingsMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
 ): UseMutationOptions<Awaited<ReturnType<typeof saveKalshiSettings>>, TError,SaveKalshiSettingsMutationVariables, TContext> => {
 
@@ -335,13 +338,13 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
 
     export type SaveKalshiSettingsMutationResult = NonNullable<Awaited<ReturnType<typeof saveKalshiSettings>>>
     export type SaveKalshiSettingsMutationBody = BodyType<KalshiSettingsInput>
-    export type SaveKalshiSettingsMutationError = ErrorType<ApiError>
+    export type SaveKalshiSettingsMutationError = ErrorType<ApiError | SignInRequiredResponse | OwnerRequiredResponse | OwnerUnavailableResponse>
     export type SaveKalshiSettingsMutationVariables = {data: BodyType<KalshiSettingsInput>}
 
     /**
  * @summary Save sports trade alert settings
  */
-export const useSaveKalshiSettings = <TError = ErrorType<ApiError>,
+export const useSaveKalshiSettings = <TError = ErrorType<ApiError | SignInRequiredResponse | OwnerRequiredResponse | OwnerUnavailableResponse>,
     TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof saveKalshiSettings>>, TError,SaveKalshiSettingsMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
  , queryClient?: QueryClient): UseMutationResult<
         Awaited<ReturnType<typeof saveKalshiSettings>>,
@@ -361,7 +364,7 @@ export const getFindTelegramChatUrl = () => {
 }
 
 /**
- * @summary Find the chat that recently sent /start to the bot
+ * @summary Get the owner-locked Telegram destination
  */
 export const findTelegramChat = async ( options?: Parameters<typeof customFetch>[1]): Promise<TelegramChatLookup> => {
 
@@ -380,7 +383,7 @@ export const findTelegramChat = async ( options?: Parameters<typeof customFetch>
 
 export const getFindTelegramChatMutationKey = () => ['findTelegramChat'] as const;
 
-export const getFindTelegramChatMutationOptions = <TError = ErrorType<unknown>,
+export const getFindTelegramChatMutationOptions = <TError = ErrorType<SignInRequiredResponse | OwnerRequiredResponse | OwnerUnavailableResponse>,
     TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof findTelegramChat>>, TError,void, TContext>, request?: SecondParameter<typeof customFetch>}
 ): UseMutationOptions<Awaited<ReturnType<typeof findTelegramChat>>, TError,void, TContext> => {
 
@@ -409,13 +412,13 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
 
     export type FindTelegramChatMutationResult = NonNullable<Awaited<ReturnType<typeof findTelegramChat>>>
 
-    export type FindTelegramChatMutationError = ErrorType<unknown>
+    export type FindTelegramChatMutationError = ErrorType<SignInRequiredResponse | OwnerRequiredResponse | OwnerUnavailableResponse>
 
 
     /**
- * @summary Find the chat that recently sent /start to the bot
+ * @summary Get the owner-locked Telegram destination
  */
-export const useFindTelegramChat = <TError = ErrorType<unknown>,
+export const useFindTelegramChat = <TError = ErrorType<SignInRequiredResponse | OwnerRequiredResponse | OwnerUnavailableResponse>,
     TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof findTelegramChat>>, TError,void, TContext>, request?: SecondParameter<typeof customFetch>}
  , queryClient?: QueryClient): UseMutationResult<
         Awaited<ReturnType<typeof findTelegramChat>>,
@@ -435,7 +438,7 @@ export const getSendTelegramTestUrl = () => {
 }
 
 /**
- * @summary Send a test alert to the selected Telegram chat
+ * @summary Refresh the owner-locked Telegram dashboard
  */
 export const sendTelegramTest = async (telegramTestInput: TelegramTestInput, options?: Parameters<typeof customFetch>[1]): Promise<TelegramTestResult> => {
 
@@ -468,7 +471,7 @@ return customFetch<TelegramTestResult>(getSendTelegramTestUrl(),
 
 export const getSendTelegramTestMutationKey = () => ['sendTelegramTest'] as const;
 
-export const getSendTelegramTestMutationOptions = <TError = ErrorType<ApiError>,
+export const getSendTelegramTestMutationOptions = <TError = ErrorType<ApiError | SignInRequiredResponse | OwnerRequiredResponse | OwnerUnavailableResponse>,
     TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof sendTelegramTest>>, TError,SendTelegramTestMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
 ): UseMutationOptions<Awaited<ReturnType<typeof sendTelegramTest>>, TError,SendTelegramTestMutationVariables, TContext> => {
 
@@ -497,13 +500,13 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
 
     export type SendTelegramTestMutationResult = NonNullable<Awaited<ReturnType<typeof sendTelegramTest>>>
     export type SendTelegramTestMutationBody = BodyType<TelegramTestInput>
-    export type SendTelegramTestMutationError = ErrorType<ApiError>
+    export type SendTelegramTestMutationError = ErrorType<ApiError | SignInRequiredResponse | OwnerRequiredResponse | OwnerUnavailableResponse>
     export type SendTelegramTestMutationVariables = {data: BodyType<TelegramTestInput>}
 
     /**
- * @summary Send a test alert to the selected Telegram chat
+ * @summary Refresh the owner-locked Telegram dashboard
  */
-export const useSendTelegramTest = <TError = ErrorType<ApiError>,
+export const useSendTelegramTest = <TError = ErrorType<ApiError | SignInRequiredResponse | OwnerRequiredResponse | OwnerUnavailableResponse>,
     TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof sendTelegramTest>>, TError,SendTelegramTestMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
  , queryClient?: QueryClient): UseMutationResult<
         Awaited<ReturnType<typeof sendTelegramTest>>,

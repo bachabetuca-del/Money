@@ -88,7 +88,7 @@ export const SaveKalshiSettingsResponse = zod.object({
 
 
 /**
- * @summary Find the chat that recently sent /start to the bot
+ * @summary Get the owner-locked Telegram destination
  */
 export const FindTelegramChatResponse = zod.object({
   "found": zod.boolean(),
@@ -99,7 +99,7 @@ export const FindTelegramChatResponse = zod.object({
 
 
 /**
- * @summary Send a test alert to the selected Telegram chat
+ * @summary Refresh the owner-locked Telegram dashboard
  */
 
 

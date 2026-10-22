@@ -38,6 +38,8 @@ import {
   Router as WouterRouter,
 } from 'wouter';
 import type { ReactNode } from 'react';
+import { UserButton } from '@clerk/react';
+import { OwnerAuthProvider, ClearOwnerCache, OwnerLanding, RequireSignIn, OwnerSignIn, OwnerSignUp } from '@/components/owner-access';
 
 const queryClient = new QueryClient();
 
@@ -93,7 +95,7 @@ function LoadingDashboard() {
 function Home() {
   const queryClient = useQueryClient();
   const { data: dashboard, isLoading, isError, error, refetch, isFetching } = useGetKalshiDashboard({
-    query: { refetchInterval: 15000 },
+    query: { refetchInterval: 15000, retry: false },
   });
   const saveSettings = useSaveKalshiSettings();
   const findChat = useFindTelegramChat();
@@ -195,7 +197,7 @@ function Home() {
         {isError && (
           <div className="error-box" role="alert" data-testid="status-dashboard-error">
             <div className="error-copy">
-              <strong>Dashboard connection interrupted</strong>
+              <strong>Dashboard access unavailable</strong>
               <p>{error instanceof Error ? error.message : 'The monitor could not load its latest status.'}</p>
             </div>
             <button className="button secondary" onClick={() => void refetch()} data-testid="button-retry-dashboard">
@@ -300,12 +302,15 @@ function Home() {
                         id="chat-id-input"
                         type="text"
                         value={chatId}
+                        readOnly
+                        aria-readonly="true"
                         onChange={(event) => { setChatId(event.target.value); setSavedMessage(''); }}
                         placeholder="Find it with the setup below"
                         autoComplete="off"
                         data-testid="input-telegram-chat-id"
                       />
                     </div>
+                    <div className="small-note">Owner-locked destination. Telegram /start cannot change it.</div>
                   </div>
 
                   <div className="save-row">
@@ -459,6 +464,7 @@ function Header() {
         <span>Fieldnote <span style={{ color: '#8c9690', fontWeight: 500 }}>/ Kalshi</span></span>
       </div>
       <div className="top-meta">
+        <UserButton />
         <span className="meta-refresh">SPORTS FLOW MONITOR</span>
         <span className="live-pill"><i className="live-dot" /> Public feed</span>
       </div>
@@ -489,7 +495,10 @@ function Router() {
   return (
     <RoutedErrorBoundary>
       <Switch>
-        <Route path="/" component={Home} />
+        <Route path="/" component={OwnerLanding} />
+        <Route path="/sign-in/*?" component={OwnerSignIn} />
+        <Route path="/sign-up/*?" component={OwnerSignUp} />
+        <Route path="/dashboard">{() => <RequireSignIn><Home /></RequireSignIn>}</Route>
         <Route component={NotFound} />
       </Switch>
     </RoutedErrorBoundary>
@@ -506,7 +515,10 @@ function App() {
     <QueryClientProvider client={queryClient}>
       <TooltipProvider>
         <WouterRouter base={import.meta.env.BASE_URL.replace(/\/$/, '')}>
-          <Router />
+          <OwnerAuthProvider>
+            <ClearOwnerCache />
+            <Router />
+          </OwnerAuthProvider>
         </WouterRouter>
         <Toaster />
       </TooltipProvider>

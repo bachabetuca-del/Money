@@ -4,3 +4,4 @@
 - [Market history and recency](market-history-and-recency.md) — include pre-bot history within the chosen range; distinguish recent executions from newly imported records.
 - [Telegram push notifications](telegram-push-notifications.md) — notify only for fresh individual trades over $10k; keep just the latest short notice alongside the single graph.
 - [Game lifecycle](game-lifecycle.md) — white upcoming, yellow in play, red finished; archive ended games without recurring individual checks or deleting history.
+- [Always-on ownership](always-on-ownership.md) — user-approved Reserved VM preparation, owner-only controls, and explicit development-to-production polling handoff.

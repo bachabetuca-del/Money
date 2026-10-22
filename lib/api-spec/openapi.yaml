@@ -7,6 +7,8 @@ info:
 servers:
   - url: /api
     description: Base API path
+security:
+  - ClerkSession: []
 tags:
   - name: health
     description: Health operations
@@ -15,6 +17,7 @@ tags:
 paths:
   /healthz:
     get:
+      security: []
       operationId: healthCheck
       tags: [health]
       summary: Health check
@@ -32,6 +35,12 @@ paths:
       tags: [kalshi]
       summary: Get monitor status and recent qualifying sports trades
       responses:
+        "401":
+          $ref: "#/components/responses/SignInRequired"
+        "403":
+          $ref: "#/components/responses/OwnerRequired"
+        "503":
+          $ref: "#/components/responses/OwnerUnavailable"
         "200":
           description: Dashboard status and recent trades
           content:
@@ -50,6 +59,12 @@ paths:
             schema:
               $ref: "#/components/schemas/KalshiSettingsInput"
       responses:
+        "401":
+          $ref: "#/components/responses/SignInRequired"
+        "403":
+          $ref: "#/components/responses/OwnerRequired"
+        "503":
+          $ref: "#/components/responses/OwnerUnavailable"
         "200":
           description: Settings saved
           content:
@@ -66,8 +81,14 @@ paths:
     post:
       operationId: findTelegramChat
       tags: [kalshi]
-      summary: Find the chat that recently sent /start to the bot
+      summary: Get the owner-locked Telegram destination
       responses:
+        "401":
+          $ref: "#/components/responses/SignInRequired"
+        "403":
+          $ref: "#/components/responses/OwnerRequired"
+        "503":
+          $ref: "#/components/responses/OwnerUnavailable"
         "200":
           description: Chat lookup result
           content:
@@ -78,7 +99,7 @@ paths:
     post:
       operationId: sendTelegramTest
       tags: [kalshi]
-      summary: Send a test alert to the selected Telegram chat
+      summary: Refresh the owner-locked Telegram dashboard
       requestBody:
         required: true
         content:
@@ -86,6 +107,12 @@ paths:
             schema:
               $ref: "#/components/schemas/TelegramTestInput"
       responses:
+        "401":
+          $ref: "#/components/responses/SignInRequired"
+        "403":
+          $ref: "#/components/responses/OwnerRequired"
+        "503":
+          $ref: "#/components/responses/OwnerUnavailable"
         "200":
           description: Test message result
           content:
@@ -99,6 +126,31 @@ paths:
               schema:
                 $ref: "#/components/schemas/ApiError"
 components:
+  securitySchemes:
+    ClerkSession:
+      type: apiKey
+      in: cookie
+      name: __session
+      description: Clerk browser session. Kalshi routes also require the configured owner's verified email.
+  responses:
+    SignInRequired:
+      description: Sign in is required
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ApiError"
+    OwnerRequired:
+      description: Only the configured owner can access this resource
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ApiError"
+    OwnerUnavailable:
+      description: Owner authorization is unavailable or not configured
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ApiError"
   schemas:
     HealthStatus:
       type: object

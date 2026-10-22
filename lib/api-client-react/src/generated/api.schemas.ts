@@ -71,3 +71,18 @@ export interface TelegramTestResult {
   message: string;
 }
 
+/**
+ * Sign in is required
+ */
+export type SignInRequiredResponse = ApiError;
+
+/**
+ * Only the configured owner can access this resource
+ */
+export type OwnerRequiredResponse = ApiError;
+
+/**
+ * Owner authorization is unavailable or not configured
+ */
+export type OwnerUnavailableResponse = ApiError;
+

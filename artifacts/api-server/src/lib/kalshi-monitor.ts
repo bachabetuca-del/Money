@@ -1,4 +1,4 @@
-import { and, count, eq, gte, isNotNull } from "drizzle-orm";
+import { and, count, desc, eq, gte, isNotNull } from "drizzle-orm";
 import {
   db,
   kalshiAlertsTable,
@@ -15,6 +15,7 @@ import { enqueueLiveNotifications, tradeNotificationStore } from "./telegram-tra
 import { GameStatusMonitor } from "./kalshi-game-status";
 import { KalshiGameStatusSource } from "./kalshi-game-status-source";
 import { canMonitorMarket, gameStatusRepository, readGameStatus } from "./kalshi-game-status-store";
+import { isOwnerChat, ownerChatId } from "./owner-policy";
 
 const KALSHI_API = "https://external-api.kalshi.com/trade-api/v2";
 const TELEGRAM_API = "https://api.telegram.org";
@@ -365,7 +366,7 @@ async function readSettings(): Promise<Settings> {
   return {
     enabled: saved?.enabled ?? false,
     minimumNotional: saved?.minimumNotional ?? DEFAULT_THRESHOLD,
-    chatId: saved?.chatId ?? null,
+    chatId: ownerChatId(),
     telegramUpdateOffset: saved?.telegramUpdateOffset ?? null,
   };
 }
@@ -514,6 +515,7 @@ async function pollOnce() {
 }
 
 async function saveTelegramChatId(chatId: string) {
+  if (!isOwnerChat(chatId)) return;
   await db
     .insert(kalshiMonitorSettingsTable)
     .values({
@@ -545,6 +547,8 @@ async function saveTelegramUpdateOffset(offset: number) {
 }
 
 async function respondToTelegramUpdate(update: TelegramUpdate) {
+  const incomingChat = update.callback_query?.message?.chat.id ?? update.message?.chat?.id;
+  if (incomingChat == null || !isOwnerChat(String(incomingChat))) return;
   if (update.callback_query) {
     await telegramDashboard.callback(update.callback_query, await readSettings());
     return;
@@ -642,7 +646,21 @@ export async function getKalshiDashboard() {
     .select({ value: count() })
     .from(kalshiAlertsTable)
     .where(gte(kalshiAlertsTable.notional, settings.minimumNotional));
-  const recentTrades = latestQualifyingTrades.slice(0, 50);
+  // Use durable executions rather than only the latest polling batch, which
+  // may be empty after a restart or when no qualifying trade just occurred.
+  const savedRecent = await db.select().from(kalshiAlertsTable)
+    .where(gte(kalshiAlertsTable.notional, settings.minimumNotional))
+    .orderBy(desc(kalshiAlertsTable.createdTime))
+    .limit(50);
+  const recentTrades: PublicTrade[] = savedRecent.map(trade => ({
+    tradeId: trade.tradeId, ticker: trade.ticker, title: trade.title,
+    eventTitle: trade.eventTitle ?? trade.title,
+    marketTitle: trade.marketTitle ?? trade.title,
+    sport: trade.sport, outcomeSide: trade.outcomeSide, bookSide: trade.bookSide,
+    price: trade.price, count: trade.count, notional: trade.notional,
+    createdTime: trade.createdTime.toISOString(), blockTrade: trade.blockTrade,
+    marketUrl: trade.marketUrl,
+  }));
   const status = !settings.enabled
     ? "paused"
     : !botToken() || !settings.chatId
@@ -676,6 +694,7 @@ export async function getKalshiDashboard() {
 }
 
 export async function saveKalshiSettings(settings: Settings) {
+  if (!isOwnerChat(settings.chatId)) throw new Error("Telegram destination is owner-locked.");
   await db
     .insert(kalshiMonitorSettingsTable)
     .values({
@@ -714,6 +733,7 @@ export async function findTelegramChat() {
 }
 
 export async function sendTelegramTest(chatId: string) {
+  if (!isOwnerChat(chatId)) throw new Error("Telegram destination is owner-locked.");
   const settings = await readSettings();
   await telegramDashboard.sync({ ...settings, chatId }, true);
 }
