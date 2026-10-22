@@ -1,0 +1,16 @@
+uploads = []
+generated = []
+
+[[outputs]]
+id = "4tlenhpxFdDB2R4444-b7"
+uri = "file://.local/outputs/kalshi-card-preview.png"
+type = "image"
+title = "Revised Telegram card"
+description = "Phone-readable preview using the real New England vs Chicago trade history: clear bet description, trade value, and FOR/AGAINST direction."
+logical_id = "45edd526-8e8a-43f5-9e9e-a3904755b3b2"
+content_hash = "sha256:5e4f3fdd3e633c498fa51eebb43c7987e06a74ca5cb32b7cc241738f199f41fb"
+size = 111934
+mtime_ms = 1792696225464
+storage_uri = "gcs://replit-rams-assets-kirk/rams/assets/repl:217fd6cc-800e-4596-b158-396d253b647b/45edd526-8e8a-43f5-9e9e-a3904755b3b2/2ecfe86f-54f4-4a37-9b49-f73cb0b8988a"
+storage_version_token = "1792696320673265"
+content_type = "image/png"

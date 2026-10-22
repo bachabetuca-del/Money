@@ -16,6 +16,11 @@ import {
   kalshiTelegramChartsTable,
 } from "@workspace/db";
 import { logger } from "./logger";
+import {
+  MARKET_CARD_VERSION,
+  marketCardCaption,
+  marketCardSvg,
+} from "./telegram-market-card";
 
 const KALSHI_API = "https://external-api.kalshi.com/trade-api/v2";
 const TELEGRAM_API = "https://api.telegram.org";
@@ -251,66 +256,57 @@ function toPublicTrade(
   };
 }
 
-async function withTradeContext(trade: PublicTrade): Promise<PublicTrade> {
-  let contextPromise = tradeContextCache.get(trade.ticker);
+async function getTradeContext(ticker: string) {
+  let contextPromise = tradeContextCache.get(ticker);
   if (!contextPromise) {
     contextPromise = (async () => {
-      try {
-        const marketResponse = await fetchJson<{ market: KalshiMarketMetadata }>(
-          `${KALSHI_API}/markets/${encodeURIComponent(trade.ticker)}`,
-        );
-        const market = marketResponse.market;
-        let eventTitle = trade.eventTitle;
-
-        if (market.event_ticker) {
-          let eventTitlePromise = eventTitleCache.get(market.event_ticker);
-          if (!eventTitlePromise) {
-            eventTitlePromise = fetchJson<{ event: KalshiEventMetadata }>(
-              `${KALSHI_API}/events/${encodeURIComponent(market.event_ticker)}`,
-            )
-              .then(
-                ({ event }) =>
-                  event.title ?? event.sub_title ?? trade.eventTitle,
-              )
-              .catch(() => trade.eventTitle);
-            if (eventTitleCache.size >= 5_000) eventTitleCache.clear();
-            eventTitleCache.set(market.event_ticker, eventTitlePromise);
-          }
-          eventTitle = await eventTitlePromise;
-        }
-
-        return {
-          eventTitle,
-          marketTitle:
-            market.title ??
-            market.yes_sub_title ??
-            market.no_sub_title ??
-            trade.marketTitle,
-        };
-      } catch (error) {
-        logger.debug(
-          {
-            ticker: trade.ticker,
-            error: error instanceof Error ? error.message : "Metadata unavailable",
-          },
-          "Using ticker fallback for trade context",
-        );
-        return {
-          eventTitle: trade.eventTitle,
-          marketTitle: trade.marketTitle,
-        };
+      const marketResponse = await fetchJson<{ market: KalshiMarketMetadata }>(
+        `${KALSHI_API}/markets/${encodeURIComponent(ticker)}`,
+      );
+      const market = marketResponse.market;
+      const eventTicker = market.event_ticker;
+      if (!eventTicker) throw new Error("Kalshi market has no game identifier.");
+      let eventTitlePromise = eventTitleCache.get(eventTicker);
+      if (!eventTitlePromise) {
+        eventTitlePromise = fetchJson<{ event: KalshiEventMetadata }>(
+          `${KALSHI_API}/events/${encodeURIComponent(eventTicker)}`,
+        ).then(({ event }) => {
+          const title = event.title?.trim() || event.sub_title?.trim();
+          if (!title) throw new Error("Kalshi game title is unavailable.");
+          return title;
+        }).catch((error) => {
+          eventTitleCache.delete(eventTicker);
+          throw error;
+        });
+        if (eventTitleCache.size >= 5_000) eventTitleCache.clear();
+        eventTitleCache.set(eventTicker, eventTitlePromise);
       }
+      const eventTitle = await eventTitlePromise;
+      const marketTitle = market.title?.trim() || market.yes_sub_title?.trim();
+      if (!marketTitle || marketTitle.includes(ticker)) {
+        throw new Error("Kalshi bet description is unavailable; will retry before sending.");
+      }
+      return { eventTitle, marketTitle };
     })();
     if (tradeContextCache.size >= 5_000) tradeContextCache.clear();
-    tradeContextCache.set(trade.ticker, contextPromise);
+    tradeContextCache.set(ticker, contextPromise);
   }
+  try {
+    return await contextPromise;
+  } catch (error) {
+    tradeContextCache.delete(ticker);
+    throw error;
+  }
+}
 
-  const context = await contextPromise;
-  return {
-    ...trade,
-    ...context,
-    title: `${context.eventTitle} · ${context.marketTitle}`,
-  };
+async function withTradeContext(trade: PublicTrade): Promise<PublicTrade> {
+  try {
+    const context = await getTradeContext(trade.ticker);
+    return { ...trade, ...context, title: `${context.eventTitle} · ${context.marketTitle}` };
+  } catch (error) {
+    logger.debug({ ticker: trade.ticker }, "Game metadata unavailable; will retry");
+    return trade;
+  }
 }
 
 async function readSettings(): Promise<Settings> {
@@ -351,116 +347,6 @@ async function telegramRequest<T>(
   return result;
 }
 
-function escapeTelegramHtml(value: string) {
-  return value
-    .replaceAll("&", "&amp;")
-    .replaceAll("<", "&lt;")
-    .replaceAll(">", "&gt;")
-    .replaceAll('"', "&quot;");
-}
-
-function escapeXml(value: string) {
-  return value
-    .replaceAll("&", "&amp;")
-    .replaceAll("<", "&lt;")
-    .replaceAll(">", "&gt;")
-    .replaceAll('"', "&quot;")
-    .replaceAll("'", "&apos;");
-}
-
-function tradeChartCaption(
-  trades: (typeof kalshiAlertsTable.$inferSelect)[],
-  minimumNotional: number,
-) {
-  const newest = trades[trades.length - 1];
-  return [
-    `🏈 <b>${escapeTelegramHtml(newest.eventTitle ?? newest.title)}</b>`,
-    `<b>Market:</b> ${escapeTelegramHtml(newest.marketTitle ?? newest.ticker)}`,
-    `<b>Qualifying trades:</b> ${trades.length.toLocaleString("en-US")} · threshold $${minimumNotional.toLocaleString("en-US")}`,
-    `<a href="${escapeTelegramHtml(newest.marketUrl)}">Open this market in Kalshi</a>`,
-    "<i>Each dot is a public trade; color shows taker position and size shows trade value. Public data does not identify buyers.</i>",
-  ].join("\n");
-}
-
-function tradeChartSvg(
-  trades: (typeof kalshiAlertsTable.$inferSelect)[],
-) {
-  const width = 1200;
-  const height = 720;
-  const left = 112;
-  const right = 1148;
-  const top = 208;
-  const bottom = 590;
-  const plotWidth = right - left;
-  const plotHeight = bottom - top;
-  const visibleTrades = trades.slice(-100);
-  const times = visibleTrades.map((trade) => trade.createdTime.getTime());
-  const minTime = Math.min(...times);
-  const maxTime = Math.max(...times);
-  const eventTitle = escapeXml(
-    visibleTrades[visibleTrades.length - 1].eventTitle ??
-      visibleTrades[visibleTrades.length - 1].title,
-  );
-  const marketTitle = escapeXml(
-    visibleTrades[visibleTrades.length - 1].marketTitle ??
-      visibleTrades[visibleTrades.length - 1].ticker,
-  );
-  const points = visibleTrades
-    .map((trade) => {
-      const time = trade.createdTime.getTime();
-      const x =
-        minTime === maxTime
-          ? left + plotWidth / 2
-          : left + ((time - minTime) / (maxTime - minTime)) * plotWidth;
-      const priceCents = Math.max(0, Math.min(100, trade.price * 100));
-      const y = bottom - (priceCents / 100) * plotHeight;
-      const radius = Math.max(7, Math.min(19, 5 + Math.sqrt(trade.notional / 1000)));
-      const color = trade.outcomeSide === "no" ? "#E98E2E" : "#1F74AD";
-      const title = `${trade.outcomeSide.toUpperCase()} · ${priceCents.toFixed(1)}¢ · $${trade.notional.toLocaleString("en-US", { maximumFractionDigits: 0 })} · ${trade.createdTime.toISOString()}`;
-      return `<circle cx="${x.toFixed(1)}" cy="${y.toFixed(1)}" r="${radius.toFixed(1)}" fill="${color}" fill-opacity="0.82" stroke="#FFFFFF" stroke-width="2"><title>${escapeXml(title)}</title></circle>`;
-    })
-    .join("");
-  const grid = [0, 25, 50, 75, 100]
-    .map((value) => {
-      const y = bottom - (value / 100) * plotHeight;
-      return `<line x1="${left}" y1="${y}" x2="${right}" y2="${y}" stroke="#E2E8F0" stroke-width="2"/><text x="${left - 18}" y="${y + 7}" text-anchor="end" font-size="20" fill="#64748B">${value}¢</text>`;
-    })
-    .join("");
-  const formatTime = (time: number) =>
-    new Date(time).toLocaleString("en-US", {
-      timeZone: "America/New_York",
-      month: "short",
-      day: "numeric",
-      hour: "numeric",
-      minute: "2-digit",
-    });
-  const periodLabel =
-    minTime === maxTime
-      ? formatTime(minTime)
-      : `${formatTime(minTime)} — ${formatTime(maxTime)}`;
-  const truncatedLabel =
-    trades.length > visibleTrades.length
-      ? `Latest ${visibleTrades.length} of ${trades.length.toLocaleString("en-US")} qualifying trades`
-      : `${trades.length.toLocaleString("en-US")} qualifying trades`;
-
-  return `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}" viewBox="0 0 ${width} ${height}">
-  <rect width="100%" height="100%" rx="28" fill="#FFFFFF"/>
-  <text x="56" y="68" font-family="Arial, sans-serif" font-size="30" font-weight="700" fill="#0F172A">${eventTitle}</text>
-  <text x="56" y="112" font-family="Arial, sans-serif" font-size="25" fill="#334155">${marketTitle}</text>
-  <text x="56" y="158" font-family="Arial, sans-serif" font-size="19" fill="#64748B">${escapeXml(truncatedLabel)} · price and trade size</text>
-  <circle cx="78" cy="186" r="9" fill="#1F74AD"/><text x="97" y="193" font-family="Arial, sans-serif" font-size="18" fill="#334155">YES</text>
-  <circle cx="180" cy="186" r="9" fill="#E98E2E"/><text x="199" y="193" font-family="Arial, sans-serif" font-size="18" fill="#334155">NO</text>
-  <text x="${right}" y="193" text-anchor="end" font-family="Arial, sans-serif" font-size="17" fill="#64748B">Larger dot = larger trade</text>
-  ${grid}
-  <line x1="${left}" y1="${top}" x2="${left}" y2="${bottom}" stroke="#94A3B8" stroke-width="2"/>
-  <line x1="${left}" y1="${bottom}" x2="${right}" y2="${bottom}" stroke="#94A3B8" stroke-width="2"/>
-  ${points}
-  <text x="${left}" y="${bottom + 38}" font-family="Arial, sans-serif" font-size="17" fill="#64748B">${escapeXml(formatTime(minTime))}</text>
-  <text x="${right}" y="${bottom + 38}" text-anchor="end" font-family="Arial, sans-serif" font-size="17" fill="#64748B">${escapeXml(formatTime(maxTime))}</text>
-  <text x="${(left + right) / 2}" y="672" text-anchor="middle" font-family="Arial, sans-serif" font-size="18" fill="#475569">${escapeXml(periodLabel)} · New York time</text>
-</svg>`;
-}
-
 async function telegramPhotoRequest<T>(
   method: "sendPhoto" | "editMessageMedia",
   fields: Record<string, string>,
@@ -495,8 +381,16 @@ async function deliverTradeChart(
   minimumNotional: number,
 ) {
   if (trades.length === 0) throw new Error("Cannot render an empty trade chart.");
-  const newest = trades[trades.length - 1];
-  const png = await sharp(Buffer.from(tradeChartSvg(trades)))
+  // Historical alerts may have been saved while metadata was unavailable.
+  // Require authoritative names before sending instead of exposing raw tickers.
+  const context = await getTradeContext(ticker);
+  const title = `${context.eventTitle} · ${context.marketTitle}`;
+  const enriched = trades.map(trade => ({ ...trade, ...context, title }));
+  await db.update(kalshiAlertsTable)
+    .set({ ...context, title })
+    .where(eq(kalshiAlertsTable.ticker, ticker));
+  const newest = enriched[enriched.length - 1];
+  const png = await sharp(Buffer.from(marketCardSvg(enriched, minimumNotional)))
     .png()
     .toBuffer();
   const savedChart = await db
@@ -505,13 +399,17 @@ async function deliverTradeChart(
     .where(eq(kalshiTelegramChartsTable.ticker, ticker))
     .limit(1);
   const existing = savedChart[0];
-  const caption = tradeChartCaption(trades, minimumNotional);
+  const caption = marketCardCaption(newest);
+  const keyboard = JSON.stringify({
+    inline_keyboard: [[{ text: "Open game in Kalshi", url: newest.marketUrl }]],
+  });
   let messageId: number;
 
   if (existing && existing.chatId === chatId) {
     await telegramPhotoRequest("editMessageMedia", {
       chat_id: chatId,
       message_id: String(existing.messageId),
+      reply_markup: keyboard,
       media: JSON.stringify({
         type: "photo",
         media: "attach://photo",
@@ -527,6 +425,7 @@ async function deliverTradeChart(
         chat_id: chatId,
         caption,
         parse_mode: "HTML",
+        reply_markup: keyboard,
       },
       png,
     );
@@ -542,6 +441,7 @@ async function deliverTradeChart(
       ticker,
       chatId,
       messageId,
+      renderVersion: MARKET_CARD_VERSION,
       marketUrl: newest.marketUrl,
       updatedAt: new Date(),
     })
@@ -550,6 +450,7 @@ async function deliverTradeChart(
       set: {
         chatId,
         messageId,
+        renderVersion: MARKET_CARD_VERSION,
         marketUrl: newest.marketUrl,
         updatedAt: new Date(),
       },
@@ -631,7 +532,10 @@ async function deliverRecentMarketCharts(settings: Settings) {
       .from(kalshiTelegramChartsTable)
       .where(eq(kalshiTelegramChartsTable.ticker, ticker))
       .limit(1);
-    if (savedChart?.chatId === settings.chatId) continue;
+    if (
+      savedChart?.chatId === settings.chatId &&
+      savedChart.renderVersion === MARKET_CARD_VERSION
+    ) continue;
 
     try {
       const chartTrades = await db

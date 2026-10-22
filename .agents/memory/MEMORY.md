@@ -1,0 +1,1 @@
+- [Telegram alert readability](telegram-alert-readability.md) — use plain-language game and bet names; verify cards at phone width and repair historical metadata.
