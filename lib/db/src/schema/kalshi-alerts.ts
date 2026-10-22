@@ -29,6 +29,8 @@ export const kalshiAlertsTable = pgTable("kalshi_alerts", {
   tradeId: text("trade_id").primaryKey(),
   ticker: text("ticker").notNull(),
   title: text("title").notNull(),
+  eventTitle: text("event_title"),
+  marketTitle: text("market_title"),
   sport: text("sport").notNull(),
   outcomeSide: text("outcome_side").notNull(),
   bookSide: text("book_side").notNull(),

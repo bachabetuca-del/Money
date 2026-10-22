@@ -42,10 +42,24 @@ type TradeFeedResponse = {
   cursor?: string;
 };
 
+type KalshiMarketMetadata = {
+  event_ticker?: string;
+  title?: string;
+  yes_sub_title?: string;
+  no_sub_title?: string;
+};
+
+type KalshiEventMetadata = {
+  title?: string;
+  sub_title?: string;
+};
+
 type PublicTrade = {
   tradeId: string;
   ticker: string;
   title: string;
+  eventTitle: string;
+  marketTitle: string;
   sport: string;
   outcomeSide: string;
   bookSide: string;
@@ -94,6 +108,11 @@ let lastPollBoundary: number | null = null;
 let pollInProgress = false;
 let monitorStarted = false;
 let telegramPollInProgress = false;
+const tradeContextCache = new Map<
+  string,
+  Promise<{ eventTitle: string; marketTitle: string }>
+>();
+const eventTitleCache = new Map<string, Promise<string>>();
 
 async function fetchJson<T>(url: string): Promise<T> {
   const response = await fetch(url, { signal: AbortSignal.timeout(15_000) });
@@ -203,6 +222,8 @@ function toPublicTrade(
     tradeId: trade.trade_id,
     ticker: trade.ticker,
     title,
+    eventTitle: series.title,
+    marketTitle: trade.ticker,
     sport: series.tags?.[0] ?? series.title,
     outcomeSide,
     bookSide: (trade.taker_book_side ?? "unknown").toLowerCase(),
@@ -212,6 +233,68 @@ function toPublicTrade(
     createdTime: createdAt.toISOString(),
     blockTrade: trade.is_block_trade ?? false,
     marketUrl: `https://kalshi.com/markets/${series.ticker}/${trade.ticker}`,
+  };
+}
+
+async function withTradeContext(trade: PublicTrade): Promise<PublicTrade> {
+  let contextPromise = tradeContextCache.get(trade.ticker);
+  if (!contextPromise) {
+    contextPromise = (async () => {
+      try {
+        const marketResponse = await fetchJson<{ market: KalshiMarketMetadata }>(
+          `${KALSHI_API}/markets/${encodeURIComponent(trade.ticker)}`,
+        );
+        const market = marketResponse.market;
+        let eventTitle = trade.eventTitle;
+
+        if (market.event_ticker) {
+          let eventTitlePromise = eventTitleCache.get(market.event_ticker);
+          if (!eventTitlePromise) {
+            eventTitlePromise = fetchJson<{ event: KalshiEventMetadata }>(
+              `${KALSHI_API}/events/${encodeURIComponent(market.event_ticker)}`,
+            )
+              .then(
+                ({ event }) =>
+                  event.title ?? event.sub_title ?? trade.eventTitle,
+              )
+              .catch(() => trade.eventTitle);
+            if (eventTitleCache.size >= 5_000) eventTitleCache.clear();
+            eventTitleCache.set(market.event_ticker, eventTitlePromise);
+          }
+          eventTitle = await eventTitlePromise;
+        }
+
+        return {
+          eventTitle,
+          marketTitle:
+            market.title ??
+            market.yes_sub_title ??
+            market.no_sub_title ??
+            trade.marketTitle,
+        };
+      } catch (error) {
+        logger.debug(
+          {
+            ticker: trade.ticker,
+            error: error instanceof Error ? error.message : "Metadata unavailable",
+          },
+          "Using ticker fallback for trade context",
+        );
+        return {
+          eventTitle: trade.eventTitle,
+          marketTitle: trade.marketTitle,
+        };
+      }
+    })();
+    if (tradeContextCache.size >= 5_000) tradeContextCache.clear();
+    tradeContextCache.set(trade.ticker, contextPromise);
+  }
+
+  const context = await contextPromise;
+  return {
+    ...trade,
+    ...context,
+    title: `${context.eventTitle} · ${context.marketTitle}`,
   };
 }
 
@@ -253,18 +336,50 @@ async function telegramRequest<T>(
   return result;
 }
 
+function escapeTelegramHtml(value: string) {
+  return value
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;");
+}
+
 function alertText(trade: PublicTrade) {
+  const side =
+    trade.outcomeSide === "yes"
+      ? "YES"
+      : trade.outcomeSide === "no"
+        ? "NO"
+        : "UNKNOWN";
+  const priceCents = Math.round(trade.price * 100);
+  const contractCount = trade.count.toLocaleString("en-US", {
+    maximumFractionDigits: 2,
+  });
+  const tradeValue = trade.notional.toLocaleString("en-US", {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  });
+  const localTime = new Date(trade.createdTime).toLocaleString("en-US", {
+    timeZone: "America/New_York",
+    month: "short",
+    day: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+    timeZoneName: "short",
+  });
+
   return [
-    "Kalshi sports trade alert",
+    "🏈 <b>SPORTS TRADE ALERT</b>",
     "",
-    trade.title,
-    `Estimated trade value: $${trade.notional.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`,
-    `${trade.count.toLocaleString("en-US")} contracts × $${trade.price.toFixed(4)}`,
-    `Public taker details: ${trade.outcomeSide} outcome / ${trade.bookSide} book side`,
-    `Time: ${new Date(trade.createdTime).toLocaleString("en-US", { timeZone: "UTC", timeZoneName: "short" })}`,
+    `<b>Game:</b> ${escapeTelegramHtml(trade.eventTitle)}`,
+    `<b>Taker position:</b> ${side} — ${escapeTelegramHtml(trade.marketTitle)}`,
+    `<b>Trade value:</b> $${tradeValue}`,
+    `<b>Size:</b> ${contractCount} contracts × ${priceCents}¢`,
+    `<b>Time:</b> ${localTime}`,
     "",
-    "Public trade data does not identify an individual buyer or account.",
-    trade.marketUrl,
+    `<a href="${escapeTelegramHtml(trade.marketUrl)}">Open this game in Kalshi</a>`,
+    "",
+    "<i>Public data shows taker direction, not trader identity.</i>",
   ].join("\n");
 }
 
@@ -286,6 +401,8 @@ async function deliverPendingAlerts(settings: Settings) {
           tradeId: alert.tradeId,
           ticker: alert.ticker,
           title: alert.title,
+          eventTitle: alert.eventTitle ?? alert.title,
+          marketTitle: alert.marketTitle ?? alert.title,
           sport: alert.sport,
           outcomeSide: alert.outcomeSide,
           bookSide: alert.bookSide,
@@ -296,6 +413,7 @@ async function deliverPendingAlerts(settings: Settings) {
           blockTrade: alert.blockTrade,
           marketUrl: alert.marketUrl,
         }),
+        parse_mode: "HTML",
         disable_web_page_preview: true,
       });
       await db
@@ -336,8 +454,6 @@ async function pollOnce() {
     const qualifyingTrades = allSportsTrades.filter(
       (trade) => trade.notional >= settings.minimumNotional,
     );
-    latestQualifyingTrades = qualifyingTrades.slice(0, 50);
-
     const newTrades =
       lastPollBoundary === null
         ? []
@@ -345,23 +461,44 @@ async function pollOnce() {
             (trade) => new Date(trade.createdTime).getTime() > lastPollBoundary!,
           );
 
+    const contextCandidates = [
+      ...qualifyingTrades.slice(0, 50),
+      ...newTrades,
+    ];
+    const uniqueContextCandidates = Array.from(
+      new Map(contextCandidates.map((trade) => [trade.tradeId, trade])).values(),
+    );
+    const enrichedCandidates = await Promise.all(
+      uniqueContextCandidates.map(async (trade) => [
+        trade.tradeId,
+        await withTradeContext(trade),
+      ] as const),
+    );
+    const enrichedByTradeId = new Map(enrichedCandidates);
+    latestQualifyingTrades = qualifyingTrades
+      .slice(0, 50)
+      .map((trade) => enrichedByTradeId.get(trade.tradeId) ?? trade);
+
     if (settings.enabled && settings.chatId && botToken()) {
       for (const trade of newTrades) {
+        const enrichedTrade = enrichedByTradeId.get(trade.tradeId) ?? trade;
         await db
           .insert(kalshiAlertsTable)
           .values({
-            tradeId: trade.tradeId,
-            ticker: trade.ticker,
-            title: trade.title,
-            sport: trade.sport,
-            outcomeSide: trade.outcomeSide,
-            bookSide: trade.bookSide,
-            price: trade.price,
-            count: trade.count,
-            notional: trade.notional,
-            createdTime: new Date(trade.createdTime),
-            blockTrade: trade.blockTrade,
-            marketUrl: trade.marketUrl,
+            tradeId: enrichedTrade.tradeId,
+            ticker: enrichedTrade.ticker,
+            title: enrichedTrade.title,
+            eventTitle: enrichedTrade.eventTitle,
+            marketTitle: enrichedTrade.marketTitle,
+            sport: enrichedTrade.sport,
+            outcomeSide: enrichedTrade.outcomeSide,
+            bookSide: enrichedTrade.bookSide,
+            price: enrichedTrade.price,
+            count: enrichedTrade.count,
+            notional: enrichedTrade.notional,
+            createdTime: new Date(enrichedTrade.createdTime),
+            blockTrade: enrichedTrade.blockTrade,
+            marketUrl: enrichedTrade.marketUrl,
           })
           .onConflictDoNothing();
       }
