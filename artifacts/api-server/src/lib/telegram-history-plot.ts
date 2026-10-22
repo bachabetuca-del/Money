@@ -13,7 +13,7 @@ export type HistoryBucket = {
   total: number;
 };
 
-export function bucketHistory(trades: MarketCardTrade[], now: Date) {
+export function bucketHistory(trades: MarketCardTrade[], now: Date, highlightRecent = true) {
   if (!trades.length) throw new Error("History requires at least one trade.");
   let oldest = Infinity;
   let latest = -Infinity;
@@ -34,7 +34,7 @@ export function bucketHistory(trades: MarketCardTrade[], now: Date) {
   let total = 0;
   for (const trade of trades) {
     const time = trade.createdTime.getTime();
-    const recent = time >= now.getTime() - RECENT_WINDOW_MS && time <= now.getTime();
+    const recent = highlightRecent && time >= now.getTime() - RECENT_WINDOW_MS && time <= now.getTime();
     const side = trade.outcomeSide.toLowerCase() === "yes" ? 0 : trade.outcomeSide.toLowerCase() === "no" ? 1 : 2;
     const bucket = buckets[Math.floor((time - start) / width)];
     bucket.values[side + (recent ? 3 : 0)] += trade.notional;
@@ -59,8 +59,8 @@ const OLD = ["#2F7F88", "#9A6420", "#5B6663"];
 const NEW = ["#4FDDE8", "#FFB13B", "#B4BDBA"];
 
 /** Every qualifying trade contributes to a time bucket; no last-N truncation. */
-export function historyPlotSvg(trades: MarketCardTrade[], now: Date, top: number, bottom: number) {
-  const history = bucketHistory(trades, now);
+export function historyPlotSvg(trades: MarketCardTrade[], now: Date, top: number, bottom: number, highlightRecent = true) {
+  const history = bucketHistory(trades, now, highlightRecent);
   const left = 176;
   const right = 856;
   const column = (right - left) / history.buckets.length;

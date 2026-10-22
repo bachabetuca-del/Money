@@ -12,6 +12,9 @@ import { MarketHistory, type HistoryJob } from "./kalshi-market-history";
 import { marketHistoryStore } from "./kalshi-market-history-store";
 import { liveNotificationTrades, TelegramTradeNotifications } from "./telegram-trade-notifications";
 import { enqueueLiveNotifications, tradeNotificationStore } from "./telegram-trade-notification-store";
+import { GameStatusMonitor } from "./kalshi-game-status";
+import { KalshiGameStatusSource } from "./kalshi-game-status-source";
+import { canMonitorMarket, gameStatusRepository, readGameStatus } from "./kalshi-game-status-store";
 
 const KALSHI_API = "https://external-api.kalshi.com/trade-api/v2";
 const TELEGRAM_API = "https://api.telegram.org";
@@ -122,14 +125,18 @@ const tradeContextCache = new Map<
 const eventTitleCache = new Map<string, Promise<string>>();
 const marketHistory = new MarketHistory(marketHistoryStore, readHistoryPage, () => new Date(),
   (ticker, error) => logger.warn({ ticker, error }, "Market history incomplete; retry scheduled"));
+const gameStatusSource = new KalshiGameStatusSource(<T>(path: string) => fetchJson<T>(`${KALSHI_API}${path}`));
+const gameStatusMonitor = new GameStatusMonitor(gameStatusRepository,
+  (ticker, previous, now) => gameStatusSource.resolve(ticker, previous, now),
+  () => new Date(), error => logger.warn({ error }, "Game status lookup will retry"));
 const telegramDashboard = new TelegramDashboard(telegramDashboardStore, {
   request: telegramRequest,
   photo: telegramPhotoRequest,
   context: getTradeContext,
-  history: ticker => marketHistory.status(ticker),
+  history: ticker => { gameStatusMonitor.prefer(ticker); return marketHistory.status(ticker); },
 });
 const tradeNotifications = new TelegramTradeNotifications(tradeNotificationStore, {
-  request: telegramRequest, context: getTradeContext,
+  request: telegramRequest, context: getTradeContext, active: canMonitorMarket,
 }, () => new Date(), (event, detail) => {
   if (event === "sent") logger.info({ tradeId: detail }, "Telegram trade notification delivered");
   else logger.warn({ error: detail }, event === "failed" ? "Telegram notification will retry" : "Previous notification cleanup will retry");
@@ -286,6 +293,16 @@ async function getTradeContext(ticker: string) {
   let contextPromise = tradeContextCache.get(ticker);
   if (!contextPromise) {
     contextPromise = (async () => {
+      // An archived game needs no metadata refresh, including after a process restart.
+      if ((await readGameStatus(ticker))?.state === "finished") {
+        const [saved] = await db.select({ eventTitle: kalshiAlertsTable.eventTitle,
+          marketTitle: kalshiAlertsTable.marketTitle }).from(kalshiAlertsTable)
+          .where(eq(kalshiAlertsTable.ticker, ticker)).limit(1);
+        if (saved?.eventTitle && saved.marketTitle && !saved.marketTitle.includes(ticker)) return {
+          eventTitle: saved.eventTitle, marketTitle: saved.marketTitle,
+        };
+        throw new Error("Finished game has no saved readable metadata.");
+      }
       let marketResponse: { market: KalshiMarketMetadata };
       try {
         marketResponse = await fetchJson(`${KALSHI_API}/markets/${encodeURIComponent(ticker)}`);
@@ -596,6 +613,12 @@ export function startKalshiMonitor() {
   monitorStarted = true;
   void pollOnce();
   setInterval(() => void pollOnce(), POLL_INTERVAL_MS);
+  setInterval(() => {
+    void readSettings().then(async settings => {
+      if (settings.enabled) await gameStatusMonitor.tick();
+    }).catch(error => logger.warn({ error: error instanceof Error ? error.message : "Game status worker failed" },
+      "Game status worker failed"));
+  }, 2000);
   // Independent of live polling: a large backfill must not block live trades or navigation.
   setInterval(() => {
     void readSettings().then(async settings => {

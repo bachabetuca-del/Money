@@ -7,6 +7,7 @@ export const kalshiNotificationsTable = pgTable("kalshi_notifications", {
   tradeId: text("trade_id").notNull().references(() => kalshiAlertsTable.tradeId),
   queuedAt: timestamp("queued_at", { withTimezone: true }).notNull().defaultNow(),
   sentAt: timestamp("sent_at", { withTimezone: true }),
+  skippedAt: timestamp("skipped_at", { withTimezone: true }),
   messageId: integer("message_id"),
   removedAt: timestamp("removed_at", { withTimezone: true }),
   attempts: integer("attempts").notNull().default(0),

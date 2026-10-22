@@ -4,7 +4,7 @@ import { escapeHtml, marketCardCaption, marketCardSvg, type MarketCardTrade } fr
 import { rangeFooter, rangeLabel, tradeRange, type TradeRange } from "./kalshi-trade-bands";
 import type { HistoryStatus } from "./kalshi-market-history";
 import {
-  buildCatalog, chartKeyboard, HOME, keyFor, menuSvg, menuView,
+  buildCatalog, catalogGameBadge, chartKeyboard, HOME, keyFor, menuSvg, menuView,
   navigate, normalizeSelection, type MarketSummary, type Selection,
 } from "./telegram-dashboard-view";
 
@@ -124,21 +124,31 @@ export class TelegramDashboard {
     let keyboard;
     if (selection.screen === "chart") {
       const market = catalog.find(item => item.ticker === selection.ticker)!;
-      const context = await this.api.context(market.ticker);
+      const badge = catalogGameBadge(catalog.filter(item => item.gameKey === market.gameKey));
+      const stopped = badge.rank === 3 || market.marketTerminal;
+      const context = stopped ? { eventTitle: market.eventTitle!, marketTitle: market.marketTitle! } :
+        await this.api.context(market.ticker);
       await this.store.context(market.ticker, context);
       const rows = (await this.store.trades(market.ticker, range)).map(row => ({ ...row, ...context }));
       if (!rows.length) throw new Error("No qualifying trades are available for this market.");
       const history = await this.api.history?.(market.ticker);
-      svg = marketCardSvg(rows, range.minimum, rangeFooter(range), selection.band, this.api.now?.() ?? new Date());
-      caption = marketCardCaption(rows[rows.length - 1]) +
+      svg = marketCardSvg(rows, range.minimum, rangeFooter(range), selection.band, this.api.now?.() ?? new Date(),
+        { label: badge.label, color: badge.color, stopped });
+      caption = marketCardCaption(rows[rows.length - 1], !stopped) +
+        `\n${badge.marker} ${escapeHtml(badge.label)}` +
+        (market.gameCheckedAt ? ` · comprobado ${new Date(market.gameCheckedAt).toLocaleTimeString("en-US",
+          { timeZone: "America/New_York", hour: "numeric", minute: "2-digit" })} NY` : "") +
         `\nSection: ${escapeHtml(rangeLabel(range))} only.` +
-        (history ? `\n${history.error ? "History incomplete · retrying automatically." :
+        (stopped ? "\nAutomatic market checks stopped · saved history only." :
+          history ? `\n${history.error ? "History incomplete · retrying automatically." :
           history.phase === "complete" ? "Available public history loaded." :
           !settings.enabled ? "History loading paused." :
           `Loading history · ${history.scanned.toLocaleString("en-US")} public trades checked; graph is partial.`}` : "") +
-        "\nBars sum trade value per interval. Bright portions: last 15 minutes. White outline: latest interval." +
+        (stopped ? "\nSaved history · recent-activity highlighting disabled." :
+          "\nBars sum trade value per interval. Bright portions: last 15 minutes. White outline: latest interval.") +
         "\nNotifications: new trades over $10,000 only; latest notice kept." +
-        (settings.enabled ? "\nLive · checks every 15 seconds." : "\nMonitoring paused · saved history.");
+        (stopped ? "\nTerminado/cerrado · sin consultas automáticas." :
+          settings.enabled ? "\nLive · checks every 15 seconds." : "\nMonitoring paused · saved history.");
       keyboard = chartKeyboard(selection, market.marketUrl, settings.minimumNotional);
     } else {
       const view = menuView(selection, catalog, settings.enabled, settings.minimumNotional);

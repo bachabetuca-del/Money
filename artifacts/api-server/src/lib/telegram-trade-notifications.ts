@@ -17,6 +17,7 @@ export function liveNotificationTrades<T extends { notional: number; createdTime
 export interface NotificationStore {
   next(chatId: string, now: Date): Promise<NotificationJob | undefined>;
   sent(job: NotificationJob, messageId: number, now: Date): Promise<void>;
+  skipped(job: NotificationJob, now: Date): Promise<void>;
   failed(chatId: string, tradeId: string, error: string, retryAt: Date): Promise<void>;
   latestMessageId(chatId: string): Promise<number | undefined>;
   cleanup(chatId: string, keep: number, now: Date): Promise<CleanupJob[]>;
@@ -25,6 +26,7 @@ export interface NotificationStore {
 export interface NotificationApi {
   request<T>(method: string, body: Record<string, unknown>): Promise<{ result?: T }>;
   context(ticker: string): Promise<{ eventTitle: string; marketTitle: string }>;
+  active?(ticker: string): Promise<boolean>;
 }
 
 export function notificationText(trade: NotificationTrade) {
@@ -63,6 +65,9 @@ export class TelegramTradeNotifications {
       if (job) {
         try {
           if (!(job.notional > NOTIFICATION_THRESHOLD)) throw new Error("Non-qualifying trade in notification queue.");
+          if (this.api.active && !await this.api.active(job.ticker)) {
+            await this.store.skipped(job, this.now());
+          } else {
           const context = await this.api.context(job.ticker);
           if (!context.eventTitle || !context.marketTitle ||
             context.eventTitle.includes(job.ticker) || context.marketTitle.includes(job.ticker)) {
@@ -79,6 +84,7 @@ export class TelegramTradeNotifications {
           if (!result.result?.message_id) throw new Error("Telegram did not confirm the notification message.");
           await this.store.sent(job, result.result.message_id, this.now());
           this.log("sent", job.tradeId);
+          }
         } catch (error) {
           const message = error instanceof Error ? error.message : "Notification delivery failed.";
           const requestedDelay = Number(message.match(/retry after (\d+)/i)?.[1] ?? 0) * 1000;

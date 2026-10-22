@@ -16,6 +16,7 @@ export type HistoryStatus = {
 export interface HistoryRepository<T> {
   candidates(): Promise<{ ticker: string; job?: HistoryJob }[]>;
   job(ticker: string): Promise<HistoryJob | undefined>;
+  eligible?(ticker: string): Promise<boolean>;
   // Page inserts and cursor advancement must be one atomic transaction.
   commit(job: HistoryJob, rows: T[]): Promise<void>;
 }
@@ -65,6 +66,8 @@ export class MarketHistory<T> {
       if (job.phase === "complete") {
         job = { ...job, phase: "live", sinceAt: job.snapshotAt, snapshotAt: now, cursor: null };
       }
+      // Recheck immediately before requesting a page; the game can finish while queued.
+      if (this.repository.eligible && !await this.repository.eligible(job.ticker)) return;
       try {
         const result = await this.page(job);
         if (result.cursor && result.cursor === job.cursor) {

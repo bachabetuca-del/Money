@@ -59,24 +59,25 @@ function wrappedText(
   };
 }
 
-export function marketCardCaption(trade: MarketCardTrade) {
+export function marketCardCaption(trade: MarketCardTrade, live = true) {
   const side = trade.outcomeSide.toLowerCase();
   const position = side === "yes" ? "YES · FOR" : side === "no" ? "NO · AGAINST" : "Direction unavailable";
   return [
     `<b>${escapeHtml(trade.eventTitle ?? "Game details unavailable")}</b>`,
     `${position}: ${escapeHtml(readableBet(trade.marketTitle ?? "Bet details unavailable"))}`,
-    "<i>Public taker direction—not trader identity. Updates in place.</i>",
+    `<i>Public taker direction—not trader identity. ${live ? "Updates in place." : "Saved history only."}</i>`,
   ].join("\n");
 }
 
-export function marketCardSvg(trades: MarketCardTrade[], threshold: number, filterLabel?: string, band: TradeBand = "large", now = new Date()) {
+export function marketCardSvg(trades: MarketCardTrade[], threshold: number, filterLabel?: string, band: TradeBand = "large", now = new Date(),
+  gameStatus?: { label: string; color: string; stopped?: boolean }) {
   if (!trades.length) throw new Error("A market card needs at least one trade.");
   const ordered = [...trades].sort((a, b) => a.createdTime.getTime() - b.createdTime.getTime());
   const latest = ordered[ordered.length - 1];
   const side = latest.outcomeSide.toLowerCase();
   const sideColor = side === "no" ? "#FFB13B" : side === "yes" ? "#4FDDE8" : "#B4BDBA";
   const sideText = side === "yes" ? "YES  /  FOR THIS BET" : side === "no" ? "NO  /  AGAINST THIS BET" : "DIRECTION UNAVAILABLE";
-  const game = wrappedText(latest.eventTitle ?? "Game details unavailable", 52, 125, 46, 28, "#F4F1E6", 700);
+  const game = wrappedText(latest.eventTitle ?? "Game details unavailable", 52, 125, 46, 28, gameStatus?.color ?? "#F4F1E6", 700);
   const betY = 125 + game.height + 30;
   const bet = wrappedText(readableBet(latest.marketTitle ?? "Bet details unavailable"), 52, betY + 46, 39, 33, "#D9E2DC");
   const panelY = betY + 46 + bet.height + 22;
@@ -84,7 +85,7 @@ export function marketCardSvg(trades: MarketCardTrade[], threshold: number, filt
   const chartTop = chartTitleY + 150;
   const chartBottom = chartTop + 360;
   const height = chartBottom + 270;
-  const history = historyPlotSvg(ordered, now, chartTop, chartBottom);
+  const history = historyPlotSvg(ordered, now, chartTop, chartBottom, !gameStatus?.stopped);
   const timestamp = latest.createdTime.toLocaleString("en-US", {
     timeZone: "America/New_York", month: "short", day: "numeric",
     hour: "numeric", minute: "2-digit", timeZoneName: "short",
@@ -94,9 +95,10 @@ export function marketCardSvg(trades: MarketCardTrade[], threshold: number, filt
   const ly = chartBottom + 115;
   return `<svg xmlns="http://www.w3.org/2000/svg" width="900" height="${height}" viewBox="0 0 900 ${height}">
     <rect width="900" height="${height}" fill="#0C1714"/>
-    <rect width="900" height="14" fill="${sideColor}"/>
+    <rect width="900" height="14" fill="${gameStatus?.color ?? sideColor}"/>
     <g font-family="DejaVu Sans, Arial, sans-serif">
       <text x="52" y="62" font-size="25" font-weight="700" letter-spacing="3" fill="#8FA39C">KALSHI · SPORTS ALERT</text>
+       ${gameStatus ? `<text x="848" y="62" text-anchor="end" font-size="23" font-weight="700" fill="${gameStatus.color}">${escapeHtml(gameStatus.label)}</text>` : ""}
       ${game.svg}
       <text x="52" y="${betY}" font-size="24" font-weight="700" fill="#8FA39C" letter-spacing="3">THE BET</text>
       ${bet.svg}
@@ -109,7 +111,7 @@ export function marketCardSvg(trades: MarketCardTrade[], threshold: number, filt
       <text x="76" y="${panelY + 275}" font-size="25" fill="#A9B8B3">${escapeHtml(timestamp)}</text>
       <text x="52" y="${chartTitleY}" font-size="36" font-weight="700" fill="#F4F1E6">Money traded per ${history.widthLabel}</text>
       <text x="52" y="${chartTitleY + 42}" font-size="26" fill="#A9B8B3">Total value per interval · not individual trades.</text>
-      <text x="52" y="${chartTitleY + 94}" font-size="28" font-weight="700" fill="#E8EDE9">${ordered.length.toLocaleString("en-US")} trades · ${history.recentCount.toLocaleString("en-US")} in last 15m · ${escapeHtml(money(history.total, true))} total</text>
+       <text x="52" y="${chartTitleY + 94}" font-size="28" font-weight="700" fill="#E8EDE9">${ordered.length.toLocaleString("en-US")} trades · ${gameStatus?.stopped ? "saved history" : `${history.recentCount.toLocaleString("en-US")} in last 15m`} · ${escapeHtml(money(history.total, true))} total</text>
       ${history.svg}
       <rect x="52" y="${ly - 22}" width="20" height="30" fill="#2F7F88"/><rect x="72" y="${ly - 22}" width="20" height="30" fill="#4FDDE8"/>
       <text x="106" y="${ly + 4}" font-size="27" font-weight="700" fill="#E8EDE9">YES / FOR</text>

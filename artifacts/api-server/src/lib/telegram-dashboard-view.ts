@@ -1,6 +1,7 @@
 import { createHash } from "node:crypto";
 import { escapeHtml, readableBet } from "./telegram-market-card";
 import { rangeLabel, tradeRange, type TradeBand } from "./kalshi-trade-bands";
+import { gameBadge } from "./kalshi-game-status";
 
 export type Screen = "sports" | "games" | "markets" | "chart";
 export type Selection = {
@@ -19,6 +20,11 @@ export type MarketSummary = {
   marketUrl: string;
   trades: number;
   lastTradeAt: string;
+  gameState?: string | null;
+  gameSource?: string | null;
+  gameDelayed?: boolean;
+  gameCheckedAt?: string;
+  marketTerminal?: boolean;
 };
 export type CatalogMarket = MarketSummary & {
   id: string;
@@ -143,7 +149,16 @@ export function chartKeyboard(selection: Selection, marketUrl: string, threshold
   ] };
 }
 
-type MenuItem = { label: string; detail: string; action: string };
+export function catalogGameBadge(markets: MarketSummary[]) {
+  const confirmed = markets.filter(m => m.gameState && m.gameState !== "unknown" && m.gameSource !== "market")
+    .sort((a, b) => (b.gameCheckedAt ?? "").localeCompare(a.gameCheckedAt ?? ""));
+  const latest = confirmed[0];
+  if (latest) return gameBadge(latest.gameState, latest.gameSource, latest.gameDelayed);
+  if (markets.length && markets.every(m => m.gameState === "finished")) return gameBadge("finished", "market");
+  return gameBadge("unknown");
+}
+
+type MenuItem = { label: string; detail: string; action: string; badge?: ReturnType<typeof gameBadge> };
 export function menuView(selection: Selection, catalog: CatalogMarket[], enabled: boolean, threshold: number) {
   const activeRange = rangeLabel(tradeRange(selection.band, threshold));
   let title = "Choose a sport";
@@ -159,13 +174,16 @@ export function menuView(selection: Selection, catalog: CatalogMarket[], enabled
       label: markets[0].gameLabel,
       detail: `${markets.length} ${markets.length === 1 ? "market" : "markets"} · ${markets.reduce((sum, m) => sum + m.trades, 0)} trades`,
       action: `d:game:${key}`,
-    }));
+      badge: catalogGameBadge(markets),
+    })).sort((a, b) => a.badge.rank - b.badge.rank);
   } else if (selection.screen === "markets") {
     title = sportMarkets.find(m => m.gameKey === selection.gameKey)?.gameName ?? "Markets";
     subtitle = `${activeRange} only · choose a bet`;
+    const badge = catalogGameBadge(sportMarkets.filter(m => m.gameKey === selection.gameKey));
     items = sportMarkets.filter(m => m.gameKey === selection.gameKey).map(m => ({
-      label: m.betLabel, detail: `${m.trades} tracked ${m.trades === 1 ? "trade" : "trades"}`,
+      label: m.betLabel, detail: `${m.trades} ${m.trades === 1 ? "trade" : "trades"}${m.marketTerminal ? " · mercado cerrado" : ""}`,
       action: `d:market:${m.id}`,
+      badge,
     }));
   } else {
     const sports = [...new Set(catalog.map(m => m.sport))].sort();
@@ -183,7 +201,9 @@ export function menuView(selection: Selection, catalog: CatalogMarket[], enabled
   const visible = items.slice(page * PAGE_SIZE, (page + 1) * PAGE_SIZE);
   const keyboard: Keyboard = { inline_keyboard: [
     bandButtons(selection.band, threshold),
-    ...visible.map(item => [{ text: item.label.slice(0, 100), callback_data: item.action }]),
+    ...visible.map(item => [{ text: (item.badge
+      ? `${item.badge.marker} ${item.label.slice(0, 67)} · ${item.badge.label}`
+      : item.label).slice(0, 120), callback_data: item.action }]),
   ] };
   const paging: Button[] = [];
   if (page > 0) paging.push({ text: "Previous", callback_data: `d:page:${page - 1}` });
@@ -195,6 +215,7 @@ export function menuView(selection: Selection, catalog: CatalogMarket[], enabled
   keyboard.inline_keyboard.push([{ text: "Refresh", callback_data: "d:refresh" }]);
   const status = enabled ? "LIVE · checks every 15 seconds" : "PAUSED · saved trade history";
   const caption = `<b>${escapeHtml(title)}</b>\nChoose a button below. Sport → Game → Market.\n` +
+    "⚪ Por empezar · 🟡 En juego · 🔴 Terminado\nTerminados: al final, sin consultas automáticas. ◌ Sin confirmar: no se adivina el estado.\n" +
     `<i>${status}. Captured trades ${escapeHtml(activeRange)} only; sections never mix.</i>\n` +
     "Notifications: new trades over $10,000 only. Only the latest notice is kept.";
   return { title, subtitle, items: visible, page, pages, keyboard, caption, status };
@@ -217,13 +238,15 @@ export function menuSvg(view: ReturnType<typeof menuView>) {
   y += 55;
   const cards = view.items.map((item, index) => {
     const labels = lines(item.label);
-    const cardHeight = 65 + labels.length * 39;
+    const cardHeight = (item.badge ? 110 : 65) + labels.length * 39;
     const top = y;
     y += cardHeight + 18;
     return `<rect x="40" y="${top}" width="820" height="${cardHeight}" rx="18" fill="#172337"/>
-      <text x="65" y="${top + 46}" font-size="28" fill="#61A9BD">${index + 1}</text>
-      ${labels.map((line, i) => `<text x="108" y="${top + 44 + i * 39}" font-size="32" font-weight="600" fill="#F8FAFC">${escapeHtml(line)}</text>`).join("")}
-      <text x="108" y="${top + 51 + labels.length * 39}" font-size="25" fill="#94A3B8">${escapeHtml(item.detail)}</text>`;
+      ${item.badge ? `<circle cx="76" cy="${top + 35}" r="10" fill="${item.badge.color}"/>` :
+        `<text x="65" y="${top + 46}" font-size="28" fill="#61A9BD">${index + 1}</text>`}
+      ${labels.map((line, i) => `<text x="108" y="${top + 44 + i * 39}" font-size="32" font-weight="600" fill="${item.badge?.color ?? "#F8FAFC"}">${escapeHtml(line)}</text>`).join("")}
+      ${item.badge ? `<text x="108" y="${top + 45 + labels.length * 39}" font-size="27" font-weight="600" fill="${item.badge.color}">${escapeHtml(item.badge.label)}</text>` : ""}
+      <text x="108" y="${top + (item.badge ? 87 : 51) + labels.length * 39}" font-size="25" fill="#94A3B8">${escapeHtml(item.detail)}</text>`;
   }).join("");
   if (!view.items.length) y += 150;
   const height = Math.max(560, y + 145);

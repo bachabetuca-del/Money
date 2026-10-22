@@ -21,3 +21,4 @@ export * from "./kalshi-alerts";
 export * from "./telegram-dashboard";
 export * from "./kalshi-trade-history";
 export * from "./kalshi-notifications";
+export * from "./kalshi-game-status";

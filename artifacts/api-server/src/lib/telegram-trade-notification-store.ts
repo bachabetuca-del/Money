@@ -14,13 +14,17 @@ export const tradeNotificationStore: NotificationStore = {
     const [row] = await db.select({ trade: kalshiAlertsTable, chatId: notifications.chatId,
       attempts: notifications.attempts }).from(notifications)
       .innerJoin(kalshiAlertsTable, eq(notifications.tradeId, kalshiAlertsTable.tradeId))
-      .where(and(eq(notifications.chatId, chatId), isNull(notifications.sentAt),
+      .where(and(eq(notifications.chatId, chatId), isNull(notifications.sentAt), isNull(notifications.skippedAt),
         lte(notifications.retryAt, now), gt(kalshiAlertsTable.notional, NOTIFICATION_THRESHOLD)))
       .orderBy(asc(kalshiAlertsTable.createdTime), asc(notifications.queuedAt)).limit(1);
     return row ? { ...row.trade, chatId: row.chatId, attempts: row.attempts } : undefined;
   },
   async sent(job, messageId, now) {
     await db.update(notifications).set({ sentAt: now, messageId, lastError: null, retryAt: now })
+      .where(and(eq(notifications.chatId, job.chatId), eq(notifications.tradeId, job.tradeId)));
+  },
+  async skipped(job, now) {
+    await db.update(notifications).set({ skippedAt: now, lastError: null })
       .where(and(eq(notifications.chatId, job.chatId), eq(notifications.tradeId, job.tradeId)));
   },
   async failed(chatId, tradeId, lastError, retryAt) {

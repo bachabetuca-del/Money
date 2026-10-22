@@ -15,7 +15,7 @@ const sample = (tradeId = "trade-1", notional = 15000): NotificationJob => ({
   createdTime: clock,
 });
 type Row = NotificationJob & {
-  sentAt?: Date; messageId?: number; removedAt?: Date; retryAt: Date; error?: string;
+  sentAt?: Date; skippedAt?: Date; messageId?: number; removedAt?: Date; retryAt: Date; error?: string;
 };
 
 class MemoryNotifications implements NotificationStore {
@@ -27,13 +27,14 @@ class MemoryNotifications implements NotificationStore {
   row(chatId: string, tradeId: string) { return this.rows.get(`${chatId}:${tradeId}`)!; }
   async next(chatId: string, now: Date) {
     const row = [...this.rows.values()].filter(item => item.chatId === chatId &&
-      !item.sentAt && item.retryAt <= now && item.notional > 10000)
+      !item.sentAt && !item.skippedAt && item.retryAt <= now && item.notional > 10000)
       .sort((a, b) => a.createdTime.getTime() - b.createdTime.getTime())[0];
     return row ? { ...row } : undefined;
   }
   async sent(job: NotificationJob, messageId: number, now: Date) {
     Object.assign(this.row(job.chatId, job.tradeId), { sentAt: now, messageId, error: undefined, retryAt: now });
   }
+  async skipped(job: NotificationJob, now: Date) { this.row(job.chatId, job.tradeId).skippedAt = now; }
   async failed(chatId: string, tradeId: string, error: string, retryAt: Date) {
     const row = this.row(chatId, tradeId);
     Object.assign(row, { error, retryAt, attempts: row.attempts + 1 });
@@ -207,6 +208,19 @@ test("Telegram rate-limit delays are respected", async () => {
   api.failSend = "Too Many Requests: retry after 120";
   await worker.tick(settings);
   assert.equal(store.row(settings.chatId, "trade-1").retryAt.getTime(), clock.getTime() + 120000);
+});
+
+test("a queued trade from a now-finished game is retired without notification or repeated retries", async () => {
+  const { store, api, now } = setup();
+  store.add(sample());
+  const worker = new TelegramTradeNotifications(store, {
+    request: api.request.bind(api), context: api.context.bind(api), active: async () => false,
+  }, now);
+  await worker.tick(settings);
+  await worker.tick(settings);
+  assert.equal(api.calls.length, 0);
+  assert.ok(store.row(settings.chatId, "trade-1").skippedAt);
+  assert.equal(store.row(settings.chatId, "trade-1").sentAt, undefined);
 });
 
 test("notification wording escapes names and distinguishes against/unknown direction", () => {

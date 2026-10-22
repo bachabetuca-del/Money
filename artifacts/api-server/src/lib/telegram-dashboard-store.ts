@@ -1,6 +1,6 @@
 import { and, asc, count, desc, eq, gt, gte, inArray, isNull, lt, lte, sql } from "drizzle-orm";
 import {
-  db, kalshiAlertsTable, kalshiTelegramChartsTable, telegramDashboardTable,
+  db, kalshiAlertsTable, kalshiTelegramChartsTable, telegramDashboardTable, kalshiGameStatusTable,
 } from "@workspace/db";
 import type { DashboardState, DashboardStore } from "./telegram-dashboard";
 import type { Screen } from "./telegram-dashboard-view";
@@ -34,7 +34,14 @@ export const telegramDashboardStore: DashboardStore = {
     }).from(kalshiAlertsTable).where(rangeCondition(range))
       .groupBy(kalshiAlertsTable.ticker, kalshiAlertsTable.sport, kalshiAlertsTable.eventTitle,
         kalshiAlertsTable.marketTitle, kalshiAlertsTable.marketUrl);
-    return rows.map(row => ({ ...row, lastTradeAt: new Date(row.lastTradeAt).toISOString() }));
+    const statuses = await db.select().from(kalshiGameStatusTable);
+    const byTicker = new Map(statuses.map(row => [row.ticker, row]));
+    return rows.map(row => {
+      const status = byTicker.get(row.ticker);
+      return { ...row, lastTradeAt: new Date(row.lastTradeAt).toISOString(),
+        gameState: status?.state, gameSource: status?.source, gameDelayed: status?.delayed,
+        gameCheckedAt: status?.checkedAt.toISOString(), marketTerminal: status?.marketTerminal };
+    });
   },
   async trades(ticker, range) {
     return db.select().from(kalshiAlertsTable)
