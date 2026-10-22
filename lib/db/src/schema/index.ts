@@ -18,3 +18,4 @@
 //   export type Post = typeof postsTable.$inferSelect;
 
 export * from "./kalshi-alerts";
+export * from "./telegram-dashboard";

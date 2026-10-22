@@ -53,6 +53,7 @@ export const kalshiTelegramChartsTable = pgTable("kalshi_telegram_charts", {
   chatId: text("chat_id").notNull(),
   messageId: integer("message_id").notNull(),
   renderVersion: integer("render_version").notNull().default(0),
+  retiredAt: timestamp("retired_at", { withTimezone: true }),
   marketUrl: text("market_url").notNull(),
   updatedAt: timestamp("updated_at", { withTimezone: true })
     .notNull()

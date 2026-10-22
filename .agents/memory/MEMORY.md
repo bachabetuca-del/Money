@@ -1,1 +1,2 @@
 - [Telegram alert readability](telegram-alert-readability.md) — use plain-language game and bet names; verify cards at phone width and repair historical metadata.
+- [Single Telegram dashboard](single-telegram-dashboard.md) — sport → game → market navigation; keep one selected graph updating in the same message.

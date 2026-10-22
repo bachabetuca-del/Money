@@ -168,7 +168,7 @@ function Home() {
           setTestError(!result.success);
         },
         onError: (testSendError) => {
-          setTestMessage(testSendError instanceof Error ? testSendError.message : 'Test message could not be sent.');
+          setTestMessage(testSendError instanceof Error ? testSendError.message : 'The Telegram dashboard could not be refreshed.');
           setTestError(true);
         },
       },
@@ -229,9 +229,9 @@ function Home() {
                 <div className="stat-glyph"><Activity /></div>
               </div>
               <div className="stat-card">
-                <div className="stat-label">Alerts delivered</div>
+                <div className="stat-label">Trades in live dashboard</div>
                 <div className="stat-value" data-testid="text-alerts-sent">{dashboard.alertsSent.toLocaleString()}</div>
-                <div className="stat-foot">Sent to configured Telegram chat</div>
+                <div className="stat-foot">Available in your single Telegram dashboard</div>
                 <div className="stat-glyph"><Bell /></div>
               </div>
             </section>
@@ -332,7 +332,7 @@ function Home() {
                     </div>
                     <p className="setup-copy">
                       {dashboard.telegramConfigured
-                        ? <>Your alert destination is configured. Send a test message to verify delivery.</>
+                        ? <>Your live dashboard is connected. Browse Sport → Game → Market in Telegram. New trades update the same message.</>
                         : <>Open your bot in Telegram and send <strong>/start</strong> first. Then find the chat to link this monitor.</>}
                     </p>
                     {!dashboard.telegramConfigured && (
@@ -359,13 +359,13 @@ function Home() {
                         data-testid="button-send-test"
                       >
                         {sendTest.isPending ? <LoaderCircle className="spin" /> : <ArrowUpRight />}
-                        {sendTest.isPending ? 'Sending…' : 'Send test'}
+                        {sendTest.isPending ? 'Refreshing…' : 'Refresh Telegram menu'}
                       </button>
                     </div>
                     {findMessage && <div className={`feedback ${findError ? 'error' : ''}`} role="status" data-testid="status-chat-lookup">{findMessage}</div>}
                     {testMessage && <div className={`feedback ${testError ? 'error' : ''}`} role="status" data-testid="status-telegram-test">{testMessage}</div>}
                     {findChat.isError && !findMessage && <div className="feedback error" role="alert">Could not find a chat. Confirm /start was sent, then try again.</div>}
-                    {sendTest.isError && !testMessage && <div className="feedback error" role="alert">The test alert could not be delivered. Check the chat ID and try again.</div>}
+                    {sendTest.isError && !testMessage && <div className="feedback error" role="alert">The Telegram dashboard could not be refreshed. Check the chat ID and try again.</div>}
                   </div>
                 </div>
               </section>

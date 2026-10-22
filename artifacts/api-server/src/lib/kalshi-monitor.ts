@@ -1,33 +1,18 @@
-import {
-  and,
-  asc,
-  count,
-  eq,
-  gte,
-  inArray,
-  isNotNull,
-  isNull,
-} from "drizzle-orm";
-import sharp from "sharp";
+import { count, eq, isNotNull } from "drizzle-orm";
 import {
   db,
   kalshiAlertsTable,
   kalshiMonitorSettingsTable,
-  kalshiTelegramChartsTable,
 } from "@workspace/db";
 import { logger } from "./logger";
-import {
-  MARKET_CARD_VERSION,
-  marketCardCaption,
-  marketCardSvg,
-} from "./telegram-market-card";
+import { TelegramDashboard, type CallbackQuery } from "./telegram-dashboard";
+import { telegramDashboardStore } from "./telegram-dashboard-store";
 
 const KALSHI_API = "https://external-api.kalshi.com/trade-api/v2";
 const TELEGRAM_API = "https://api.telegram.org";
 const DEFAULT_THRESHOLD = 10_000;
 const POLL_INTERVAL_MS = 15_000;
 const SERIES_CACHE_MS = 60 * 60 * 1000;
-const ALERTS_PER_CYCLE = 20;
 
 type KalshiSeries = {
   ticker: string;
@@ -100,12 +85,9 @@ type TelegramResponse<T> = {
   description?: string;
 };
 
-type TelegramMessage = {
-  message_id: number;
-};
-
 type TelegramUpdate = {
   update_id?: number;
+  callback_query?: CallbackQuery;
   message?: {
     text?: string;
     chat?: {
@@ -133,6 +115,11 @@ const tradeContextCache = new Map<
   Promise<{ eventTitle: string; marketTitle: string }>
 >();
 const eventTitleCache = new Map<string, Promise<string>>();
+const telegramDashboard = new TelegramDashboard(telegramDashboardStore, {
+  request: telegramRequest,
+  photo: telegramPhotoRequest,
+  context: getTradeContext,
+});
 
 async function fetchJson<T>(url: string): Promise<T> {
   const response = await fetch(url, { signal: AbortSignal.timeout(15_000) });
@@ -374,190 +361,6 @@ async function telegramPhotoRequest<T>(
   return result;
 }
 
-async function deliverTradeChart(
-  chatId: string,
-  ticker: string,
-  trades: (typeof kalshiAlertsTable.$inferSelect)[],
-  minimumNotional: number,
-) {
-  if (trades.length === 0) throw new Error("Cannot render an empty trade chart.");
-  // Historical alerts may have been saved while metadata was unavailable.
-  // Require authoritative names before sending instead of exposing raw tickers.
-  const context = await getTradeContext(ticker);
-  const title = `${context.eventTitle} · ${context.marketTitle}`;
-  const enriched = trades.map(trade => ({ ...trade, ...context, title }));
-  await db.update(kalshiAlertsTable)
-    .set({ ...context, title })
-    .where(eq(kalshiAlertsTable.ticker, ticker));
-  const newest = enriched[enriched.length - 1];
-  const png = await sharp(Buffer.from(marketCardSvg(enriched, minimumNotional)))
-    .png()
-    .toBuffer();
-  const savedChart = await db
-    .select()
-    .from(kalshiTelegramChartsTable)
-    .where(eq(kalshiTelegramChartsTable.ticker, ticker))
-    .limit(1);
-  const existing = savedChart[0];
-  const caption = marketCardCaption(newest);
-  const keyboard = JSON.stringify({
-    inline_keyboard: [[{ text: "Open game in Kalshi", url: newest.marketUrl }]],
-  });
-  let messageId: number;
-
-  if (existing && existing.chatId === chatId) {
-    await telegramPhotoRequest("editMessageMedia", {
-      chat_id: chatId,
-      message_id: String(existing.messageId),
-      reply_markup: keyboard,
-      media: JSON.stringify({
-        type: "photo",
-        media: "attach://photo",
-        caption,
-        parse_mode: "HTML",
-      }),
-    }, png);
-    messageId = existing.messageId;
-  } else {
-    const sent = await telegramPhotoRequest<TelegramMessage>(
-      "sendPhoto",
-      {
-        chat_id: chatId,
-        caption,
-        parse_mode: "HTML",
-        reply_markup: keyboard,
-      },
-      png,
-    );
-    if (!sent.result?.message_id) {
-      throw new Error("Telegram did not return a message ID for the chart.");
-    }
-    messageId = sent.result.message_id;
-  }
-
-  await db
-    .insert(kalshiTelegramChartsTable)
-    .values({
-      ticker,
-      chatId,
-      messageId,
-      renderVersion: MARKET_CARD_VERSION,
-      marketUrl: newest.marketUrl,
-      updatedAt: new Date(),
-    })
-    .onConflictDoUpdate({
-      target: kalshiTelegramChartsTable.ticker,
-      set: {
-        chatId,
-        messageId,
-        renderVersion: MARKET_CARD_VERSION,
-        marketUrl: newest.marketUrl,
-        updatedAt: new Date(),
-      },
-    });
-}
-
-async function deliverPendingAlerts(settings: Settings) {
-  if (!settings.enabled || !settings.chatId || !botToken()) return;
-
-  const pending = await db
-    .select()
-    .from(kalshiAlertsTable)
-    .where(isNull(kalshiAlertsTable.alertedAt))
-    .orderBy(kalshiAlertsTable.createdTime)
-    .limit(ALERTS_PER_CYCLE);
-
-  const byMarket = new Map<string, typeof pending>();
-  for (const alert of pending) {
-    const marketAlerts = byMarket.get(alert.ticker) ?? [];
-    marketAlerts.push(alert);
-    byMarket.set(alert.ticker, marketAlerts);
-  }
-
-  for (const [ticker, marketAlerts] of byMarket) {
-    try {
-      const chartTrades = await db
-        .select()
-        .from(kalshiAlertsTable)
-        .where(eq(kalshiAlertsTable.ticker, ticker))
-        .orderBy(asc(kalshiAlertsTable.createdTime));
-      await deliverTradeChart(
-        settings.chatId,
-        ticker,
-        chartTrades,
-        settings.minimumNotional,
-      );
-      await db
-        .update(kalshiAlertsTable)
-        .set({ alertedAt: new Date() })
-        .where(
-          inArray(
-            kalshiAlertsTable.tradeId,
-            marketAlerts.map((alert) => alert.tradeId),
-          ),
-        );
-    } catch (error) {
-      const message =
-        error instanceof Error ? error.message : "Telegram delivery failed.";
-      lastError = `Telegram delivery failed: ${message}`;
-      logger.warn({ ticker, error: message }, "Trade chart delivery failed");
-    }
-  }
-}
-
-async function deliverRecentMarketCharts(settings: Settings) {
-  if (!settings.enabled || !settings.chatId || !botToken()) return;
-
-  const recentCutoff = new Date(Date.now() - 24 * 60 * 60 * 1000);
-  const recentDeliveredTrades = await db
-    .select()
-    .from(kalshiAlertsTable)
-    .where(
-      and(
-        gte(kalshiAlertsTable.createdTime, recentCutoff),
-        isNotNull(kalshiAlertsTable.alertedAt),
-      ),
-    )
-    .orderBy(asc(kalshiAlertsTable.createdTime));
-  const byMarket = new Map<string, typeof recentDeliveredTrades>();
-  for (const trade of recentDeliveredTrades) {
-    const marketTrades = byMarket.get(trade.ticker) ?? [];
-    marketTrades.push(trade);
-    byMarket.set(trade.ticker, marketTrades);
-  }
-
-  for (const [ticker] of byMarket) {
-    const [savedChart] = await db
-      .select()
-      .from(kalshiTelegramChartsTable)
-      .where(eq(kalshiTelegramChartsTable.ticker, ticker))
-      .limit(1);
-    if (
-      savedChart?.chatId === settings.chatId &&
-      savedChart.renderVersion === MARKET_CARD_VERSION
-    ) continue;
-
-    try {
-      const chartTrades = await db
-        .select()
-        .from(kalshiAlertsTable)
-        .where(eq(kalshiAlertsTable.ticker, ticker))
-        .orderBy(asc(kalshiAlertsTable.createdTime));
-      await deliverTradeChart(
-        settings.chatId,
-        ticker,
-        chartTrades,
-        settings.minimumNotional,
-      );
-    } catch (error) {
-      const message =
-        error instanceof Error ? error.message : "Telegram chart delivery failed.";
-      lastError = `Telegram chart delivery failed: ${message}`;
-      logger.warn({ ticker, error: message }, "Recent market chart delivery failed");
-    }
-  }
-}
-
 async function pollOnce() {
   if (pollInProgress) return;
   pollInProgress = true;
@@ -630,9 +433,8 @@ async function pollOnce() {
           })
           .onConflictDoNothing();
       }
-      await deliverPendingAlerts(settings);
-      await deliverRecentMarketCharts(settings);
     }
+    if (settings.chatId && botToken()) await telegramDashboard.sync(settings);
     lastPollBoundary = pollStartedAt;
     lastChecked = new Date().toISOString();
     lastError = null;
@@ -678,24 +480,19 @@ async function saveTelegramUpdateOffset(offset: number) {
 }
 
 async function respondToTelegramUpdate(update: TelegramUpdate) {
+  if (update.callback_query) {
+    await telegramDashboard.callback(update.callback_query, await readSettings());
+    return;
+  }
   const message = update.message;
   const text = message?.text?.trim();
   const chat = message?.chat;
-  if (!text || !/^\/start(?:@\w+)?(?:\s|$)/i.test(text) || !chat) return;
+  if (!text || !/^\/(?:start|menu|sports)(?:@\w+)?(?:\s|$)/i.test(text) || !chat) return;
 
   const chatId = String(chat.id);
-  await saveTelegramChatId(chatId);
-  await telegramRequest("sendMessage", {
-    chat_id: chatId,
-    text: [
-      "Kalshi Sports Alerts is connected to this chat.",
-      "",
-      "Open the dashboard, enable the monitor, and save settings to start receiving alerts. The default threshold is $10,000 per trade.",
-      "",
-      "Alerts use public market trades and do not identify individual buyers.",
-    ].join("\n"),
-    disable_web_page_preview: true,
-  });
+  if (/^\/start(?:@\w+)?(?:\s|$)/i.test(text)) await saveTelegramChatId(chatId);
+  const settings = await readSettings();
+  if (settings.chatId === chatId) await telegramDashboard.sync(settings, true);
 }
 
 async function pollTelegramUpdates(): Promise<boolean> {
@@ -707,7 +504,7 @@ async function pollTelegramUpdates(): Promise<boolean> {
     const request: Record<string, unknown> = {
       limit: 100,
       timeout: 10,
-      allowed_updates: ["message"],
+      allowed_updates: ["message", "callback_query"],
     };
     if (settings.telegramUpdateOffset != null) {
       request.offset = settings.telegramUpdateOffset;
@@ -769,8 +566,8 @@ export async function getKalshiDashboard() {
         ? "error"
         : "running";
 
-  // The alert log total is the count of qualifying trades that were queued;
-  // the separate sent count tracks successful Telegram deliveries.
+  // The published count represents trades made available in the one live
+  // Telegram dashboard, not the number of separate messages.
   const [actuallySent] = await db
     .select({ value: count() })
     .from(kalshiAlertsTable)
@@ -829,9 +626,6 @@ export async function findTelegramChat() {
 }
 
 export async function sendTelegramTest(chatId: string) {
-  await telegramRequest("sendMessage", {
-    chat_id: chatId,
-    text: "Kalshi Sports Alerts test message. Telegram delivery is connected.",
-    disable_web_page_preview: true,
-  });
+  const settings = await readSettings();
+  await telegramDashboard.sync({ ...settings, chatId }, true);
 }

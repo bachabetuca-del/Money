@@ -88,7 +88,7 @@ router.post("/kalshi/telegram/test", async (req, res): Promise<void> => {
     res.json(
       SendTelegramTestResponse.parse({
         success: true,
-        message: "Test message sent. Check your Telegram chat.",
+        message: "Live Telegram dashboard refreshed. Use its sport, game, and market buttons.",
       }),
     );
   } catch (error) {
