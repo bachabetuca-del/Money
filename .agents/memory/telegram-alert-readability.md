@@ -9,8 +9,8 @@ Telegram alerts must describe the game and bet in plain language, not raw Kalshi
 
 **How to apply:** Verify the actual image at phone width. Preserve the distinction between public taker direction and a literal identifiable buyer. When changing alert presentation, refresh existing saved messages as well as future messages. Historical metadata can contain old fallback identifiers even when live metadata lookup is now working; retry missing metadata rather than permanently caching lookup failures or sending raw identifiers.
 
-The user approved the revised phone-readable card appearance: “Ok great I like it now.” Preserve that visual presentation while improving chat organization.
+The user approved an earlier phone-readable card appearance: “Ok great I like it now.” They later explicitly requested a prettier, easier-to-read graph: “algo más bonito y fácil de leer.” Earlier approval is not a freeze on the layout when visual improvement is requested.
 
-**Why:** Explicit user confirmation after the readability changes; the subsequent concern was chat clutter and graph-message reuse, not the card's appearance.
+**Why:** The user values readable game/bet descriptions and clear trade details, but explicitly asked for stronger visual design after historical graphs were added.
 
-**How to apply:** Do not replace the approved visual approach merely to implement sport/market navigation or persistent live updates.
+**How to apply:** Preserve the plain-language content and one-message behavior, not necessarily the old layout or palette. Check the real rendered graph at 320–390px, with large currency amounts, long bet descriptions, sparse and multi-day history, and both monetary sections. Keep chart labels from colliding or getting clipped.

@@ -7,7 +7,7 @@ Include available public market history from before the bot was created, not mer
 
 **Why:** The user wanted more historical context and explicitly chose “Solo las del rango elegido: $5k–$10k o $10k+”.
 
-**How to apply:** Every qualifying historical trade should contribute to the graph, rather than truncating to the last six. Aggregate into clearly labeled time intervals when needed for phone readability. Explain that bar values are summed value per interval, not an individual purchase. Historical retrieval must not replay old transactions as new chat alerts or change the one-message dashboard.
+**How to apply:** Every qualifying historical trade should contribute to the graph, rather than truncating to the last six. Aggregate into clearly labeled time intervals when needed for phone readability. Explain that bar values are summed value per interval, not an individual purchase. Never label a bucket's summed amount as the “latest trade”; label it as an interval total and retain the actual latest individual amount separately. Historical retrieval must not replay old transactions as new chat alerts or change the one-message dashboard.
 
 Distinguish recent trades by their actual execution time relative to the current clock, never by import time or the time of the latest record in the dataset. The current presentation highlights the last 15 minutes and outlines the interval containing the latest trade; the top card retains that individual trade's exact amount and timestamp.
 
