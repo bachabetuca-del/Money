@@ -14,3 +14,9 @@ The user approved an earlier phone-readable card appearance: “Ok great I like 
 **Why:** The user values readable game/bet descriptions and clear trade details, but explicitly asked for stronger visual design after historical graphs were added.
 
 **How to apply:** Preserve the plain-language content and one-message behavior, not necessarily the old layout or palette. Check the real rendered graph at 320–390px, with large currency amounts, long bet descriptions, sparse and multi-day history, and both monetary sections. Keep chart labels from colliding or getting clipped.
+
+Prioritize the complete calendar date before team names on Telegram's single-line game buttons. Keep full names available on the rendered card and show dates in the selected game's context too.
+
+**Why:** The user could not tell which day several games were scheduled for because Telegram truncated long team names before the date. Date visibility is more important than preserving the full team name in a single button.
+
+**How to apply:** Use the authoritative scheduled date in New York time when available, otherwise the validated ticker date. Do not substitute trade/import dates or invent a day for season-long championship markets without a confirmed schedule.

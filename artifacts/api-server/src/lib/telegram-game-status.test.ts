@@ -4,7 +4,8 @@ import sharp from "sharp";
 import { writeFile } from "node:fs/promises";
 import { GameStatusMonitor, gameBadge, monitoringStopped, providerGameState, type GameStatus } from "./kalshi-game-status";
 import { KalshiGameStatusSource } from "./kalshi-game-status-source";
-import { buildCatalog, catalogGameBadge, HOME, menuSvg, menuView, type MarketSummary } from "./telegram-dashboard-view";
+import { bandButtons, buildCatalog, catalogGameBadge, HOME, menuSvg, menuView, type MarketSummary } from "./telegram-dashboard-view";
+import { gameDateLabel } from "./telegram-game-date";
 import { MarketHistory } from "./kalshi-market-history";
 import { marketCardSvg } from "./telegram-market-card";
 
@@ -176,4 +177,48 @@ test("finished charts are red, static across time and never present old trades a
   assert.match(first, /Terminado/);
   assert.match(first, /saved history/);
   assert.doesNotMatch(first, /1 in last 15m/);
+});
+
+test("game dates precede long team names on Telegram buttons, without a redundant trailing status", async () => {
+  const rows = menuRows().slice(0, 2).map((row, index) => ({
+    ...row, eventTitle: ["Denver vs Oklahoma City", "Cleveland vs Philadelphia"][index],
+    sport: "Basketball", ticker: `KXNBAGAME-26OCT2${index + 3}TEST-CHI`, gameState: "scheduled",
+  }));
+  const catalog = buildCatalog(rows);
+  const view = menuView({ ...HOME, screen: "games", sportKey: catalog[0].sportKey }, catalog, true, 10000);
+  const buttons = view.keyboard.inline_keyboard.flat().filter(button => button.callback_data?.startsWith("d:game:"));
+  assert.equal(buttons.length, 2);
+  for (const button of buttons) {
+    assert.match(button.text, /^⚪ 2[34] oct 2026 · /);
+    assert.doesNotMatch(button.text, /Por empezar/);
+    assert.ok(button.text.length < 52);
+  }
+  assert.match(view.items[0].label, /^2[34] oct 2026 · /);
+  const png = await sharp(Buffer.from(menuSvg(view))).resize({ width: 320 }).png().toBuffer();
+  await writeFile("/tmp/kalshi-date-first-preview.png", png);
+});
+
+test("official game dates use New York time and never change the callback/game identity", () => {
+  const row = { ...menuRows()[0], ticker: "KXNBAGAME-26OCT23DENOKC-DEN" };
+  assert.equal(gameDateLabel(row.ticker, "2026-10-24T00:30:00Z"), "23 oct 2026");
+  const before = buildCatalog([row])[0];
+  const after = buildCatalog([{ ...row, gameStartsAt: "2026-10-25T00:30:00Z" }])[0];
+  assert.equal(after.gameDateLabel, "24 oct 2026");
+  assert.equal(before.gameKey, after.gameKey);
+  assert.equal(before.id, after.id);
+});
+
+test("missing/invalid schedule dates fall back safely; season titles are never assigned a made-up game date", () => {
+  assert.equal(gameDateLabel("KXNBAGAME-26OCT23DENOKC-DEN", "invalid"), "23 oct 2026");
+  assert.equal(gameDateLabel("KXNBA-27-TEAM"), "Sin fecha");
+  assert.equal(gameDateLabel("KXNFLGAME-26FEB31AB-CD"), "Sin fecha");
+  assert.equal(gameDateLabel("KXNFLGAME-26XYZ23AB-CD"), "Sin fecha");
+  assert.equal(gameDateLabel("KXNBA-27-TEAM", "2027-06-12T19:00:00Z"), "12 jun 2027");
+});
+
+test("compact range labels preserve exact thresholds, selection and callback routing", () => {
+  assert.deepEqual(bandButtons("large").map(button => button.text), ["• $10k+", "$5k–$10k"]);
+  assert.deepEqual(bandButtons("medium").map(button => button.text), ["$10k+", "• $5k–$10k"]);
+  assert.equal(bandButtons("large", 15050)[0].text, "• $15,050+");
+  assert.equal(bandButtons("large", 15050)[0].callback_data, "d:band:large");
 });

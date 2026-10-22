@@ -2,6 +2,7 @@ import { createHash } from "node:crypto";
 import { escapeHtml, readableBet } from "./telegram-market-card";
 import { rangeLabel, tradeRange, type TradeBand } from "./kalshi-trade-bands";
 import { gameBadge } from "./kalshi-game-status";
+import { gameDateLabel } from "./telegram-game-date";
 
 export type Screen = "sports" | "games" | "markets" | "chart";
 export type Selection = {
@@ -24,6 +25,7 @@ export type MarketSummary = {
   gameSource?: string | null;
   gameDelayed?: boolean;
   gameCheckedAt?: string;
+  gameStartsAt?: string | null;
   marketTerminal?: boolean;
 };
 export type CatalogMarket = MarketSummary & {
@@ -32,6 +34,7 @@ export type CatalogMarket = MarketSummary & {
   gameKey: string;
   gameName: string;
   gameLabel: string;
+  gameDateLabel: string;
   betLabel: string;
 };
 export type Button = { text: string; callback_data?: string; url?: string };
@@ -71,12 +74,13 @@ export function buildCatalog(rows: MarketSummary[]): CatalogMarket[] {
       /\s*:\s*(?:spread|total points|total runs|total goals|total games|moneyline|game winner|winner)$/i, "",
     ).trim();
     const date = row.ticker.match(/-(\d{2}[A-Z]{3}\d{2})/)?.[1] ?? "";
-    const dateLabel = date ? `${date.slice(2, 5)} ${Number(date.slice(5))}, 20${date.slice(0, 2)}` : "";
+    const dateLabel = gameDateLabel(row.ticker, row.gameStartsAt);
     const entry = {
       ...row, sport, id: keyFor(row.ticker), sportKey: keyFor(sport),
       gameKey: keyFor(`${sport}|${gameName.toLowerCase()}|${date}`),
       gameName,
-      gameLabel: gameName + (dateLabel ? ` · ${dateLabel}` : ""),
+      gameLabel: `${dateLabel} · ${gameName}`,
+      gameDateLabel: dateLabel,
       betLabel: readableBet(row.marketTitle),
     };
     const prior = unique.get(row.ticker);
@@ -135,9 +139,11 @@ export function navigate(selection: Selection, action: string, catalog: CatalogM
 }
 
 export function bandButtons(band: TradeBand, threshold = 10_000): Button[] {
+  const minimum = Math.max(10_000, threshold);
+  const amount = minimum % 1000 === 0 ? `${minimum / 1000}k` : minimum.toLocaleString("en-US");
   return [
-    { text: `${band === "large" ? "Selected: " : ""}$${Math.max(10_000, threshold).toLocaleString("en-US")}+`, callback_data: "d:band:large" },
-    { text: `${band === "medium" ? "Selected: " : ""}$5k–$10k`, callback_data: "d:band:medium" },
+    { text: `${band === "large" ? "• " : ""}$${amount}+`, callback_data: "d:band:large" },
+    { text: `${band === "medium" ? "• " : ""}$5k–$10k`, callback_data: "d:band:medium" },
   ];
 }
 
@@ -158,7 +164,7 @@ export function catalogGameBadge(markets: MarketSummary[]) {
   return gameBadge("unknown");
 }
 
-type MenuItem = { label: string; detail: string; action: string; badge?: ReturnType<typeof gameBadge> };
+type MenuItem = { label: string; detail: string; action: string; badge?: ReturnType<typeof gameBadge>; buttonLabel?: string };
 export function menuView(selection: Selection, catalog: CatalogMarket[], enabled: boolean, threshold: number) {
   const activeRange = rangeLabel(tradeRange(selection.band, threshold));
   let title = "Choose a sport";
@@ -172,12 +178,13 @@ export function menuView(selection: Selection, catalog: CatalogMarket[], enabled
     for (const market of sportMarkets) grouped.set(market.gameKey, [...(grouped.get(market.gameKey) ?? []), market]);
     items = [...grouped].map(([key, markets]) => ({
       label: markets[0].gameLabel,
+      buttonLabel: markets[0].gameLabel,
       detail: `${markets.length} ${markets.length === 1 ? "market" : "markets"} · ${markets.reduce((sum, m) => sum + m.trades, 0)} trades`,
       action: `d:game:${key}`,
       badge: catalogGameBadge(markets),
     })).sort((a, b) => a.badge.rank - b.badge.rank);
   } else if (selection.screen === "markets") {
-    title = sportMarkets.find(m => m.gameKey === selection.gameKey)?.gameName ?? "Markets";
+    title = sportMarkets.find(m => m.gameKey === selection.gameKey)?.gameLabel ?? "Markets";
     subtitle = `${activeRange} only · choose a bet`;
     const badge = catalogGameBadge(sportMarkets.filter(m => m.gameKey === selection.gameKey));
     items = sportMarkets.filter(m => m.gameKey === selection.gameKey).map(m => ({
@@ -202,7 +209,8 @@ export function menuView(selection: Selection, catalog: CatalogMarket[], enabled
   const keyboard: Keyboard = { inline_keyboard: [
     bandButtons(selection.band, threshold),
     ...visible.map(item => [{ text: (item.badge
-      ? `${item.badge.marker} ${item.label.slice(0, 67)} · ${item.badge.label}`
+      ? item.buttonLabel ? `${item.badge.marker} ${item.buttonLabel.slice(0, 92)}` :
+        `${item.badge.marker} ${item.label.slice(0, 67)} · ${item.badge.label}`
       : item.label).slice(0, 120), callback_data: item.action }]),
   ] };
   const paging: Button[] = [];

@@ -40,6 +40,7 @@ export const telegramDashboardStore: DashboardStore = {
       const status = byTicker.get(row.ticker);
       return { ...row, lastTradeAt: new Date(row.lastTradeAt).toISOString(),
         gameState: status?.state, gameSource: status?.source, gameDelayed: status?.delayed,
+        gameStartsAt: status?.startsAt?.toISOString(),
         gameCheckedAt: status?.checkedAt.toISOString(), marketTerminal: status?.marketTerminal };
     });
   },

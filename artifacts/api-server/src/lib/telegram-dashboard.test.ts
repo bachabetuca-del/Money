@@ -219,7 +219,7 @@ test("game grouping combines Kalshi's separate moneyline, spread, and total even
   assert.equal(games.items.length, 1);
   const markets = menuView(navigate(sportSelection, `d:game:${catalog[0].gameKey}`, catalog), catalog, true, 10000);
   assert.equal(markets.items.length, 3);
-  assert.equal(markets.title, "New England vs Chicago");
+  assert.equal(markets.title, "22 oct 2026 · New England vs Chicago");
   assert.ok(markets.items.some(m => m.label === "Chicago to win by more than 2.5 points"));
   assert.ok(markets.keyboard.inline_keyboard.flat().every(button =>
     !button.callback_data || Buffer.byteLength(button.callback_data) <= 64));

@@ -135,6 +135,7 @@ export class TelegramDashboard {
       svg = marketCardSvg(rows, range.minimum, rangeFooter(range), selection.band, this.api.now?.() ?? new Date(),
         { label: badge.label, color: badge.color, stopped });
       caption = marketCardCaption(rows[rows.length - 1], !stopped) +
+        `\nFecha del partido: ${escapeHtml(market.gameDateLabel)}` +
         `\n${badge.marker} ${escapeHtml(badge.label)}` +
         (market.gameCheckedAt ? ` · comprobado ${new Date(market.gameCheckedAt).toLocaleTimeString("en-US",
           { timeZone: "America/New_York", hour: "numeric", minute: "2-digit" })} NY` : "") +
