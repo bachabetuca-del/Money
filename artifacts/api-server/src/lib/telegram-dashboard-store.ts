@@ -1,9 +1,17 @@
-import { and, asc, count, desc, eq, gte, inArray, isNull, lte, sql } from "drizzle-orm";
+import { and, asc, count, desc, eq, gt, gte, inArray, isNull, lt, lte, sql } from "drizzle-orm";
 import {
   db, kalshiAlertsTable, kalshiTelegramChartsTable, telegramDashboardTable,
 } from "@workspace/db";
 import type { DashboardState, DashboardStore } from "./telegram-dashboard";
 import type { Screen } from "./telegram-dashboard-view";
+import type { TradeRange } from "./kalshi-trade-bands";
+
+function rangeCondition(range: TradeRange) {
+  return and(
+    range.minimumInclusive ? gte(kalshiAlertsTable.notional, range.minimum) : gt(kalshiAlertsTable.notional, range.minimum),
+    range.maximum === null ? undefined : lt(kalshiAlertsTable.notional, range.maximum),
+  );
+}
 
 export const telegramDashboardStore: DashboardStore = {
   async state(chatId) {
@@ -11,26 +19,26 @@ export const telegramDashboardStore: DashboardStore = {
       .where(eq(telegramDashboardTable.chatId, chatId)).limit(1);
     if (!state) return undefined;
     const screen: Screen = ["sports", "games", "markets", "chart"].includes(state.screen) ? state.screen as Screen : "sports";
-    return { ...state, screen };
+    return { ...state, screen, band: state.band === "medium" ? "medium" : "large" };
   },
   async save(state: DashboardState) {
     await db.insert(telegramDashboardTable).values({ ...state, updatedAt: new Date() })
       .onConflictDoUpdate({ target: telegramDashboardTable.chatId, set: { ...state, updatedAt: new Date() } });
   },
-  async markets(threshold) {
+  async markets(range) {
     const rows = await db.select({
       ticker: kalshiAlertsTable.ticker, sport: kalshiAlertsTable.sport,
       eventTitle: kalshiAlertsTable.eventTitle, marketTitle: kalshiAlertsTable.marketTitle,
       marketUrl: kalshiAlertsTable.marketUrl, trades: count(),
       lastTradeAt: sql<string>`max(${kalshiAlertsTable.createdTime})::text`,
-    }).from(kalshiAlertsTable).where(gte(kalshiAlertsTable.notional, threshold))
+    }).from(kalshiAlertsTable).where(rangeCondition(range))
       .groupBy(kalshiAlertsTable.ticker, kalshiAlertsTable.sport, kalshiAlertsTable.eventTitle,
         kalshiAlertsTable.marketTitle, kalshiAlertsTable.marketUrl);
     return rows.map(row => ({ ...row, lastTradeAt: new Date(row.lastTradeAt).toISOString() }));
   },
-  async trades(ticker, threshold) {
+  async trades(ticker, range) {
     return db.select().from(kalshiAlertsTable)
-      .where(and(eq(kalshiAlertsTable.ticker, ticker), gte(kalshiAlertsTable.notional, threshold)))
+      .where(and(eq(kalshiAlertsTable.ticker, ticker), rangeCondition(range)))
       .orderBy(asc(kalshiAlertsTable.createdTime), asc(kalshiAlertsTable.tradeId));
   },
   async context(ticker, context) {
@@ -48,10 +56,10 @@ export const telegramDashboardStore: DashboardStore = {
     await db.update(kalshiTelegramChartsTable).set({ retiredAt: new Date() })
       .where(eq(kalshiTelegramChartsTable.ticker, ticker));
   },
-  async publishedThrough(cutoff, tickers) {
+  async publishedThrough(cutoff, tickers, range) {
     if (!tickers.length) return;
     await db.update(kalshiAlertsTable).set({ alertedAt: new Date() })
       .where(and(isNull(kalshiAlertsTable.alertedAt), lte(kalshiAlertsTable.savedAt, cutoff),
-        inArray(kalshiAlertsTable.ticker, tickers)));
+        inArray(kalshiAlertsTable.ticker, tickers), rangeCondition(range)));
   },
 };

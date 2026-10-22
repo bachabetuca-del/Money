@@ -4,6 +4,7 @@ export const telegramDashboardTable = pgTable("telegram_dashboard", {
   chatId: text("chat_id").primaryKey(),
   messageId: integer("message_id"),
   screen: text("screen").notNull().default("sports"),
+  band: text("band").notNull().default("large"),
   sportKey: text("sport_key"),
   gameKey: text("game_key"),
   ticker: text("ticker"),

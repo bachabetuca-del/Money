@@ -229,7 +229,7 @@ function Home() {
                 <div className="stat-glyph"><Activity /></div>
               </div>
               <div className="stat-card">
-                <div className="stat-label">Trades in live dashboard</div>
+                <div className="stat-label">Large trades in live dashboard</div>
                 <div className="stat-value" data-testid="text-alerts-sent">{dashboard.alertsSent.toLocaleString()}</div>
                 <div className="stat-foot">Available in your single Telegram dashboard</div>
                 <div className="stat-glyph"><Bell /></div>
@@ -332,7 +332,7 @@ function Home() {
                     </div>
                     <p className="setup-copy">
                       {dashboard.telegramConfigured
-                        ? <>Your live dashboard is connected. Browse Sport → Game → Market in Telegram. New trades update the same message.</>
+                        ? <>Your live dashboard is connected. Choose the $10k+ or separate $5k–$10k section, then Sport → Game → Market. New trades update the same message.</>
                         : <>Open your bot in Telegram and send <strong>/start</strong> first. Then find the chat to link this monitor.</>}
                     </p>
                     {!dashboard.telegramConfigured && (

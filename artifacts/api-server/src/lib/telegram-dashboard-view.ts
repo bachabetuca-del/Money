@@ -1,9 +1,11 @@
 import { createHash } from "node:crypto";
 import { escapeHtml, readableBet } from "./telegram-market-card";
+import { rangeLabel, tradeRange, type TradeBand } from "./kalshi-trade-bands";
 
 export type Screen = "sports" | "games" | "markets" | "chart";
 export type Selection = {
   screen: Screen;
+  band: TradeBand;
   sportKey: string | null;
   gameKey: string | null;
   ticker: string | null;
@@ -28,7 +30,7 @@ export type CatalogMarket = MarketSummary & {
 };
 export type Button = { text: string; callback_data?: string; url?: string };
 export type Keyboard = { inline_keyboard: Button[][] };
-export const HOME: Selection = { screen: "sports", sportKey: null, gameKey: null, ticker: null, page: 0 };
+export const HOME: Selection = { screen: "sports", band: "large", sportKey: null, gameKey: null, ticker: null, page: 0 };
 const PAGE_SIZE = 6;
 
 export function keyFor(value: string) {
@@ -82,8 +84,8 @@ export function buildCatalog(rows: MarketSummary[]): CatalogMarket[] {
 }
 
 export function normalizeSelection(selection: Selection, catalog: CatalogMarket[]): Selection {
-  if (selection.screen === "sports") return { ...HOME, page: selection.page };
-  if (!catalog.some(market => market.sportKey === selection.sportKey)) return { ...HOME };
+  if (selection.screen === "sports") return { ...HOME, band: selection.band, page: selection.page };
+  if (!catalog.some(market => market.sportKey === selection.sportKey)) return { ...HOME, band: selection.band };
   if (selection.screen === "games") return selection;
   if (!catalog.some(market => market.sportKey === selection.sportKey && market.gameKey === selection.gameKey)) {
     return { ...selection, screen: "games", gameKey: null, ticker: null, page: 0 };
@@ -98,33 +100,44 @@ export function normalizeSelection(selection: Selection, catalog: CatalogMarket[
 export function navigate(selection: Selection, action: string, catalog: CatalogMarket[]): Selection {
   const [prefix, type, value] = action.split(":");
   if (prefix !== "d") throw new Error("Unknown dashboard action.");
-  if (type === "home") return { ...HOME };
+  if (type === "home") return { ...HOME, band: selection.band };
+  if (type === "band" && (value === "large" || value === "medium")) {
+    return { ...HOME, band: value };
+  }
   if (type === "refresh") return selection;
   if (type === "page" && /^\d+$/.test(value ?? "")) {
     return { ...selection, page: Math.min(Number(value), 100_000) };
   }
   if (type === "sport") {
     const market = catalog.find(m => m.sportKey === value);
-    if (market) return { ...HOME, screen: "games", sportKey: market.sportKey };
+    if (market) return { ...HOME, band: selection.band, screen: "games", sportKey: market.sportKey };
   }
   if (type === "game") {
     const market = catalog.find(m => m.gameKey === value);
-    if (market) return { screen: "markets", sportKey: market.sportKey, gameKey: market.gameKey, ticker: null, page: 0 };
+    if (market) return { screen: "markets", band: selection.band, sportKey: market.sportKey, gameKey: market.gameKey, ticker: null, page: 0 };
   }
   if (type === "market") {
     const market = catalog.find(m => m.id === value);
-    if (market) return { screen: "chart", sportKey: market.sportKey, gameKey: market.gameKey, ticker: market.ticker, page: 0 };
+    if (market) return { screen: "chart", band: selection.band, sportKey: market.sportKey, gameKey: market.gameKey, ticker: market.ticker, page: 0 };
   }
   if (type === "back") {
     if (selection.screen === "chart") return { ...selection, screen: "markets", ticker: null, page: 0 };
     if (selection.screen === "markets") return { ...selection, screen: "games", gameKey: null, ticker: null, page: 0 };
-    return { ...HOME };
+    return { ...HOME, band: selection.band };
   }
   throw new Error("This selection is no longer available. Tap Sports to refresh.");
 }
 
-export function chartKeyboard(selection: Selection, marketUrl: string): Keyboard {
+export function bandButtons(band: TradeBand, threshold = 10_000): Button[] {
+  return [
+    { text: `${band === "large" ? "Selected: " : ""}$${Math.max(10_000, threshold).toLocaleString("en-US")}+`, callback_data: "d:band:large" },
+    { text: `${band === "medium" ? "Selected: " : ""}$5k–$10k`, callback_data: "d:band:medium" },
+  ];
+}
+
+export function chartKeyboard(selection: Selection, marketUrl: string, threshold = 10_000): Keyboard {
   return { inline_keyboard: [
+    bandButtons(selection.band, threshold),
     [{ text: "Back to markets", callback_data: "d:back" }, { text: "Sports", callback_data: "d:home" }],
     [{ text: "Open market in Kalshi", url: marketUrl }, { text: "Refresh", callback_data: "d:refresh" }],
   ] };
@@ -132,13 +145,14 @@ export function chartKeyboard(selection: Selection, marketUrl: string): Keyboard
 
 type MenuItem = { label: string; detail: string; action: string };
 export function menuView(selection: Selection, catalog: CatalogMarket[], enabled: boolean, threshold: number) {
+  const activeRange = rangeLabel(tradeRange(selection.band, threshold));
   let title = "Choose a sport";
-  let subtitle = "One dashboard. Every tracked market.";
+  let subtitle = `${activeRange} only · separate trade section`;
   let items: MenuItem[];
   const sportMarkets = catalog.filter(m => m.sportKey === selection.sportKey);
   if (selection.screen === "games") {
     title = sportMarkets[0]?.sport ?? "Games";
-    subtitle = "Choose a game to browse its markets";
+    subtitle = `${activeRange} only · choose a game`;
     const grouped = new Map<string, CatalogMarket[]>();
     for (const market of sportMarkets) grouped.set(market.gameKey, [...(grouped.get(market.gameKey) ?? []), market]);
     items = [...grouped].map(([key, markets]) => ({
@@ -148,7 +162,7 @@ export function menuView(selection: Selection, catalog: CatalogMarket[], enabled
     }));
   } else if (selection.screen === "markets") {
     title = sportMarkets.find(m => m.gameKey === selection.gameKey)?.gameName ?? "Markets";
-    subtitle = "Choose a bet to open its live graph";
+    subtitle = `${activeRange} only · choose a bet`;
     items = sportMarkets.filter(m => m.gameKey === selection.gameKey).map(m => ({
       label: m.betLabel, detail: `${m.trades} tracked ${m.trades === 1 ? "trade" : "trades"}`,
       action: `d:market:${m.id}`,
@@ -167,7 +181,10 @@ export function menuView(selection: Selection, catalog: CatalogMarket[], enabled
   const pages = Math.max(1, Math.ceil(items.length / PAGE_SIZE));
   const page = Math.max(0, Math.min(selection.page, pages - 1));
   const visible = items.slice(page * PAGE_SIZE, (page + 1) * PAGE_SIZE);
-  const keyboard: Keyboard = { inline_keyboard: visible.map(item => [{ text: item.label.slice(0, 100), callback_data: item.action }]) };
+  const keyboard: Keyboard = { inline_keyboard: [
+    bandButtons(selection.band, threshold),
+    ...visible.map(item => [{ text: item.label.slice(0, 100), callback_data: item.action }]),
+  ] };
   const paging: Button[] = [];
   if (page > 0) paging.push({ text: "Previous", callback_data: `d:page:${page - 1}` });
   if (page < pages - 1) paging.push({ text: "Next", callback_data: `d:page:${page + 1}` });
@@ -178,7 +195,7 @@ export function menuView(selection: Selection, catalog: CatalogMarket[], enabled
   keyboard.inline_keyboard.push([{ text: "Refresh", callback_data: "d:refresh" }]);
   const status = enabled ? "LIVE · checks every 15 seconds" : "PAUSED · saved trade history";
   const caption = `<b>${escapeHtml(title)}</b>\nChoose a button below. Sport → Game → Market.\n` +
-    `<i>${status}. Only captured trades ≥ $${threshold.toLocaleString("en-US")}.</i>`;
+    `<i>${status}. Captured trades ${escapeHtml(activeRange)} only; sections never mix.</i>`;
   return { title, subtitle, items: visible, page, pages, keyboard, caption, status };
 }
 

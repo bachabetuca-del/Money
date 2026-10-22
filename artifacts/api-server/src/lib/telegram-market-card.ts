@@ -1,3 +1,5 @@
+import type { TradeBand } from "./kalshi-trade-bands";
+
 export const MARKET_CARD_VERSION = 2;
 
 export type MarketCardTrade = {
@@ -66,7 +68,7 @@ export function marketCardCaption(trade: MarketCardTrade) {
   ].join("\n");
 }
 
-export function marketCardSvg(trades: MarketCardTrade[], threshold: number) {
+export function marketCardSvg(trades: MarketCardTrade[], threshold: number, filterLabel?: string, band: TradeBand = "large") {
   if (!trades.length) throw new Error("A market card needs at least one trade.");
   const ordered = [...trades].sort((a, b) => a.createdTime.getTime() - b.createdTime.getTime());
   const latest = ordered[ordered.length - 1];
@@ -122,19 +124,19 @@ export function marketCardSvg(trades: MarketCardTrade[], threshold: number) {
       <text x="52" y="${betY}" font-size="25" fill="#94A3B8" letter-spacing="2">THE BET</text>
       ${bet.svg}
       <rect x="36" y="${panelY}" width="828" height="286" rx="24" fill="#172337"/>
-      <text x="64" y="${panelY + 48}" font-size="26" fill="#CBD5E1" letter-spacing="1">LATEST LARGE TRADE</text>
+      <text x="64" y="${panelY + 48}" font-size="26" fill="#CBD5E1" letter-spacing="1">${band === "medium" ? "LATEST $5k–$10k TRADE" : "LATEST LARGE TRADE"}</text>
       <text x="64" y="${panelY + 131}" font-size="78" font-weight="700" fill="#FFFFFF">${escapeHtml(money(latest.notional))}</text>
       <text x="64" y="${panelY + 181}" font-size="31" font-weight="700" fill="${sideColor}">${sideText}</text>
       <text x="64" y="${panelY + 227}" font-size="29" fill="#E2E8F0">${count} contracts at ${cents}¢</text>
       <text x="64" y="${panelY + 264}" font-size="25" fill="#94A3B8">${escapeHtml(timestamp)}</text>
-      <text x="52" y="${chartTitleY}" font-size="34" font-weight="700" fill="#F8FAFC">Large trades over time</text>
+      <text x="52" y="${chartTitleY}" font-size="34" font-weight="700" fill="#F8FAFC">${band === "medium" ? "$5k–$10k trades over time" : "Large trades over time"}</text>
       <text x="52" y="${chartTitleY + 42}" font-size="27" fill="#94A3B8">${shownLabel} · trade value in USD</text>
       ${grid}${bars}
       <circle cx="68" cy="${chartBottom + 94}" r="9" fill="#61A9BD"/>
       <text x="89" y="${chartBottom + 103}" font-size="27" fill="#CBD5E1">YES / FOR</text>
       <circle cx="332" cy="${chartBottom + 94}" r="9" fill="#E98E2E"/>
       <text x="353" y="${chartBottom + 103}" font-size="27" fill="#CBD5E1">NO / AGAINST</text>
-      <text x="52" y="${chartBottom + 155}" font-size="25" fill="#94A3B8">Trades ≥ ${escapeHtml(money(threshold))} · Times in New York</text>
+      <text x="52" y="${chartBottom + 155}" font-size="25" fill="#94A3B8">${escapeHtml(filterLabel ?? `Trades ≥ ${money(threshold)}`)} · New York time</text>
     </g>
   </svg>`;
 }

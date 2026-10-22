@@ -7,6 +7,8 @@ import {
 import {
   buildCatalog, HOME, menuSvg, menuView, navigate, type MarketSummary,
 } from "./telegram-dashboard-view";
+import { inTradeRange, shouldCaptureTrade, tradeRange, type TradeRange } from "./kalshi-trade-bands";
+import { marketCardSvg } from "./telegram-market-card";
 
 const settings = { chatId: "test-chat", minimumNotional: 10000, enabled: true };
 const moneyline = "KXNFLGAME-26OCT22NECHI-CHI";
@@ -30,11 +32,20 @@ class MemoryStore implements DashboardStore {
   cards = [{ ticker: "newest", messageId: 400 }, { ticker: "older", messageId: 300 }, { ticker: "oldest", messageId: 200 }];
   retired = new Set<string>();
   published: string[][] = [];
+  graphRows: DashboardTrade[][] = [];
   async state(chatId: string) { const row = this.saved.get(chatId); return row ? { ...row } : undefined; }
   async save(state: DashboardState) { this.saved.set(state.chatId, { ...state }); }
-  async markets() { return this.rows.map(row => ({ ...row })); }
-  async trades(ticker: string, threshold: number) {
-    return (this.tradesByTicker.get(ticker) ?? []).filter(row => row.notional >= threshold);
+  async markets(range: TradeRange) {
+    return this.rows.flatMap(row => {
+      const trades = (this.tradesByTicker.get(row.ticker) ?? []).filter(t => inTradeRange(t.notional, range));
+      if (!trades.length) return [];
+      return [{ ...row, trades: trades.length, lastTradeAt: new Date(Math.max(...trades.map(t => t.createdTime.getTime()))).toISOString() }];
+    });
+  }
+  async trades(ticker: string, range: TradeRange) {
+    const rows = (this.tradesByTicker.get(ticker) ?? []).filter(row => inTradeRange(row.notional, range));
+    this.graphRows.push(rows);
+    return rows;
   }
   async context(ticker: string, context: { eventTitle: string; marketTitle: string }) {
     this.rows = this.rows.map(row => row.ticker === ticker ? { ...row, ...context } : row);
@@ -123,7 +134,9 @@ test("new unrelated markets do not post new graph messages or replace the select
   await dashboard.sync(settings);
   await openChart(dashboard, store);
   const before = api.photos().length;
-  store.rows.push({ ...summary("KXNBAGAME-26OCT22OTHER-TEAM"), sport: "Basketball", eventTitle: "Boston vs Miami" });
+  const newMarket = { ...summary("KXNBAGAME-26OCT22OTHER-TEAM"), sport: "Basketball", eventTitle: "Boston vs Miami" };
+  store.rows.push(newMarket);
+  store.tradesByTicker.set(newMarket.ticker, [trade(newMarket)]);
   await dashboard.sync(settings);
   assert.equal(api.photos().length, before);
   assert.equal((await store.state(settings.chatId))?.ticker, moneyline);
@@ -230,4 +243,65 @@ test("an empty catalog still has one dashboard with clear waiting status", async
   assert.equal(api.photos().length, 1);
   assert.equal((await store.state(settings.chatId))?.screen, "sports");
   assert.match(menuSvg(menuView(HOME, [], true, 10000)), /Waiting for a qualifying sports trade/);
+});
+
+test("the new section has strict $5k/$10k boundaries and never overlaps the existing section", () => {
+  const medium = tradeRange("medium");
+  const large = tradeRange("large");
+  for (const amount of [0, 4999.99, 5000, 5000.01, 7500, 9999.99, 10000, 10000.01, 50000]) {
+    assert.equal(inTradeRange(amount, medium), amount > 5000 && amount < 10000);
+    assert.equal(inTradeRange(amount, large), amount >= 10000);
+    assert.equal(shouldCaptureTrade(amount), amount > 5000);
+    assert.ok(!(inTradeRange(amount, medium) && inTradeRange(amount, large)));
+  }
+  assert.equal(inTradeRange(Number.NaN, medium), false);
+  assert.equal(inTradeRange(Number.POSITIVE_INFINITY, large), false);
+  assert.equal(tradeRange("large", 15000).minimum, 15000);
+  assert.equal(tradeRange("large", 2000).minimum, 10000);
+  assert.deepEqual(tradeRange("medium", 15000), medium);
+  const card = marketCardSvg([{ ...trade(summary()), notional: 7500 }], 5000, undefined, "medium");
+  assert.match(card, /LATEST \$5k–\$10k TRADE/);
+  assert.doesNotMatch(card, /LATEST LARGE TRADE/);
+});
+
+test("switching sections filters a shared market's graph, preserves the message, and persists after restart", async () => {
+  const { store, api, dashboard } = setup();
+  const original = store.tradesByTicker.get(moneyline)![0];
+  store.tradesByTicker.set(moneyline, [original, ...[5000, 5000.01, 7500, 9999.99, 10000].map((notional, index) => ({
+    ...original, notional, createdTime: new Date(original.createdTime.getTime() + index + 1),
+  }))]);
+  await dashboard.sync(settings);
+  await openChart(dashboard, store);
+  assert.deepEqual(store.graphRows.at(-1)?.map(row => row.notional), [33084, 10000]);
+  await press(dashboard, "d:band:medium");
+  assert.equal((await store.state(settings.chatId))?.band, "medium");
+  assert.equal((await store.state(settings.chatId))?.screen, "sports");
+  await openChart(dashboard, store);
+  assert.deepEqual(store.graphRows.at(-1)?.map(row => row.notional), [5000.01, 7500, 9999.99]);
+  assert.ok(String(api.photos().at(-1)?.body.media).includes("Section: &gt;$5,000 and &lt;$10,000 only."));
+  assert.ok(api.photos().every(call => call.method === "editMessageMedia" && call.body.message_id === "400"));
+  const restarted = new TelegramDashboard(store, api);
+  await restarted.sync(settings);
+  assert.equal((await store.state(settings.chatId))?.band, "medium");
+  assert.equal((await store.state(settings.chatId))?.screen, "chart");
+  await press(restarted, "d:home");
+  assert.equal((await store.state(settings.chatId))?.band, "medium");
+  await press(restarted, "d:band:large");
+  assert.equal((await store.state(settings.chatId))?.band, "large");
+  assert.equal(api.calls.filter(call => call.method === "sendPhoto").length, 0);
+});
+
+test("new medium-size trades cannot change the existing large-trade graph", async () => {
+  const { store, api, dashboard } = setup();
+  await dashboard.sync(settings);
+  await openChart(dashboard, store);
+  const before = api.photos().length;
+  const rows = store.tradesByTicker.get(moneyline)!;
+  rows.push({ ...rows[0], notional: 7200, createdTime: new Date("2026-10-22T19:00:00Z") });
+  await dashboard.sync(settings);
+  assert.equal(api.photos().length, before);
+  assert.deepEqual(store.graphRows.at(-1)?.map(row => row.notional), [33084]);
+  await press(dashboard, "d:band:medium");
+  await openChart(dashboard, store);
+  assert.deepEqual(store.graphRows.at(-1)?.map(row => row.notional), [7200]);
 });

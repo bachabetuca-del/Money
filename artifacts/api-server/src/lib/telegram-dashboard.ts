@@ -1,6 +1,7 @@
 import sharp from "sharp";
 import { logger } from "./logger";
-import { marketCardCaption, marketCardSvg, type MarketCardTrade } from "./telegram-market-card";
+import { escapeHtml, marketCardCaption, marketCardSvg, type MarketCardTrade } from "./telegram-market-card";
+import { rangeFooter, rangeLabel, tradeRange, type TradeRange } from "./kalshi-trade-bands";
 import {
   buildCatalog, chartKeyboard, HOME, keyFor, menuSvg, menuView,
   navigate, normalizeSelection, type MarketSummary, type Selection,
@@ -23,12 +24,12 @@ export type CallbackQuery = {
 export interface DashboardStore {
   state(chatId: string): Promise<DashboardState | undefined>;
   save(state: DashboardState): Promise<void>;
-  markets(threshold: number): Promise<MarketSummary[]>;
-  trades(ticker: string, threshold: number): Promise<DashboardTrade[]>;
+  markets(range: TradeRange): Promise<MarketSummary[]>;
+  trades(ticker: string, range: TradeRange): Promise<DashboardTrade[]>;
   context(ticker: string, context: { eventTitle: string; marketTitle: string }): Promise<void>;
   oldCards(chatId: string): Promise<{ ticker: string; messageId: number }[]>;
   retire(ticker: string): Promise<void>;
-  publishedThrough(cutoff: Date, tickers: string[]): Promise<void>;
+  publishedThrough(cutoff: Date, tickers: string[], range: TradeRange): Promise<void>;
 }
 type TelegramResult<T> = { result?: T };
 export interface DashboardApi {
@@ -97,7 +98,9 @@ export class TelegramDashboard {
         contentHash: null, cleanupComplete: false, cleanupWarning: null,
       };
     }
-    let summaries = await this.store.markets(settings.minimumNotional);
+    const band = action === "d:band:medium" ? "medium" : action === "d:band:large" ? "large" : state.band;
+    const range = tradeRange(band, settings.minimumNotional);
+    let summaries = await this.store.markets(range);
     const missingNames = summaries.filter(row => !row.eventTitle || !row.marketTitle ||
       row.marketTitle.includes(row.ticker) || row.eventTitle.includes(row.ticker));
     if (!action && missingNames.length) {
@@ -108,10 +111,10 @@ export class TelegramDashboard {
           logger.debug({ ticker: row.ticker }, "Dashboard metadata unavailable; retrying on the next refresh");
         }
       }));
-      summaries = await this.store.markets(settings.minimumNotional);
+      summaries = await this.store.markets(range);
     }
     const catalog = buildCatalog(summaries);
-    let selection = normalizeSelection(state, catalog);
+    let selection = normalizeSelection({ ...state, band }, catalog);
     if (action) selection = normalizeSelection(navigate(selection, action, catalog), catalog);
     let svg: string;
     let caption: string;
@@ -120,12 +123,13 @@ export class TelegramDashboard {
       const market = catalog.find(item => item.ticker === selection.ticker)!;
       const context = await this.api.context(market.ticker);
       await this.store.context(market.ticker, context);
-      const rows = (await this.store.trades(market.ticker, settings.minimumNotional)).map(row => ({ ...row, ...context }));
+      const rows = (await this.store.trades(market.ticker, range)).map(row => ({ ...row, ...context }));
       if (!rows.length) throw new Error("No qualifying trades are available for this market.");
-      svg = marketCardSvg(rows, settings.minimumNotional);
+      svg = marketCardSvg(rows, range.minimum, rangeFooter(range), selection.band);
       caption = marketCardCaption(rows[rows.length - 1]) +
+        `\nSection: ${escapeHtml(rangeLabel(range))} only.` +
         (settings.enabled ? "\nLive · checks every 15 seconds." : "\nMonitoring paused · saved history.");
-      keyboard = chartKeyboard(selection, market.marketUrl);
+      keyboard = chartKeyboard(selection, market.marketUrl, settings.minimumNotional);
     } else {
       const view = menuView(selection, catalog, settings.enabled, settings.minimumNotional);
       selection = { ...selection, page: view.page };
@@ -164,7 +168,7 @@ export class TelegramDashboard {
       state = { ...state, ...selection, messageId, contentHash };
       await this.store.save(state);
     }
-    await this.store.publishedThrough(cutoff, catalog.map(market => market.ticker));
+    await this.store.publishedThrough(cutoff, catalog.map(market => market.ticker), range);
     if (!state.cleanupComplete) await this.cleanup(state);
     return state;
   }

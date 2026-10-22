@@ -1,4 +1,4 @@
-import { count, eq, isNotNull } from "drizzle-orm";
+import { and, count, eq, gte, isNotNull } from "drizzle-orm";
 import {
   db,
   kalshiAlertsTable,
@@ -7,6 +7,7 @@ import {
 import { logger } from "./logger";
 import { TelegramDashboard, type CallbackQuery } from "./telegram-dashboard";
 import { telegramDashboardStore } from "./telegram-dashboard-store";
+import { shouldCaptureTrade } from "./kalshi-trade-bands";
 
 const KALSHI_API = "https://external-api.kalshi.com/trade-api/v2";
 const TELEGRAM_API = "https://api.telegram.org";
@@ -385,10 +386,11 @@ async function pollOnce() {
     const qualifyingTrades = allSportsTrades.filter(
       (trade) => trade.notional >= settings.minimumNotional,
     );
+    const capturedTrades = allSportsTrades.filter(trade => shouldCaptureTrade(trade.notional));
     const newTrades =
       lastPollBoundary === null
         ? []
-        : qualifyingTrades.filter(
+        : capturedTrades.filter(
             (trade) => new Date(trade.createdTime).getTime() > lastPollBoundary!,
           );
 
@@ -556,7 +558,8 @@ export async function getKalshiDashboard() {
   const settings = await readSettings();
   const [alertTotal] = await db
     .select({ value: count() })
-    .from(kalshiAlertsTable);
+    .from(kalshiAlertsTable)
+    .where(gte(kalshiAlertsTable.notional, settings.minimumNotional));
   const recentTrades = latestQualifyingTrades.slice(0, 50);
   const status = !settings.enabled
     ? "paused"
@@ -571,7 +574,10 @@ export async function getKalshiDashboard() {
   const [actuallySent] = await db
     .select({ value: count() })
     .from(kalshiAlertsTable)
-    .where(isNotNull(kalshiAlertsTable.alertedAt));
+    .where(and(
+      isNotNull(kalshiAlertsTable.alertedAt),
+      gte(kalshiAlertsTable.notional, settings.minimumNotional),
+    ));
 
   return {
     enabled: settings.enabled,
