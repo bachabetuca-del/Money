@@ -1,0 +1,28 @@
+kind = "web"
+previewPath = "/"
+title = "Kalshi Sports Alerts"
+description = "A live monitor for public Kalshi sports-market trades. Configure a minimum trade value and a Telegram destination, see recent qualifying trades, and check the bot connection."
+version = "1.0.0"
+id = "artifacts/kalshi-sports-alerts"
+router = "path"
+
+[[services]]
+name = "web"
+paths = [ "/" ]
+localPort = 25978
+
+[services.development]
+run = "pnpm --filter @workspace/kalshi-sports-alerts run dev"
+
+[services.production]
+build = [ "pnpm", "--filter", "@workspace/kalshi-sports-alerts", "run", "build" ]
+serve = "static"
+publicDir = "artifacts/kalshi-sports-alerts/dist/public"
+
+[[services.production.rewrites]]
+from = "/*"
+to = "/index.html"
+
+[services.env]
+PORT = "25978"
+BASE_PATH = "/"

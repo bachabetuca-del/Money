@@ -10,6 +10,8 @@ servers:
 tags:
   - name: health
     description: Health operations
+  - name: kalshi
+    description: Kalshi sports trade monitoring and Telegram alerts
 paths:
   /healthz:
     get:
@@ -24,6 +26,78 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/HealthStatus"
+  /kalshi/dashboard:
+    get:
+      operationId: getKalshiDashboard
+      tags: [kalshi]
+      summary: Get monitor status and recent qualifying sports trades
+      responses:
+        "200":
+          description: Dashboard status and recent trades
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/KalshiDashboard"
+  /kalshi/settings:
+    put:
+      operationId: saveKalshiSettings
+      tags: [kalshi]
+      summary: Save sports trade alert settings
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/KalshiSettingsInput"
+      responses:
+        "200":
+          description: Settings saved
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/KalshiDashboard"
+        "400":
+          description: Invalid settings
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+  /kalshi/telegram/find-chat:
+    post:
+      operationId: findTelegramChat
+      tags: [kalshi]
+      summary: Find the chat that recently sent /start to the bot
+      responses:
+        "200":
+          description: Chat lookup result
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TelegramChatLookup"
+  /kalshi/telegram/test:
+    post:
+      operationId: sendTelegramTest
+      tags: [kalshi]
+      summary: Send a test alert to the selected Telegram chat
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/TelegramTestInput"
+      responses:
+        "200":
+          description: Test message result
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TelegramTestResult"
+        "400":
+          description: Invalid destination or bot configuration
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
 components:
   schemas:
     HealthStatus:
@@ -33,4 +107,136 @@ components:
           type: string
       required:
         - status
+    ApiError:
+      type: object
+      properties:
+        error:
+          type: string
+      required:
+        - error
+    KalshiTrade:
+      type: object
+      properties:
+        tradeId:
+          type: string
+        ticker:
+          type: string
+        title:
+          type: string
+        sport:
+          type: string
+        outcomeSide:
+          type: string
+        bookSide:
+          type: string
+        price:
+          type: number
+        count:
+          type: number
+        notional:
+          type: number
+        createdTime:
+          type: string
+        blockTrade:
+          type: boolean
+        marketUrl:
+          type: string
+      required:
+        - tradeId
+        - ticker
+        - title
+        - sport
+        - outcomeSide
+        - bookSide
+        - price
+        - count
+        - notional
+        - createdTime
+        - blockTrade
+        - marketUrl
+    KalshiDashboard:
+      type: object
+      properties:
+        enabled:
+          type: boolean
+        minimumNotional:
+          type: number
+        chatId:
+          type: ["string", "null"]
+        telegramConfigured:
+          type: boolean
+        status:
+          type: string
+        lastChecked:
+          type: ["string", "null"]
+        lastError:
+          type: ["string", "null"]
+        qualifyingTrades:
+          type: integer
+        alertsSent:
+          type: integer
+        recentTrades:
+          type: array
+          items:
+            $ref: "#/components/schemas/KalshiTrade"
+      required:
+        - enabled
+        - minimumNotional
+        - chatId
+        - telegramConfigured
+        - status
+        - lastChecked
+        - lastError
+        - qualifyingTrades
+        - alertsSent
+        - recentTrades
+    KalshiSettingsInput:
+      type: object
+      properties:
+        enabled:
+          type: boolean
+        minimumNotional:
+          type: number
+          minimum: 1
+        chatId:
+          type: string
+          minLength: 1
+      required:
+        - enabled
+        - minimumNotional
+        - chatId
+    TelegramChatLookup:
+      type: object
+      properties:
+        found:
+          type: boolean
+        chatId:
+          type: ["string", "null"]
+        displayName:
+          type: ["string", "null"]
+        message:
+          type: string
+      required:
+        - found
+        - chatId
+        - displayName
+        - message
+    TelegramTestInput:
+      type: object
+      properties:
+        chatId:
+          type: string
+          minLength: 1
+      required:
+        - chatId
+    TelegramTestResult:
+      type: object
+      properties:
+        success:
+          type: boolean
+        message:
+          type: string
+      required:
+        - success
+        - message
 
