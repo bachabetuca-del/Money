@@ -9,6 +9,8 @@ import {
 } from "./telegram-dashboard-view";
 import { inTradeRange, shouldCaptureTrade, tradeRange, type TradeRange } from "./kalshi-trade-bands";
 import { marketCardSvg } from "./telegram-market-card";
+import { bucketHistory, RECENT_WINDOW_MS } from "./telegram-history-plot";
+import { MarketHistory, type HistoryJob, type HistoryRepository } from "./kalshi-market-history";
 
 const settings = { chatId: "test-chat", minimumNotional: 10000, enabled: true };
 const moneyline = "KXNFLGAME-26OCT22NECHI-CHI";
@@ -59,6 +61,7 @@ class FakeApi implements DashboardApi {
   nextId = 900;
   failEdit: string | null = null;
   failDelete = false;
+  now() { return new Date("2026-10-22T18:01:00Z"); }
   constructor(private store: MemoryStore) {}
   async request<T>(method: string, body: Record<string, unknown> = {}) {
     this.calls.push({ method, body });
@@ -304,4 +307,147 @@ test("new medium-size trades cannot change the existing large-trade graph", asyn
   await press(dashboard, "d:band:medium");
   await openChart(dashboard, store);
   assert.deepEqual(store.graphRows.at(-1)?.map(row => row.notional), [7200]);
+});
+
+test("the history plot uses every trade, not just the latest six, with exact totals", () => {
+  const now = new Date("2026-10-22T18:00:00Z");
+  const rows = Array.from({ length: 120 }, (_, index) => ({
+    ...trade(summary()), notional: 10000 + index,
+    createdTime: new Date(now.getTime() - index * 60_000),
+    outcomeSide: index % 2 ? "no" : "yes",
+  }));
+  const history = bucketHistory(rows, now);
+  assert.equal(history.buckets.reduce((sum, bucket) => sum + bucket.count, 0), 120);
+  assert.equal(history.total, rows.reduce((sum, row) => sum + row.notional, 0));
+  assert.ok(history.buckets.length <= 38);
+  assert.equal(history.recentCount, 16);
+  assert.equal(history.buckets.reduce((sum, bucket) => sum + bucket.total, 0), history.total);
+  assert.match(marketCardSvg(rows, 10000, undefined, "large", now), /120 trades/);
+  assert.doesNotMatch(marketCardSvg(rows, 10000, undefined, "large", now), /Last 6 of/);
+});
+
+test("recency uses execution time, including the exact 15-minute boundary, never import time", () => {
+  const now = new Date("2026-10-22T18:00:00Z");
+  const rows = [RECENT_WINDOW_MS + 1, RECENT_WINDOW_MS, 60_000, 0].map(age => ({
+    ...trade(summary()), createdTime: new Date(now.getTime() - age),
+  }));
+  const history = bucketHistory(rows, now);
+  assert.equal(history.recentCount, 3);
+  assert.equal(history.buckets.reduce((sum, bucket) => sum + bucket.values.slice(3).reduce((a, b) => a + b, 0), 0), 33084 * 3);
+  const later = bucketHistory(rows, new Date(now.getTime() + RECENT_WINDOW_MS + 1));
+  assert.equal(later.recentCount, 0);
+  assert.equal(later.total, history.total);
+  assert.equal(later.buckets.length, history.buckets.length, "Quiet time must not compress the historical activity");
+});
+
+class HistoryMemory implements HistoryRepository<string> {
+  jobs = new Map<string, HistoryJob>();
+  rows = new Set<string>();
+  tickers = [moneyline, spread];
+  async candidates() { return this.tickers.map(ticker => ({ ticker, job: this.jobs.get(ticker) })); }
+  async job(ticker: string) { return this.jobs.get(ticker); }
+  async commit(job: HistoryJob, rows: string[]) {
+    rows.forEach(row => this.rows.add(row));
+    this.jobs.set(job.ticker, { ...job });
+  }
+}
+
+test("backfill pages through both public sources, deduplicates overlaps, and resumes the frozen snapshot after restart", async () => {
+  const repo = new HistoryMemory();
+  repo.tickers = [moneyline];
+  const clock = new Date("2026-10-22T18:00:00Z");
+  const calls: HistoryJob[] = [];
+  const source = async (job: HistoryJob) => {
+    calls.push({ ...job });
+    return job.phase === "archive" ? { rows: ["old", "shared"], scanned: 2, cursor: null } :
+      job.cursor ? { rows: ["second", "shared"], scanned: 2, cursor: null } :
+      { rows: ["first", "shared"], scanned: 1000, cursor: "page2" };
+  };
+  const importer = new MarketHistory(repo, source, () => clock);
+  await importer.tick();
+  assert.equal(repo.jobs.get(moneyline)?.cursor, "page2");
+  const restarted = new MarketHistory(repo, source, () => clock);
+  await restarted.tick();
+  assert.equal(repo.jobs.get(moneyline)?.phase, "archive");
+  await restarted.tick();
+  assert.equal(repo.jobs.get(moneyline)?.phase, "complete");
+  assert.deepEqual([...repo.rows].sort(), ["first", "old", "second", "shared"]);
+  assert.equal(repo.jobs.get(moneyline)?.scanned, 1004);
+  assert.ok(calls.every(job => job.snapshotAt.getTime() === clock.getTime()));
+  await restarted.tick();
+  assert.equal(calls.length, 3);
+});
+
+test("failed historical pages retain the cursor and retry only after backoff, without claiming completeness", async () => {
+  const repo = new HistoryMemory();
+  repo.tickers = [moneyline];
+  let clock = new Date("2026-10-22T18:00:00Z");
+  let fail = true;
+  let attempts = 0;
+  const importer = new MarketHistory(repo, async () => {
+    attempts += 1;
+    if (fail) throw new Error("HTTP 429");
+    return { rows: ["saved"], scanned: 1, cursor: "next" };
+  }, () => clock);
+  await importer.tick();
+  assert.equal((await importer.status(moneyline)).error, true);
+  assert.equal(repo.jobs.get(moneyline)?.cursor, null);
+  assert.equal(repo.jobs.get(moneyline)?.scanned, 0);
+  await importer.tick();
+  assert.equal(attempts, 1);
+  fail = false;
+  clock = new Date(clock.getTime() + 60_000);
+  await importer.tick();
+  assert.equal(attempts, 2);
+  assert.equal(repo.jobs.get(moneyline)?.cursor, "next");
+  assert.equal((await importer.status(moneyline)).error, false);
+});
+
+test("the selected market gets backfill priority, without concurrent workers", async () => {
+  const repo = new HistoryMemory();
+  const calls: string[] = [];
+  const importer = new MarketHistory(repo, async job => {
+    calls.push(job.ticker);
+    await new Promise(resolve => setTimeout(resolve, 5));
+    return { rows: [], scanned: 0, cursor: null };
+  });
+  await importer.status(spread);
+  await Promise.all([importer.tick(), importer.tick(), importer.tick()]);
+  assert.deepEqual(calls, [spread]);
+});
+
+test("completed history reconciles downtime using an overlapping incremental time window", async () => {
+  const repo = new HistoryMemory();
+  repo.tickers = [moneyline];
+  const old = new Date("2026-10-22T17:00:00Z");
+  repo.jobs.set(moneyline, { ticker: moneyline, phase: "complete", cursor: null,
+    snapshotAt: old, sinceAt: null, scanned: 1000, error: null, updatedAt: old });
+  const now = new Date("2026-10-22T18:00:00Z");
+  let requested: HistoryJob | undefined;
+  const importer = new MarketHistory(repo, async job => {
+    requested = job;
+    return { rows: ["missed"], scanned: 1, cursor: null };
+  }, () => now);
+  assert.equal((await importer.status(moneyline)).phase, "pending");
+  await importer.tick();
+  assert.equal(requested?.sinceAt?.getTime(), old.getTime());
+  assert.equal(requested?.snapshotAt.getTime(), now.getTime());
+  assert.equal(requested?.phase, "live");
+  assert.ok(repo.rows.has("missed"));
+});
+
+test("loading and incomplete-history status edits the existing dashboard rather than posting alerts", async () => {
+  const { store, api, dashboard } = setup();
+  let error = false;
+  const withHistory = api as FakeApi & { history: () => Promise<{ phase: "live"; scanned: number; error: boolean }> };
+  withHistory.history = async () => ({ phase: "live", scanned: 2000, error });
+  await dashboard.sync(settings);
+  await openChart(dashboard, store);
+  assert.match(String(api.photos().at(-1)?.body.media), /Loading history/);
+  assert.match(String(api.photos().at(-1)?.body.media), /graph is partial/);
+  error = true;
+  await dashboard.sync(settings);
+  assert.match(String(api.photos().at(-1)?.body.media), /History incomplete/);
+  assert.ok(api.photos().every(call => call.method === "editMessageMedia"));
+  assert.equal((await store.state(settings.chatId))?.messageId, 400);
 });

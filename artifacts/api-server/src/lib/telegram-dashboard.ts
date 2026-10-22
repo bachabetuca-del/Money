@@ -2,6 +2,7 @@ import sharp from "sharp";
 import { logger } from "./logger";
 import { escapeHtml, marketCardCaption, marketCardSvg, type MarketCardTrade } from "./telegram-market-card";
 import { rangeFooter, rangeLabel, tradeRange, type TradeRange } from "./kalshi-trade-bands";
+import type { HistoryStatus } from "./kalshi-market-history";
 import {
   buildCatalog, chartKeyboard, HOME, keyFor, menuSvg, menuView,
   navigate, normalizeSelection, type MarketSummary, type Selection,
@@ -36,6 +37,8 @@ export interface DashboardApi {
   request<T>(method: string, body?: Record<string, unknown>): Promise<TelegramResult<T>>;
   photo<T>(method: "sendPhoto" | "editMessageMedia", fields: Record<string, string>, png: Buffer): Promise<TelegramResult<T>>;
   context(ticker: string): Promise<{ eventTitle: string; marketTitle: string }>;
+  history?(ticker: string): Promise<HistoryStatus>;
+  now?(): Date;
 }
 
 export class TelegramDashboard {
@@ -125,9 +128,15 @@ export class TelegramDashboard {
       await this.store.context(market.ticker, context);
       const rows = (await this.store.trades(market.ticker, range)).map(row => ({ ...row, ...context }));
       if (!rows.length) throw new Error("No qualifying trades are available for this market.");
-      svg = marketCardSvg(rows, range.minimum, rangeFooter(range), selection.band);
+      const history = await this.api.history?.(market.ticker);
+      svg = marketCardSvg(rows, range.minimum, rangeFooter(range), selection.band, this.api.now?.() ?? new Date());
       caption = marketCardCaption(rows[rows.length - 1]) +
         `\nSection: ${escapeHtml(rangeLabel(range))} only.` +
+        (history ? `\n${history.error ? "History incomplete · retrying automatically." :
+          history.phase === "complete" ? "Available public history loaded." :
+          !settings.enabled ? "History loading paused." :
+          `Loading history · ${history.scanned.toLocaleString("en-US")} public trades checked; graph is partial.`}` : "") +
+        "\nBars sum trade value per interval. Bright portions: last 15 minutes. White outline: latest interval." +
         (settings.enabled ? "\nLive · checks every 15 seconds." : "\nMonitoring paused · saved history.");
       keyboard = chartKeyboard(selection, market.marketUrl, settings.minimumNotional);
     } else {

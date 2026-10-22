@@ -8,6 +8,8 @@ import { logger } from "./logger";
 import { TelegramDashboard, type CallbackQuery } from "./telegram-dashboard";
 import { telegramDashboardStore } from "./telegram-dashboard-store";
 import { shouldCaptureTrade } from "./kalshi-trade-bands";
+import { MarketHistory, type HistoryJob } from "./kalshi-market-history";
+import { marketHistoryStore } from "./kalshi-market-history-store";
 
 const KALSHI_API = "https://external-api.kalshi.com/trade-api/v2";
 const TELEGRAM_API = "https://api.telegram.org";
@@ -56,7 +58,7 @@ type KalshiEventMetadata = {
   sub_title?: string;
 };
 
-type PublicTrade = {
+export type PublicTrade = {
   tradeId: string;
   ticker: string;
   title: string;
@@ -116,10 +118,13 @@ const tradeContextCache = new Map<
   Promise<{ eventTitle: string; marketTitle: string }>
 >();
 const eventTitleCache = new Map<string, Promise<string>>();
+const marketHistory = new MarketHistory(marketHistoryStore, readHistoryPage, () => new Date(),
+  (ticker, error) => logger.warn({ ticker, error }, "Market history incomplete; retry scheduled"));
 const telegramDashboard = new TelegramDashboard(telegramDashboardStore, {
   request: telegramRequest,
   photo: telegramPhotoRequest,
   context: getTradeContext,
+  history: ticker => marketHistory.status(ticker),
 });
 
 async function fetchJson<T>(url: string): Promise<T> {
@@ -181,6 +186,31 @@ async function getTradesSince(boundary: number | null) {
     );
   }
   return trades;
+}
+
+async function readHistoryPage(job: HistoryJob) {
+  const query = new URLSearchParams({
+    ticker: job.ticker, limit: "1000",
+    max_ts: String(Math.floor(job.snapshotAt.getTime() / 1000)),
+  });
+  if (job.sinceAt) query.set("min_ts", String(Math.max(0, Math.floor(job.sinceAt.getTime() / 1000) - 1)));
+  if (job.cursor) query.set("cursor", job.cursor);
+  const endpoint = job.phase === "live" ? "markets/trades" : "historical/trades";
+  const [response, index, context] = await Promise.all([
+    fetchJson<TradeFeedResponse>(`${KALSHI_API}/${endpoint}?${query}`),
+    getSportsSeries(), getTradeContext(job.ticker),
+  ]);
+  if (!resolveSeries(job.ticker, index)) throw new Error("Sports metadata unavailable for historical market.");
+  const rows: PublicTrade[] = [];
+  for (const raw of response.trades) {
+    if (raw.ticker !== job.ticker) throw new Error("Historical response contains a different market.");
+    const trade = toPublicTrade(raw, index);
+    if (!trade) throw new Error("Historical response contains an unreadable trade; page will be retried.");
+    if (shouldCaptureTrade(trade.notional)) {
+      rows.push({ ...trade, ...context, title: `${context.eventTitle} · ${context.marketTitle}` });
+    }
+  }
+  return { rows, scanned: response.trades.length, cursor: response.cursor || null };
 }
 
 function dollars(rawDollars: string | undefined, cents: number | undefined) {
@@ -248,9 +278,13 @@ async function getTradeContext(ticker: string) {
   let contextPromise = tradeContextCache.get(ticker);
   if (!contextPromise) {
     contextPromise = (async () => {
-      const marketResponse = await fetchJson<{ market: KalshiMarketMetadata }>(
-        `${KALSHI_API}/markets/${encodeURIComponent(ticker)}`,
-      );
+      let marketResponse: { market: KalshiMarketMetadata };
+      try {
+        marketResponse = await fetchJson(`${KALSHI_API}/markets/${encodeURIComponent(ticker)}`);
+      } catch (error) {
+        if (!(error instanceof Error) || !/HTTP 404/.test(error.message)) throw error;
+        marketResponse = await fetchJson(`${KALSHI_API}/historical/markets/${encodeURIComponent(ticker)}`);
+      }
       const market = marketResponse.market;
       const eventTicker = market.event_ticker;
       if (!eventTicker) throw new Error("Kalshi market has no game identifier.");
@@ -550,6 +584,13 @@ export function startKalshiMonitor() {
   monitorStarted = true;
   void pollOnce();
   setInterval(() => void pollOnce(), POLL_INTERVAL_MS);
+  // Independent of live polling: a large backfill must not block live trades or navigation.
+  setInterval(() => {
+    void readSettings().then(async settings => {
+      if (settings.enabled && settings.chatId && botToken()) await marketHistory.tick();
+    }).catch(error => logger.warn({ error: error instanceof Error ? error.message : "History worker failed" },
+      "Market history worker failed"));
+  }, 2000);
   void telegramPollingLoop();
   logger.info({ intervalMs: POLL_INTERVAL_MS }, "Kalshi sports monitor started");
 }
