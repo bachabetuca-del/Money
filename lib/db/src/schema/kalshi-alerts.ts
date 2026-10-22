@@ -47,3 +47,13 @@ export const kalshiAlertsTable = pgTable("kalshi_alerts", {
   alertedAt: timestamp("alerted_at", { withTimezone: true }),
   savedAt: timestamp("saved_at", { withTimezone: true }).notNull().defaultNow(),
 });
+
+export const kalshiTelegramChartsTable = pgTable("kalshi_telegram_charts", {
+  ticker: text("ticker").primaryKey(),
+  chatId: text("chat_id").notNull(),
+  messageId: integer("message_id").notNull(),
+  marketUrl: text("market_url").notNull(),
+  updatedAt: timestamp("updated_at", { withTimezone: true })
+    .notNull()
+    .defaultNow(),
+});

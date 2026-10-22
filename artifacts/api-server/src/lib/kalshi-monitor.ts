@@ -1,8 +1,19 @@
-import { count, eq, isNotNull, isNull } from "drizzle-orm";
+import {
+  and,
+  asc,
+  count,
+  eq,
+  gte,
+  inArray,
+  isNotNull,
+  isNull,
+} from "drizzle-orm";
+import sharp from "sharp";
 import {
   db,
   kalshiAlertsTable,
   kalshiMonitorSettingsTable,
+  kalshiTelegramChartsTable,
 } from "@workspace/db";
 import { logger } from "./logger";
 
@@ -82,6 +93,10 @@ type TelegramResponse<T> = {
   ok: boolean;
   result?: T;
   description?: string;
+};
+
+type TelegramMessage = {
+  message_id: number;
 };
 
 type TelegramUpdate = {
@@ -344,43 +359,201 @@ function escapeTelegramHtml(value: string) {
     .replaceAll('"', "&quot;");
 }
 
-function alertText(trade: PublicTrade) {
-  const side =
-    trade.outcomeSide === "yes"
-      ? "YES"
-      : trade.outcomeSide === "no"
-        ? "NO"
-        : "UNKNOWN";
-  const priceCents = Math.round(trade.price * 100);
-  const contractCount = trade.count.toLocaleString("en-US", {
-    maximumFractionDigits: 2,
-  });
-  const tradeValue = trade.notional.toLocaleString("en-US", {
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-  });
-  const localTime = new Date(trade.createdTime).toLocaleString("en-US", {
-    timeZone: "America/New_York",
-    month: "short",
-    day: "numeric",
-    hour: "numeric",
-    minute: "2-digit",
-    timeZoneName: "short",
-  });
+function escapeXml(value: string) {
+  return value
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;")
+    .replaceAll("'", "&apos;");
+}
 
+function tradeChartCaption(
+  trades: (typeof kalshiAlertsTable.$inferSelect)[],
+  minimumNotional: number,
+) {
+  const newest = trades[trades.length - 1];
   return [
-    "🏈 <b>SPORTS TRADE ALERT</b>",
-    "",
-    `<b>Game:</b> ${escapeTelegramHtml(trade.eventTitle)}`,
-    `<b>Taker position:</b> ${side} — ${escapeTelegramHtml(trade.marketTitle)}`,
-    `<b>Trade value:</b> $${tradeValue}`,
-    `<b>Size:</b> ${contractCount} contracts × ${priceCents}¢`,
-    `<b>Time:</b> ${localTime}`,
-    "",
-    `<a href="${escapeTelegramHtml(trade.marketUrl)}">Open this game in Kalshi</a>`,
-    "",
-    "<i>Public data shows taker direction, not trader identity.</i>",
+    `🏈 <b>${escapeTelegramHtml(newest.eventTitle ?? newest.title)}</b>`,
+    `<b>Market:</b> ${escapeTelegramHtml(newest.marketTitle ?? newest.ticker)}`,
+    `<b>Qualifying trades:</b> ${trades.length.toLocaleString("en-US")} · threshold $${minimumNotional.toLocaleString("en-US")}`,
+    `<a href="${escapeTelegramHtml(newest.marketUrl)}">Open this market in Kalshi</a>`,
+    "<i>Each dot is a public trade; color shows taker position and size shows trade value. Public data does not identify buyers.</i>",
   ].join("\n");
+}
+
+function tradeChartSvg(
+  trades: (typeof kalshiAlertsTable.$inferSelect)[],
+) {
+  const width = 1200;
+  const height = 720;
+  const left = 112;
+  const right = 1148;
+  const top = 208;
+  const bottom = 590;
+  const plotWidth = right - left;
+  const plotHeight = bottom - top;
+  const visibleTrades = trades.slice(-100);
+  const times = visibleTrades.map((trade) => trade.createdTime.getTime());
+  const minTime = Math.min(...times);
+  const maxTime = Math.max(...times);
+  const eventTitle = escapeXml(
+    visibleTrades[visibleTrades.length - 1].eventTitle ??
+      visibleTrades[visibleTrades.length - 1].title,
+  );
+  const marketTitle = escapeXml(
+    visibleTrades[visibleTrades.length - 1].marketTitle ??
+      visibleTrades[visibleTrades.length - 1].ticker,
+  );
+  const points = visibleTrades
+    .map((trade) => {
+      const time = trade.createdTime.getTime();
+      const x =
+        minTime === maxTime
+          ? left + plotWidth / 2
+          : left + ((time - minTime) / (maxTime - minTime)) * plotWidth;
+      const priceCents = Math.max(0, Math.min(100, trade.price * 100));
+      const y = bottom - (priceCents / 100) * plotHeight;
+      const radius = Math.max(7, Math.min(19, 5 + Math.sqrt(trade.notional / 1000)));
+      const color = trade.outcomeSide === "no" ? "#E98E2E" : "#1F74AD";
+      const title = `${trade.outcomeSide.toUpperCase()} · ${priceCents.toFixed(1)}¢ · $${trade.notional.toLocaleString("en-US", { maximumFractionDigits: 0 })} · ${trade.createdTime.toISOString()}`;
+      return `<circle cx="${x.toFixed(1)}" cy="${y.toFixed(1)}" r="${radius.toFixed(1)}" fill="${color}" fill-opacity="0.82" stroke="#FFFFFF" stroke-width="2"><title>${escapeXml(title)}</title></circle>`;
+    })
+    .join("");
+  const grid = [0, 25, 50, 75, 100]
+    .map((value) => {
+      const y = bottom - (value / 100) * plotHeight;
+      return `<line x1="${left}" y1="${y}" x2="${right}" y2="${y}" stroke="#E2E8F0" stroke-width="2"/><text x="${left - 18}" y="${y + 7}" text-anchor="end" font-size="20" fill="#64748B">${value}¢</text>`;
+    })
+    .join("");
+  const formatTime = (time: number) =>
+    new Date(time).toLocaleString("en-US", {
+      timeZone: "America/New_York",
+      month: "short",
+      day: "numeric",
+      hour: "numeric",
+      minute: "2-digit",
+    });
+  const periodLabel =
+    minTime === maxTime
+      ? formatTime(minTime)
+      : `${formatTime(minTime)} — ${formatTime(maxTime)}`;
+  const truncatedLabel =
+    trades.length > visibleTrades.length
+      ? `Latest ${visibleTrades.length} of ${trades.length.toLocaleString("en-US")} qualifying trades`
+      : `${trades.length.toLocaleString("en-US")} qualifying trades`;
+
+  return `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}" viewBox="0 0 ${width} ${height}">
+  <rect width="100%" height="100%" rx="28" fill="#FFFFFF"/>
+  <text x="56" y="68" font-family="Arial, sans-serif" font-size="30" font-weight="700" fill="#0F172A">${eventTitle}</text>
+  <text x="56" y="112" font-family="Arial, sans-serif" font-size="25" fill="#334155">${marketTitle}</text>
+  <text x="56" y="158" font-family="Arial, sans-serif" font-size="19" fill="#64748B">${escapeXml(truncatedLabel)} · price and trade size</text>
+  <circle cx="78" cy="186" r="9" fill="#1F74AD"/><text x="97" y="193" font-family="Arial, sans-serif" font-size="18" fill="#334155">YES</text>
+  <circle cx="180" cy="186" r="9" fill="#E98E2E"/><text x="199" y="193" font-family="Arial, sans-serif" font-size="18" fill="#334155">NO</text>
+  <text x="${right}" y="193" text-anchor="end" font-family="Arial, sans-serif" font-size="17" fill="#64748B">Larger dot = larger trade</text>
+  ${grid}
+  <line x1="${left}" y1="${top}" x2="${left}" y2="${bottom}" stroke="#94A3B8" stroke-width="2"/>
+  <line x1="${left}" y1="${bottom}" x2="${right}" y2="${bottom}" stroke="#94A3B8" stroke-width="2"/>
+  ${points}
+  <text x="${left}" y="${bottom + 38}" font-family="Arial, sans-serif" font-size="17" fill="#64748B">${escapeXml(formatTime(minTime))}</text>
+  <text x="${right}" y="${bottom + 38}" text-anchor="end" font-family="Arial, sans-serif" font-size="17" fill="#64748B">${escapeXml(formatTime(maxTime))}</text>
+  <text x="${(left + right) / 2}" y="672" text-anchor="middle" font-family="Arial, sans-serif" font-size="18" fill="#475569">${escapeXml(periodLabel)} · New York time</text>
+</svg>`;
+}
+
+async function telegramPhotoRequest<T>(
+  method: "sendPhoto" | "editMessageMedia",
+  fields: Record<string, string>,
+  png: Buffer,
+): Promise<TelegramResponse<T>> {
+  const token = botToken();
+  if (!token) throw new Error("Telegram bot token is not configured.");
+
+  const form = new FormData();
+  for (const [key, value] of Object.entries(fields)) form.set(key, value);
+  form.set(
+    "photo",
+    new Blob([new Uint8Array(png)], { type: "image/png" }),
+    "kalshi-market-chart.png",
+  );
+  const response = await fetch(`${TELEGRAM_API}/bot${token}/${method}`, {
+    method: "POST",
+    body: form,
+    signal: AbortSignal.timeout(30_000),
+  });
+  const result = (await response.json()) as TelegramResponse<T>;
+  if (!response.ok || !result.ok) {
+    throw new Error(result.description ?? `Telegram returned HTTP ${response.status}`);
+  }
+  return result;
+}
+
+async function deliverTradeChart(
+  chatId: string,
+  ticker: string,
+  trades: (typeof kalshiAlertsTable.$inferSelect)[],
+  minimumNotional: number,
+) {
+  if (trades.length === 0) throw new Error("Cannot render an empty trade chart.");
+  const newest = trades[trades.length - 1];
+  const png = await sharp(Buffer.from(tradeChartSvg(trades)))
+    .png()
+    .toBuffer();
+  const savedChart = await db
+    .select()
+    .from(kalshiTelegramChartsTable)
+    .where(eq(kalshiTelegramChartsTable.ticker, ticker))
+    .limit(1);
+  const existing = savedChart[0];
+  const caption = tradeChartCaption(trades, minimumNotional);
+  let messageId: number;
+
+  if (existing && existing.chatId === chatId) {
+    await telegramPhotoRequest("editMessageMedia", {
+      chat_id: chatId,
+      message_id: String(existing.messageId),
+      media: JSON.stringify({
+        type: "photo",
+        media: "attach://photo",
+        caption,
+        parse_mode: "HTML",
+      }),
+    }, png);
+    messageId = existing.messageId;
+  } else {
+    const sent = await telegramPhotoRequest<TelegramMessage>(
+      "sendPhoto",
+      {
+        chat_id: chatId,
+        caption,
+        parse_mode: "HTML",
+      },
+      png,
+    );
+    if (!sent.result?.message_id) {
+      throw new Error("Telegram did not return a message ID for the chart.");
+    }
+    messageId = sent.result.message_id;
+  }
+
+  await db
+    .insert(kalshiTelegramChartsTable)
+    .values({
+      ticker,
+      chatId,
+      messageId,
+      marketUrl: newest.marketUrl,
+      updatedAt: new Date(),
+    })
+    .onConflictDoUpdate({
+      target: kalshiTelegramChartsTable.ticker,
+      set: {
+        chatId,
+        messageId,
+        marketUrl: newest.marketUrl,
+        updatedAt: new Date(),
+      },
+    });
 }
 
 async function deliverPendingAlerts(settings: Settings) {
@@ -393,39 +566,90 @@ async function deliverPendingAlerts(settings: Settings) {
     .orderBy(kalshiAlertsTable.createdTime)
     .limit(ALERTS_PER_CYCLE);
 
+  const byMarket = new Map<string, typeof pending>();
   for (const alert of pending) {
+    const marketAlerts = byMarket.get(alert.ticker) ?? [];
+    marketAlerts.push(alert);
+    byMarket.set(alert.ticker, marketAlerts);
+  }
+
+  for (const [ticker, marketAlerts] of byMarket) {
     try {
-      await telegramRequest("sendMessage", {
-        chat_id: settings.chatId,
-        text: alertText({
-          tradeId: alert.tradeId,
-          ticker: alert.ticker,
-          title: alert.title,
-          eventTitle: alert.eventTitle ?? alert.title,
-          marketTitle: alert.marketTitle ?? alert.title,
-          sport: alert.sport,
-          outcomeSide: alert.outcomeSide,
-          bookSide: alert.bookSide,
-          price: alert.price,
-          count: alert.count,
-          notional: alert.notional,
-          createdTime: alert.createdTime.toISOString(),
-          blockTrade: alert.blockTrade,
-          marketUrl: alert.marketUrl,
-        }),
-        parse_mode: "HTML",
-        disable_web_page_preview: true,
-      });
+      const chartTrades = await db
+        .select()
+        .from(kalshiAlertsTable)
+        .where(eq(kalshiAlertsTable.ticker, ticker))
+        .orderBy(asc(kalshiAlertsTable.createdTime));
+      await deliverTradeChart(
+        settings.chatId,
+        ticker,
+        chartTrades,
+        settings.minimumNotional,
+      );
       await db
         .update(kalshiAlertsTable)
         .set({ alertedAt: new Date() })
-        .where(eq(kalshiAlertsTable.tradeId, alert.tradeId));
+        .where(
+          inArray(
+            kalshiAlertsTable.tradeId,
+            marketAlerts.map((alert) => alert.tradeId),
+          ),
+        );
     } catch (error) {
       const message =
         error instanceof Error ? error.message : "Telegram delivery failed.";
       lastError = `Telegram delivery failed: ${message}`;
-      logger.warn({ tradeId: alert.tradeId, error: message }, "Alert delivery failed");
-      break;
+      logger.warn({ ticker, error: message }, "Trade chart delivery failed");
+    }
+  }
+}
+
+async function deliverRecentMarketCharts(settings: Settings) {
+  if (!settings.enabled || !settings.chatId || !botToken()) return;
+
+  const recentCutoff = new Date(Date.now() - 24 * 60 * 60 * 1000);
+  const recentDeliveredTrades = await db
+    .select()
+    .from(kalshiAlertsTable)
+    .where(
+      and(
+        gte(kalshiAlertsTable.createdTime, recentCutoff),
+        isNotNull(kalshiAlertsTable.alertedAt),
+      ),
+    )
+    .orderBy(asc(kalshiAlertsTable.createdTime));
+  const byMarket = new Map<string, typeof recentDeliveredTrades>();
+  for (const trade of recentDeliveredTrades) {
+    const marketTrades = byMarket.get(trade.ticker) ?? [];
+    marketTrades.push(trade);
+    byMarket.set(trade.ticker, marketTrades);
+  }
+
+  for (const [ticker] of byMarket) {
+    const [savedChart] = await db
+      .select()
+      .from(kalshiTelegramChartsTable)
+      .where(eq(kalshiTelegramChartsTable.ticker, ticker))
+      .limit(1);
+    if (savedChart?.chatId === settings.chatId) continue;
+
+    try {
+      const chartTrades = await db
+        .select()
+        .from(kalshiAlertsTable)
+        .where(eq(kalshiAlertsTable.ticker, ticker))
+        .orderBy(asc(kalshiAlertsTable.createdTime));
+      await deliverTradeChart(
+        settings.chatId,
+        ticker,
+        chartTrades,
+        settings.minimumNotional,
+      );
+    } catch (error) {
+      const message =
+        error instanceof Error ? error.message : "Telegram chart delivery failed.";
+      lastError = `Telegram chart delivery failed: ${message}`;
+      logger.warn({ ticker, error: message }, "Recent market chart delivery failed");
     }
   }
 }
@@ -503,6 +727,7 @@ async function pollOnce() {
           .onConflictDoNothing();
       }
       await deliverPendingAlerts(settings);
+      await deliverRecentMarketCharts(settings);
     }
     lastPollBoundary = pollStartedAt;
     lastChecked = new Date().toISOString();
