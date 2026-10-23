@@ -3,9 +3,9 @@ name: Game lifecycle
 description: User's game-status colors and requirement to stop spending requests on completed games.
 ---
 
-Mark games that have not started in white, games in progress in yellow, and finished games in red. Keep finished games at the bottom as saved history, not as actively monitored games.
+Mark games that have not started in white, games in progress in yellow, and finished games in red. Remove old and finished games from the main list and make their saved history available separately.
 
-**Why:** The user disliked seeing completed games kept in the bot as if still active, and wanted to ensure no time was wasted checking games that had already ended.
+**Why:** The user disliked seeing completed games kept in the bot as if still active, and wanted to ensure no time was wasted checking games that had already ended. They later clarified that putting yesterday's finished games at the bottom still leaves unwanted games in the main list.
 
 **How to apply:** Perform the initial classification, then stop automatic individual game/market/history requests for confirmed finished games, including after restarts. Preserve saved trades and the single dashboard message. A finished chart is a static historical view, not a live chart with changing recency highlights. New >$10k notification delivery must not revive a confirmed finished or closed market.
 
