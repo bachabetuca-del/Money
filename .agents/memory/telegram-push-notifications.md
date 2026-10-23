@@ -17,9 +17,9 @@ Keep only the latest notification. Confirm and save delivery of a new notice bef
 
 Use “a favor / en contra” as the public direction of an operation, not as a confirmed sale or closed position.
 
-**Why:** The user wanted to know when large traders sell their positions, then explicitly accepted public direction as the alternative after the limitations were explained. Public direction cannot identify the trader or distinguish buying NO from selling SÍ.
+**Why:** The user clarified that buying SÍ/NO already works and specifically wants alerts and graphs for selling previously purchased positions. A prior acceptance of public-direction signals does not mean this closing-position requirement is satisfied. Public direction cannot identify the trader or distinguish buying NO from selling SÍ.
 
-**How to apply:** Keep the bet name and direction explicit in notices and graph legends. Never imply the same previous large trader has exited or abandoned a prediction.
+**How to apply:** Keep the bet name and direction explicit in notices and graph legends. Never imply the same previous large trader has exited or abandoned a prediction. Do not describe direction-label improvements as implementing confirmed exits; report the missing public data honestly.
 
 Keep purchase-amount calculations tied to a validated direction. Explicit YES/NO outcome is authoritative. If missing, canonical book direction may supply it: bid ≡ YES, ask ≡ NO; only then use a validated YES/NO legacy fallback.
 
@@ -29,6 +29,6 @@ Keep purchase-amount calculations tied to a validated direction. Explicit YES/NO
 
 Explain the public equivalence in alerts and graphs: a favor means compra de SÍ o venta de NO; en contra means compra de NO o venta de SÍ.
 
-**Why:** The user did not recognize the existing en-contra notifications as the alternative selling signal they requested.
+**Why:** The two actions share a public directional signal, but the user explicitly distinguishes closing a previous purchase from opening an opposite bet. This explanation is context, not a substitute for the requested exit detection.
 
 **How to apply:** Show the equivalence next to the direction, with a clear warning that the public feed cannot distinguish a purchase from a sale closing an existing position.
