@@ -1,9 +1,9 @@
 import type { TradeBand } from "./kalshi-trade-bands";
 import { chartDefs, DIRECTION_COLORS, historyPlotSvg, intervalLabelEs, RECENT_WINDOW_MS } from "./telegram-history-plot";
 import { elapsed, exactMoney, fitSize, nyDateTime, textBlock } from "./telegram-card-format";
-import { publicDirection, directionLabel, DIRECTION_NOTE } from "./telegram-trade-direction";
+import { publicDirection, directionLabel, directionMeaning, DIRECTION_NOTE } from "./telegram-trade-direction";
 
-export const MARKET_CARD_VERSION = 3;
+export const MARKET_CARD_VERSION = 4;
 
 export type MarketCardTrade = {
   eventTitle: string | null;
@@ -37,13 +37,14 @@ export function betLabelEs(title: string) {
 }
 
 export function marketCardCaption(trade: MarketCardTrade, live = true) {
-  const side = publicDirection(trade.outcomeSide);
+  const side = publicDirection(trade.outcomeSide, undefined, trade.bookSide);
   const position = directionLabel(side);
   return [
     `<b>${escapeHtml(trade.eventTitle ?? "Partido no disponible")}</b>`,
     `${position}${side === "unknown" ? " · " : " «"}${escapeHtml(betLabelEs(trade.marketTitle ?? "Apuesta no disponible"))}${side === "unknown" ? "" : "»"}`,
+    side === "unknown" ? "" : directionMeaning(side),
     `<i>${DIRECTION_NOTE} ${live ? "Se actualiza aquí." : "Historial guardado."}</i>`,
-  ].join("\n");
+  ].filter(Boolean).join("\n");
 }
 
 const BG = "#0E1A17";
@@ -60,7 +61,7 @@ export function marketCardSvg(trades: MarketCardTrade[], threshold: number, filt
   const latest = ordered[ordered.length - 1];
   const first = ordered[0];
   const live = !gameStatus?.stopped;
-  const side = publicDirection(latest.outcomeSide);
+  const side = publicDirection(latest.outcomeSide, undefined, latest.bookSide);
   const sideIndex = side === "yes" ? 0 : side === "no" ? 1 : 2;
   const sideColor = DIRECTION_COLORS[sideIndex];
   const sideText = side === "yes" ? "SÍ · A FAVOR DE LA APUESTA" : side === "no" ? "NO · EN CONTRA DE LA APUESTA" : "DIRECCIÓN NO DISPONIBLE";
@@ -70,7 +71,7 @@ export function marketCardSvg(trades: MarketCardTrade[], threshold: number, filt
   const counts = [0, 0, 0];
   let recentSum = 0;
   for (const trade of ordered) {
-    const d = publicDirection(trade.outcomeSide);
+    const d = publicDirection(trade.outcomeSide, undefined, trade.bookSide);
     const i = d === "yes" ? 0 : d === "no" ? 1 : 2;
     sums[i] += trade.notional; counts[i] += 1;
     const t = trade.createdTime.getTime();
@@ -100,15 +101,16 @@ export function marketCardSvg(trades: MarketCardTrade[], threshold: number, filt
   const cents = (latest.price * 100).toLocaleString("en-US", { maximumFractionDigits: 2 });
   const age = now.getTime() - latest.createdTime.getTime();
   const ageText = live ? (age < 0 ? "Hora futura; sin confirmar" : age <= RECENT_WINDOW_MS ? `${elapsed(age)} · reciente` : elapsed(age)) : "Historial guardado";
-  const panelH = 330;
+  const panelH = 370;
   parts.push(`<rect x="36" y="${panelY}" width="828" height="${panelH}" rx="22" fill="${PANEL}"/>
     <rect x="36" y="${panelY}" width="12" height="${panelH}" rx="6" fill="${sideColor}"/>
     <text x="74" y="${panelY + 48}" font-size="25" font-weight="700" letter-spacing="1" fill="${MUTED}">ÚLTIMA OPERACIÓN · INDIVIDUAL</text>
     <text x="74" y="${panelY + 58 + amountSize}" font-size="${amountSize}" font-weight="700" fill="${INK}">${escapeHtml(amount)}</text>
     <text x="74" y="${panelY + 186}" font-size="31" font-weight="700" fill="${sideColor}">${sideText}</text>
-    <text x="74" y="${panelY + 232}" font-size="29" fill="${SOFT}">${count} contratos a ${cents}¢</text>
-    <text x="74" y="${panelY + 272}" font-size="26" fill="${MUTED}">${escapeHtml(nyDateTime(latest.createdTime))} · Nueva York</text>
-    <text x="74" y="${panelY + 308}" font-size="25" fill="${MUTED}">${ageText}</text>`);
+    <text x="74" y="${panelY + 224}" font-size="27" fill="${SOFT}">${escapeHtml(directionMeaning(side))}</text>
+    <text x="74" y="${panelY + 270}" font-size="29" fill="${SOFT}">${count} contratos a ${cents}¢</text>
+    <text x="74" y="${panelY + 310}" font-size="26" fill="${MUTED}">${escapeHtml(nyDateTime(latest.createdTime))} · Nueva York</text>
+    <text x="74" y="${panelY + 346}" font-size="25" fill="${MUTED}">${ageText}</text>`);
   y = panelY + panelH + 58;
 
   // Totals for the selected range.
@@ -168,6 +170,10 @@ export function marketCardSvg(trades: MarketCardTrade[], threshold: number, filt
   const legend = (x: number, fill: string, label: string) =>
     `<rect x="${x}" y="${y - 24}" width="28" height="28" rx="4" fill="${fill}"/><text x="${x + 40}" y="${y}" font-size="26" font-weight="700" fill="${SOFT}">${label}</text>`;
   parts.push(legend(52, "url(#dirYes)", "SÍ / a favor") + legend(330, "url(#dirNo)", "NO / en contra") + legend(642, "url(#dirUnknown)", "Sin dato"));
+  y += 44;
+  parts.push(`<text x="52" y="${y}" font-size="25" fill="${SOFT}">A favor: compra de SÍ o venta de NO</text>`);
+  y += 36;
+  parts.push(`<text x="52" y="${y}" font-size="25" fill="${SOFT}">En contra: compra de NO o venta de SÍ</text>`);
   y += 46;
   if (live) {
     parts.push(`<rect x="52" y="${y - 24}" width="28" height="28" rx="4" fill="url(#recentYes)"/>

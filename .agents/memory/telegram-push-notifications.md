@@ -21,8 +21,14 @@ Use “a favor / en contra” as the public direction of an operation, not as a 
 
 **How to apply:** Keep the bet name and direction explicit in notices and graph legends. Never imply the same previous large trader has exited or abandoned a prediction.
 
-Keep purchase-amount calculations independent of book-side terminology. Explicit YES/NO outcome is authoritative; use only a validated YES/NO legacy fallback. Preserve bid/ask as metadata rather than letting it override the outcome or choose a price.
+Keep purchase-amount calculations tied to a validated direction. Explicit YES/NO outcome is authoritative. If missing, canonical book direction may supply it: bid ≡ YES, ask ≡ NO; only then use a validated YES/NO legacy fallback.
 
-**Why:** Choosing the opposite outcome's quote can make an operation incorrectly cross the $10k notification boundary. Missing direction is not permission to assume the YES price.
+**Why:** Kalshi's official order-direction documentation defines outcome and book side as the same directional bit, not separate buy/sell flags. Ignoring a valid canonical book side can discard trades; choosing the opposite outcome's quote can incorrectly cross the $10k notification boundary.
 
-**How to apply:** Calculate notional from the explicit outcome's quote and test both book-side values against both outcomes around the threshold. If the execution cannot be priced reliably, do not invent a qualifying amount.
+**How to apply:** Calculate notional from the resolved outcome's quote and test both sides around the threshold. Do not invert an explicit outcome because book side conflicts. If execution cannot be priced reliably, do not invent a qualifying amount. See https://docs.kalshi.com/getting_started/order_direction.
+
+Explain the public equivalence in alerts and graphs: a favor means compra de SÍ o venta de NO; en contra means compra de NO o venta de SÍ.
+
+**Why:** The user did not recognize the existing en-contra notifications as the alternative selling signal they requested.
+
+**How to apply:** Show the equivalence next to the direction, with a clear warning that the public feed cannot distinguish a purchase from a sale closing an existing position.

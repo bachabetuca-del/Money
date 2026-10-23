@@ -37,7 +37,7 @@ export function bucketHistory(trades: MarketCardTrade[], now: Date, highlightRec
   for (const trade of trades) {
     const time = trade.createdTime.getTime();
     const recent = highlightRecent && time >= now.getTime() - RECENT_WINDOW_MS && time <= now.getTime();
-    const direction = publicDirection(trade.outcomeSide);
+    const direction = publicDirection(trade.outcomeSide, undefined, trade.bookSide);
     const side = direction === "yes" ? 0 : direction === "no" ? 1 : 2;
     const bucket = buckets[Math.floor((time - start) / width)];
     bucket.values[side + (recent ? 3 : 0)] += trade.notional;

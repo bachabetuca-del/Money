@@ -176,7 +176,7 @@ export function chartKeyboard(selection: Selection, marketUrl: string, threshold
 
 export function scopeButtons(selection: Selection): Button[] {
   return [
-    { text: `${selection.scope !== "history" ? "• " : ""}Vigentes`, callback_data: "d:scope:active" },
+    { text: `${selection.scope !== "history" ? "• " : ""}Vigentes · 48 h`, callback_data: "d:scope:active" },
     { text: `${selection.scope === "history" ? "• " : ""}Historial`, callback_data: "d:scope:history" },
   ];
 }
@@ -209,7 +209,7 @@ export function menuView(selection: Selection, catalog: CatalogMarket[], enabled
   catalog = scopedCatalog(catalog, historical ? "history" : "active", now);
   const activeRange = spanishRange(tradeRange(selection.band, threshold));
   let title = "Elige un deporte";
-  let subtitle = `${activeRange} · rangos separados`;
+  let subtitle = `${activeRange} · toca un deporte`;
   let items: MenuItem[];
   const sportMarkets = catalog.filter(m => m.sportKey === selection.sportKey);
   if (selection.screen === "games") {
@@ -248,8 +248,6 @@ export function menuView(selection: Selection, catalog: CatalogMarket[], enabled
   const page = Math.max(0, Math.min(selection.page, pages - 1));
   const visible = items.slice(page * PAGE_SIZE, (page + 1) * PAGE_SIZE);
   const keyboard: Keyboard = { inline_keyboard: [
-    bandButtons(selection.band, threshold),
-    scopeButtons(selection),
     ...visible.map(item => [{ text: (item.badge
       ? item.buttonLabel ? `${item.badge.marker} ${item.buttonLabel.slice(0, 92)}` :
         `${item.badge.marker} ${item.label.slice(0, 67)} · ${item.badge.label}`
@@ -259,19 +257,23 @@ export function menuView(selection: Selection, catalog: CatalogMarket[], enabled
   if (page > 0) paging.push({ text: "Anterior", callback_data: `d:page:${page - 1}` });
   if (page < pages - 1) paging.push({ text: "Siguiente", callback_data: `d:page:${page + 1}` });
   if (paging.length) keyboard.inline_keyboard.push(paging);
+  keyboard.inline_keyboard.push(bandButtons(selection.band, threshold), scopeButtons(selection));
   if (selection.screen !== "sports") keyboard.inline_keyboard.push([
-    { text: "Volver", callback_data: "d:back" }, { text: "Deportes", callback_data: "d:home" },
+    { text: "‹ Volver", callback_data: "d:back" }, { text: "Deportes", callback_data: "d:home" },
   ]);
   keyboard.inline_keyboard.push([{ text: "Actualizar", callback_data: "d:refresh" }]);
   title = `${historical ? "Historial" : "Vigentes"} · ${title}`;
   const status = historical ? "HISTORIAL · datos guardados" : enabled ? "ACTIVO · se actualiza cada 15 segundos" : "PAUSADO · datos guardados";
-  const caption = `<b>${escapeHtml(title)}</b>\nDeporte → Partido → Mercado.\n` +
-    (historical ? "Partidos anteriores; las operaciones guardadas siguen disponibles.\n" :
-      "Vigentes: partidos en juego o programados en las próximas 48 h.\n") +
-    "⚪ Por empezar · 🟡 En juego · 🔴 Terminado\nAntiguos y terminados: en Historial. ◌ Sin confirmar: no se adivina el estado.\n" +
-    `<i>${status}. Operaciones ${escapeHtml(activeRange)}; los rangos no se mezclan.</i>\n` +
-    "Avisos: solo operaciones nuevas de más de $10,000. Se conserva el último aviso.";
-  return { title, subtitle, items: visible, page, pages, keyboard, caption, status, historical };
+  const step = selection.screen === "games" ? 2 : selection.screen === "markets" ? 3 : 1;
+  const steps = ["Deporte", "Partido", "Mercado"];
+  const trail = steps.map((s, i) => i + 1 === step ? `<b>${i + 1} ${s}</b>` : `${i + 1} ${s}`).join(" › ");
+  const caption = `<b>${escapeHtml(title)}</b>\n${trail}\n` +
+    `Filtro: <b>${historical ? "Historial" : "Vigentes"}</b> · <b>${escapeHtml(activeRange)}</b>\n` +
+    (historical ? "Partidos anteriores con operaciones guardadas.\n" :
+      "Partidos en juego o programados en las próximas 48 h.\n") +
+    "⚪ Por empezar · 🟡 En juego · 🔴 Terminado\n" +
+    `<i>${status}</i>`;
+  return { title, subtitle, items: visible, page, pages, keyboard, caption, status, historical, step, steps };
 }
 
 export function menuSvg(view: ReturnType<typeof menuView>) {
@@ -288,7 +290,13 @@ export function menuSvg(view: ReturnType<typeof menuView>) {
   const heading = lines(view.title, 28);
   let y = 138 + heading.length * 53;
   const subtitleY = y;
-  y += 55;
+  y += 50;
+  const stepperY = y;
+  const stepper = view.steps.map((s, i) => {
+    const on = i + 1 === view.step;
+    return `<text x="${52 + i * 270}" y="${stepperY}" font-size="26" font-weight="${on ? 700 : 400}" fill="${on ? "#61A9BD" : "#64748B"}">${i + 1} ${s}${i < 2 ? "  ›" : ""}</text>`;
+  }).join("");
+  y += 45;
   const cards = view.items.map((item, index) => {
     const labels = lines(item.label);
     const cardHeight = (item.badge ? 110 : 65) + labels.length * 39;
@@ -297,7 +305,7 @@ export function menuSvg(view: ReturnType<typeof menuView>) {
     return `<rect x="40" y="${top}" width="820" height="${cardHeight}" rx="18" fill="#172337"/>
       ${item.badge ? `<circle cx="76" cy="${top + 35}" r="10" fill="${item.badge.color}"/>` :
         `<text x="65" y="${top + 46}" font-size="28" fill="#61A9BD">${index + 1}</text>`}
-      ${labels.map((line, i) => `<text x="108" y="${top + 44 + i * 39}" font-size="32" font-weight="600" fill="${item.badge?.color ?? "#F8FAFC"}">${escapeHtml(line)}</text>`).join("")}
+      ${labels.map((line, i) => `<text x="108" y="${top + 44 + i * 39}" font-size="32" font-weight="600" fill="#F8FAFC">${escapeHtml(line)}</text>`).join("")}
       ${item.badge ? `<text x="108" y="${top + 45 + labels.length * 39}" font-size="27" font-weight="600" fill="${item.badge.color}">${escapeHtml(item.badge.label)}</text>` : ""}
       <text x="108" y="${top + (item.badge ? 87 : 51) + labels.length * 39}" font-size="25" fill="#94A3B8">${escapeHtml(item.detail)}</text>`;
   }).join("");
@@ -309,10 +317,13 @@ export function menuSvg(view: ReturnType<typeof menuView>) {
     <text x="52" y="57" font-size="25" letter-spacing="3" fill="#94A3B8">KALSHI · ACTIVIDAD DEPORTIVA</text>
     ${heading.map((line, i) => `<text x="52" y="${126 + i * 53}" font-size="44" font-weight="700" fill="#F8FAFC">${escapeHtml(line)}</text>`).join("")}
     <text x="52" y="${subtitleY}" font-size="28" fill="#CBD5E1">${escapeHtml(view.subtitle)}</text>
+    ${stepper}
     ${cards}
-    ${view.items.length ? "" : `<text x="52" y="${subtitleY + 100}" font-size="28" fill="#CBD5E1">${view.historical ? "Sin partidos en Historial para este rango." : "Sin partidos en juego o programados en las próximas 48 horas para este rango."}</text>`}
+    ${view.items.length ? "" : lines(view.historical ? "Sin partidos en Historial para este rango." :
+      "Sin partidos en juego o programados en las próximas 48 horas para este rango.", 48)
+      .map((line, i) => `<text x="52" y="${subtitleY + 150 + i * 38}" font-size="28" fill="#CBD5E1">${escapeHtml(line)}</text>`).join("")}
     <text x="52" y="${height - 85}" font-size="25" fill="#61A9BD">${escapeHtml(view.status)}</text>
-    <text x="52" y="${height - 42}" font-size="25" fill="#94A3B8">Usa los botones · Página ${view.page + 1} de ${view.pages}</text>
+    <text x="52" y="${height - 42}" font-size="25" fill="#94A3B8">Toca una opción abajo · Página ${view.page + 1} de ${view.pages}</text>
     </g>
   </svg>`;
 }

@@ -24,3 +24,10 @@ consumers.
 **Why:** The user explicitly wants just one active Telegram bot instance and
 wants improvements applied to the already-published bot, not a parallel
 development bot.
+
+“Todo lo que vamos a desarrollar aquí no va a estar activo hasta que lo publiquemos.”
+
+**Why:** The user explicitly asked to remember this rule.
+
+**How to apply:** Verify changes without turning on development Telegram workers.
+Do not claim a workspace edit is live; publication updates the existing bot.

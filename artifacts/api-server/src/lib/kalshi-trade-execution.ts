@@ -7,9 +7,9 @@ type ExecutionFields = {
   taker_outcome_side?: string; taker_side?: string; taker_book_side?: string;
 };
 
-/** Never guess a side's purchase amount from the book side or the opposite quote. */
+/** Resolve documented canonical direction before selecting that outcome's quote. */
 export function publicTradeExecution(trade: ExecutionFields) {
-  const outcomeSide = publicDirection(trade.taker_outcome_side, trade.taker_side);
+  const outcomeSide = publicDirection(trade.taker_outcome_side, trade.taker_side, trade.taker_book_side);
   if (outcomeSide === "unknown") return undefined;
   const raw = outcomeSide === "no" ? trade.no_price_dollars : trade.yes_price_dollars;
   const cents = outcomeSide === "no" ? trade.no_price : trade.yes_price;

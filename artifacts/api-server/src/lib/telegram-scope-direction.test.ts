@@ -175,13 +175,36 @@ test("both outcomes with both book sides retain the correct price and exact $10k
 test("legacy outcome price selection and malformed execution data fail safely", () => {
   assert.equal(publicTradeExecution({ taker_side: "no", count: 20000, yes_price: 75, no_price: 25 })?.notional, 5000);
   for (const book of ["bid", "ask"]) {
-    assert.equal(publicTradeExecution({
+    const execution = publicTradeExecution({
       taker_book_side: book, count: 20000, yes_price: 75, no_price: 25,
-    }), undefined, "No explicit or legacy outcome: cannot assign either quote to an unknown direction");
+    });
+    assert.equal(execution?.outcomeSide, book === "bid" ? "yes" : "no");
+    assert.equal(execution?.notional, book === "bid" ? 15000 : 5000);
   }
+  assert.equal(publicTradeExecution({ taker_book_side: "sell", count: 20000, yes_price: 75 }), undefined);
   assert.equal(publicTradeExecution({ taker_outcome_side: "no", count: 20000, yes_price: 75 }), undefined);
   assert.equal(publicTradeExecution({ taker_outcome_side: "yes", count: 20000, yes_price_dollars: "NaN" }), undefined);
   assert.equal(publicTradeExecution({ taker_outcome_side: "no", count: 0, no_price: 60 }), undefined);
+});
+
+test("canonical book-only trades retain the exact alert threshold and direction in graphs", () => {
+  for (const book of ["bid", "ask"]) {
+    for (const [count, amount] of [["19999.98", 9999.99], ["20000.00", 10000], ["20000.02", 10000.01]] as const) {
+      const execution = publicTradeExecution({
+        taker_book_side: book, count_fp: count, yes_price_dollars: "0.5000", no_price_dollars: "0.5000",
+      })!;
+      assert.equal(execution.notional, amount);
+      const trade = {
+        ...execution, tradeId: "canonical", ticker: "TEST", eventTitle: "A vs B",
+        marketTitle: "A wins", marketUrl: "https://kalshi.com/markets/test", createdTime: now, bookSide: book,
+      };
+      assert.equal(liveNotificationTrades([{ ...trade, createdTime: now.toISOString() }], now.getTime() - 1).length,
+        amount > 10000 ? 1 : 0);
+      assert.match(notificationText(trade), book === "ask" ? /Compra de NO o venta de SÍ/ : /Compra de SÍ o venta de NO/);
+      const plot = bucketHistory([trade], now);
+      assert.equal(plot.buckets[0].values[book === "ask" ? 4 : 3], amount);
+    }
+  }
 });
 
 test("notifications, captions and plot totals share direction and explicit limitations", () => {
@@ -198,7 +221,12 @@ test("notifications, captions and plot totals share direction and explicit limit
   assert.match(marketCardCaption(base), /En contra de/);
   const plot = bucketHistory([base], now);
   assert.equal(plot.buckets.reduce((n, bucket) => n + bucket.values[4], 0), 15000);
-  const unknown = { ...base, outcomeSide: "unknown" };
+  assert.match(message, /Compra de NO o venta de SÍ/);
+  assert.match(marketCardSvg([base], 10000), /Compra de NO o venta de SÍ/);
+  const canonicalOnly = { ...base, outcomeSide: "unknown", bookSide: "ask" };
+  assert.match(notificationText(canonicalOnly), /En contra de/);
+  assert.equal(bucketHistory([canonicalOnly], now).buckets[0].values[4], 15000);
+  const unknown = { ...base, outcomeSide: "unknown", bookSide: "unknown" };
   assert.match(notificationText(unknown), /Dirección no disponible/);
   assert.match(marketCardSvg([unknown], 10000), /DIRECCIÓN NO DISPONIBLE/);
   assert.equal(bucketHistory([unknown], now).buckets[0].values[5], 15000);
@@ -213,6 +241,10 @@ test("new menus and direction cards render at phone width with saved history unc
     outcomeSide: "no", bookSide: "ask", price: 0.6, count: 25000, notional: 15000, createdTime: now,
   };
   const original = JSON.stringify(trade);
+  assert.equal(active.step, 2);
+  assert.match(active.keyboard.inline_keyboard[0][0].callback_data!, /^d:game:/);
+  assert.ok(active.keyboard.inline_keyboard.some(row => row.some(button => button.callback_data === "d:scope:history")));
+  assert.ok(active.caption.length < 600, "Menu instructions stay concise");
   for (const [name, svg] of [
     ["vigentes", menuSvg(active)], ["historial", menuSvg(historical)],
     ["direction", marketCardSvg([trade], 10000, undefined, "large", now)],

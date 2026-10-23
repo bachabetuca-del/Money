@@ -1,5 +1,5 @@
 import { escapeHtml, betLabelEs, type MarketCardTrade } from "./telegram-market-card";
-import { directionLabel, publicDirection, DIRECTION_NOTE } from "./telegram-trade-direction";
+import { directionLabel, directionMeaning, publicDirection, DIRECTION_NOTE } from "./telegram-trade-direction";
 
 export const NOTIFICATION_THRESHOLD = 10_000;
 export type NotificationTrade = MarketCardTrade & { tradeId: string; ticker: string; marketUrl: string };
@@ -32,7 +32,7 @@ export interface NotificationApi {
 
 export function notificationText(trade: NotificationTrade) {
   const amount = trade.notional.toLocaleString("en-US", { style: "currency", currency: "USD" });
-  const direction = publicDirection(trade.outcomeSide);
+  const direction = publicDirection(trade.outcomeSide, undefined, trade.bookSide);
   const side = directionLabel(direction);
   const contracts = trade.count.toLocaleString("en-US", { maximumFractionDigits: 2 });
   const price = (trade.price * 100).toLocaleString("en-US", { maximumFractionDigits: 2 });
@@ -42,10 +42,11 @@ export function notificationText(trade: NotificationTrade) {
     `<b>${amount} · operación deportiva</b>`,
     `<b>${escapeHtml(trade.eventTitle ?? "Game details unavailable")}</b>`,
     `${side}${direction === "unknown" ? " · " : " «"}${escapeHtml(betLabelEs(trade.marketTitle ?? "Apuesta no disponible"))}${direction === "unknown" ? "" : "»"}`,
+    direction === "unknown" ? "" : `<b>${directionMeaning(direction)}</b>`,
     `${contracts} contratos a ${price}¢`,
     time,
     `<i>${DIRECTION_NOTE}</i>`,
-  ].join("\n");
+  ].filter(Boolean).join("\n");
 }
 
 /** Sends one short notification, then retires only older notification messages. */
