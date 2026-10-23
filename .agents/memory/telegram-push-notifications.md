@@ -21,6 +21,12 @@ Use “a favor / en contra” as the public direction of an operation, not as a 
 
 **How to apply:** Keep the bet name and direction explicit in notices and graph legends. Never imply the same previous large trader has exited or abandoned a prediction. Do not describe direction-label improvements as implementing confirmed exits; report the missing public data honestly.
 
+The user does not need seller identity: they want executions explicitly labeled as sales above $10k, their market, push notifications, and corresponding graph marks.
+
+**Why:** They supplied a Kalshi screen showing Bought Yes and Sold No and explicitly said “no necesito saber quién la vendió”.
+
+**How to apply:** Investigate the source of that activity screen rather than requiring account identity as a prerequisite. Distinguish public activity from personal account history. A verified sell-action field may support sale alerts without identifying the trader; directional exposure alone still does not establish a sale.
+
 Keep purchase-amount calculations tied to a validated direction. Explicit YES/NO outcome is authoritative. If missing, canonical book direction may supply it: bid ≡ YES, ask ≡ NO; only then use a validated YES/NO legacy fallback.
 
 **Why:** Kalshi's official order-direction documentation defines outcome and book side as the same directional bit, not separate buy/sell flags. Ignoring a valid canonical book side can discard trades; choosing the opposite outcome's quote can incorrectly cross the $10k notification boundary.
