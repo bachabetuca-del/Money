@@ -1,7 +1,8 @@
 import sharp from "sharp";
 import { logger } from "./logger";
-import { escapeHtml, marketCardCaption, marketCardSvg, type MarketCardTrade } from "./telegram-market-card";
-import { rangeFooter, rangeLabel, tradeRange, type TradeRange } from "./kalshi-trade-bands";
+import { marketCardSvg, type MarketCardTrade } from "./telegram-market-card";
+import { dashboardChartCaption, spanishRange } from "./telegram-dashboard-caption";
+import { tradeRange, type TradeRange } from "./kalshi-trade-bands";
 import type { HistoryStatus } from "./kalshi-market-history";
 import {
   buildCatalog, catalogGameBadge, chartKeyboard, HOME, keyFor, menuSvg, menuView,
@@ -125,7 +126,7 @@ export class TelegramDashboard {
     let keyboard;
     if (selection.screen === "chart") {
       const market = catalog.find(item => item.ticker === selection.ticker)!;
-      const badge = catalogGameBadge(catalog.filter(item => item.gameKey === market.gameKey));
+      const badge = catalogGameBadge(catalog.filter(item => item.gameKey === market.gameKey), now);
       const historical = selection.scope === "history";
       const stopped = historical || badge.rank === 3 || market.marketTerminal;
       const context = stopped ? { eventTitle: market.eventTitle!, marketTitle: market.marketTitle! } :
@@ -134,27 +135,15 @@ export class TelegramDashboard {
       const rows = (await this.store.trades(market.ticker, range)).map(row => ({ ...row, ...context }));
       if (!rows.length) throw new Error("No qualifying trades are available for this market.");
       const history = stopped ? undefined : await this.api.history?.(market.ticker);
-      svg = marketCardSvg(rows, range.minimum, rangeFooter(range), selection.band, now,
-        { label: badge.label, color: badge.color, stopped });
-      caption = marketCardCaption(rows[rows.length - 1], !stopped) +
-        (historical ? "\n<b>Historial · datos guardados</b>" : "\n<b>Vigentes</b>") +
-        `\nFecha del partido: ${escapeHtml(market.gameDateLabel)}` +
-        `\n${badge.marker} ${escapeHtml(badge.label)}` +
-        (market.gameCheckedAt ? ` · comprobado ${new Date(market.gameCheckedAt).toLocaleTimeString("en-US",
-          { timeZone: "America/New_York", hour: "numeric", minute: "2-digit" })} NY` : "") +
-        `\nSection: ${escapeHtml(rangeLabel(range))} only.` +
-        (stopped ? "\nAutomatic market checks stopped · saved history only." :
-          history ? `\n${history.error ? "History incomplete · retrying automatically." :
-          history.phase === "complete" ? "Available public history loaded." :
-          !settings.enabled ? "History loading paused." :
-          `Loading history · ${history.scanned.toLocaleString("en-US")} public trades checked; graph is partial.`}` : "") +
-        (stopped ? "\nSaved history · recent-activity highlighting disabled." :
-          "\nBars sum trade value per interval. Bright portions: last 15 minutes. White outline: latest interval.") +
-        "\nNotifications: new trades over $10,000 only; latest notice kept." +
-        (stopped ? badge.rank === 3 || market.marketTerminal
-          ? "\nTerminado/cerrado · sin consultas automáticas."
-          : "\nArchivado por fecha; no confirma que haya terminado." :
-          settings.enabled ? "\nLive · checks every 15 seconds." : "\nMonitoring paused · saved history.");
+      svg = marketCardSvg(rows, range.minimum, `Operaciones ${spanishRange(range)}`, selection.band, now,
+        { label: historical ? "Historial" : !settings.enabled ? "Pausado" : market.marketTerminal ? "Mercado cerrado" : badge.label,
+          color: badge.color, stopped });
+      caption = dashboardChartCaption({
+        trade: rows[rows.length - 1], historical, stopped: Boolean(stopped),
+        confirmedClosed: badge.rank === 3 || Boolean(market.marketTerminal),
+        enabled: settings.enabled, gameDate: market.gameDateLabel, statusLabel: badge.label,
+        checkedAt: market.gameCheckedAt, range, history,
+      });
       keyboard = chartKeyboard(selection, market.marketUrl, settings.minimumNotional);
     } else {
       const view = menuView(selection, catalog, settings.enabled, settings.minimumNotional, now);

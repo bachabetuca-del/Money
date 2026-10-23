@@ -15,6 +15,12 @@ The user approved an earlier phone-readable card appearance: “Ok great I like 
 
 **How to apply:** Preserve the plain-language content and one-message behavior, not necessarily the old layout or palette. Check the real rendered graph at 320–390px, with large currency amounts, long bet descriptions, sparse and multi-day history, and both monetary sections. Keep chart labels from colliding or getting clipped.
 
+Keep the visual meaning of direction separate from recency, and show the individual latest trade separately from aggregate totals.
+
+**Why:** Reusing color intensity for age while hue represents direction makes the chart harder to interpret. Users must not confuse a sum of transactions with one large purchase.
+
+**How to apply:** Keep direction colors consistent, use a separate recent-activity marker with a short text legend, and retain explicit individual-versus-aggregate labels. Show exact totals and do not enlarge tiny segments in ways that distort their proportions.
+
 Prioritize the complete calendar date before team names on Telegram's single-line game buttons. Keep full names available on the rendered card and show dates in the selected game's context too.
 
 **Why:** The user could not tell which day several games were scheduled for because Telegram truncated long team names before the date. Date visibility is more important than preserving the full team name in a single button.

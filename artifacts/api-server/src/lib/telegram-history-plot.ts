@@ -1,5 +1,6 @@
 import type { MarketCardTrade } from "./telegram-market-card";
 import { publicDirection } from "./telegram-trade-direction";
+import { axisMoney, nyDay, nyTime } from "./telegram-card-format";
 
 const MINUTE = 60_000;
 export const RECENT_WINDOW_MS = 15 * MINUTE;
@@ -52,61 +53,87 @@ export function bucketHistory(trades: MarketCardTrade[], now: Date, highlightRec
     recentCount, total, latestIndex: Math.floor((latest - start) / width) };
 }
 
-function compactMoney(value: number) {
-  if (value >= 1_000_000) return `$${(value / 1_000_000).toFixed(1)}m`;
-  return value >= 1000 ? `$${(value / 1000).toFixed(1)}k` : `$${Math.round(value)}`;
+/** Spanish interval label for the chart title. */
+export function intervalLabelEs(width: number) {
+  if (width < 60 * MINUTE) return `${Math.round(width / MINUTE)} min`;
+  if (width < 1440 * MINUTE) { const h = Math.round(width / (60 * MINUTE)); return h === 1 ? "1 hora" : `${h} horas`; }
+  if (width === 10080 * MINUTE) return "1 semana";
+  if (width === 43200 * MINUTE) return "30 días";
+  const d = Math.round(width / (1440 * MINUTE)); return d === 1 ? "1 día" : `${d} días`;
 }
 
-const OLD = ["#2F7F88", "#9A6420", "#5B6663"];
-const NEW = ["#4FDDE8", "#FFB13B", "#B4BDBA"];
+// Direction is color; recency is texture (diagonal stripes), never a hue shift.
+export const DIRECTION_COLORS = ["#3FC8D4", "#F2A43A", "#8E9995"];
+const DIRECTION_FILLS = ["url(#dirYes)", "url(#dirNo)", "url(#dirUnknown)"];
+const RECENT_FILLS = ["url(#recentYes)", "url(#recentNo)", "url(#recentUnknown)"];
+
+export function chartDefs() {
+  const hatch = (id: string, color: string) => `<pattern id="${id}" width="14" height="14" patternUnits="userSpaceOnUse" patternTransform="rotate(45)">
+    <rect width="14" height="14" fill="${color}"/><rect width="5" height="14" fill="#F7F3E8" fill-opacity="0.85"/></pattern>`;
+  // Unknown direction: gray with dots so it never reads as a muted YES/NO.
+  return `<defs>
+    <pattern id="dirYes" width="10" height="10" patternUnits="userSpaceOnUse"><rect width="10" height="10" fill="${DIRECTION_COLORS[0]}"/></pattern>
+    <pattern id="dirNo" width="10" height="10" patternUnits="userSpaceOnUse"><rect width="10" height="10" fill="${DIRECTION_COLORS[1]}"/></pattern>
+    <pattern id="dirUnknown" width="12" height="12" patternUnits="userSpaceOnUse"><rect width="12" height="12" fill="${DIRECTION_COLORS[2]}"/><circle cx="6" cy="6" r="2.2" fill="#0E1A17"/></pattern>
+    ${hatch("recentYes", DIRECTION_COLORS[0])}${hatch("recentNo", DIRECTION_COLORS[1])}
+    <pattern id="recentUnknown" width="14" height="14" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><rect width="14" height="14" fill="${DIRECTION_COLORS[2]}"/><rect width="5" height="14" fill="#F7F3E8" fill-opacity="0.85"/><circle cx="10" cy="7" r="2" fill="#0E1A17"/></pattern>
+  </defs>`;
+}
+
+function niceMax(value: number) {
+  const raw = Math.max(1, value);
+  const power = 10 ** Math.floor(Math.log10(raw));
+  for (const step of [1, 1.5, 2, 2.5, 3, 4, 5, 6, 8, 10]) if (step * power >= raw) return step * power;
+  return 10 * power;
+}
 
 /** Every qualifying trade contributes to a time bucket; no last-N truncation. */
 export function historyPlotSvg(trades: MarketCardTrade[], now: Date, top: number, bottom: number, highlightRecent = true) {
   const history = bucketHistory(trades, now, highlightRecent);
-  const left = 176;
+  const left = 168;
   const right = 856;
   const column = (right - left) / history.buckets.length;
-  const barWidth = Math.min(80, Math.max(4, column * 0.78));
-  const maximum = Math.max(1, ...history.buckets.map(bucket => bucket.total)) * 1.18;
+  const barWidth = Math.min(72, Math.max(5, column * 0.76));
+  const maximum = niceMax(Math.max(...history.buckets.map(bucket => bucket.total)) * 1.08);
   const grid = [0, 0.5, 1].map(fraction => {
     const y = bottom - fraction * (bottom - top);
-    return `<line x1="${left}" y1="${y}" x2="${right}" y2="${y}" stroke="${fraction === 0 ? "#6B7C77" : "#2A3B36"}" stroke-width="${fraction === 0 ? 3 : 2}" ${fraction === 0 ? "" : 'stroke-dasharray="3 9"'}/>
-      <text x="${left - 16}" y="${y + 10}" text-anchor="end" font-size="28" font-weight="600" fill="#A9B8B3">${compactMoney(maximum * fraction)}</text>`;
+    return `<line x1="${left}" y1="${y}" x2="${right}" y2="${y}" stroke="${fraction === 0 ? "#6E7F79" : "#2C3D38"}" stroke-width="${fraction === 0 ? 3 : 2}" ${fraction === 0 ? "" : 'stroke-dasharray="4 10"'}/>
+      <text x="${left - 14}" y="${y + 10}" text-anchor="end" font-size="27" font-weight="600" fill="#AEBDB7">${axisMoney(maximum * fraction)}</text>`;
   }).join("");
-  let latestBand = "";
-  let latestLabel = "";
+  let marker = "";
   const bars = history.buckets.map((bucket, index) => {
     const x = left + column * (index + 0.5) - barWidth / 2;
     let used = 0;
-    const segments = bucket.values.map((value, segment) => {
+    const order = [0, 3, 1, 4, 2, 5]; // stack by direction so each color is one block
+    const segments = order.map(segment => {
+      const value = bucket.values[segment];
       if (!value) return "";
       const height = value / maximum * (bottom - top);
       const y = bottom - used - height;
       used += height;
-      const color = (segment >= 3 ? NEW : OLD)[segment % 3];
-      return `<rect x="${x}" y="${y}" width="${barWidth}" height="${height}" fill="${color}" stroke="#0C1714" stroke-width="1.5"/>`;
+      const fill = (segment >= 3 ? RECENT_FILLS : DIRECTION_FILLS)[segment % 3];
+      return `<rect x="${x}" y="${y}" width="${barWidth}" height="${height}" fill="${fill}" stroke="#0E1A17" stroke-width="1.5"/>`;
     }).join("");
     if (index === history.latestIndex && bucket.count) {
-      latestBand = `<rect x="${x - 8}" y="${top - 6}" width="${barWidth + 16}" height="${bottom - top + 6}" rx="8" fill="#F4F1E6" fill-opacity="0.09"/>`;
-      latestLabel = `<rect x="${x - 4}" y="${bottom - used - 4}" width="${barWidth + 8}" height="${used + 4}" fill="none" stroke="#F4F1E6" stroke-width="4" rx="4"/>
-        <text x="${right}" y="${top - 16}" text-anchor="end" font-size="25" font-weight="600" fill="#D9E2DC">Last interval total: ${compactMoney(bucket.total)}</text>`;
+      const cx = x + barWidth / 2;
+      const ty = bottom - used - 14;
+      marker = `<rect x="${x - 4}" y="${bottom - used - 4}" width="${barWidth + 8}" height="${used + 4}" fill="none" stroke="#F7F3E8" stroke-width="4" rx="4"/>
+        <path d="M${cx - 11} ${ty - 14} L${cx + 11} ${ty - 14} L${cx} ${ty} Z" fill="#F7F3E8"/>`;
     }
     return segments;
   }).join("");
   const span = history.end - history.start;
-  const longRange = span >= 2 * 24 * 60 * MINUTE;
-  const ticks = longRange || span < 4 * MINUTE ? [0, 0.5, 1] : [0, 0.25, 0.5, 0.75, 1];
+  const multiDay = nyDay(new Date(history.start)) !== nyDay(new Date(history.end - 1));
+  const ticks = span < 4 * MINUTE ? [0, 1] : [0, 0.5, 1];
   const labels = ticks.map(fraction => {
-    const date = new Date(history.start + (history.end - history.start) * fraction);
-    const day = date.toLocaleDateString("en-US", { timeZone: "America/New_York", month: "short", day: "numeric" });
-    const time = date.toLocaleTimeString("en-US", { timeZone: "America/New_York", hour: "numeric", minute: "2-digit",
-      ...(span <= 2 * MINUTE ? { second: "2-digit" as const } : {}), hour12: false });
+    const date = new Date(history.start + span * fraction - (fraction === 1 ? 1 : 0));
     const x = left + (right - left) * fraction;
     const anchor = fraction === 0 ? "start" : fraction === 1 ? "end" : "middle";
-    const first = fraction === 0 || fraction === 0.5 || fraction === 1;
-    return `<line x1="${x}" y1="${bottom}" x2="${x}" y2="${bottom + 10}" stroke="#6B7C77" stroke-width="2"/>
-      <text x="${x}" y="${bottom + 42}" text-anchor="${anchor}" font-size="27" font-weight="700" fill="#E8EDE9">${longRange ? day : time}</text>
-      ${first ? `<text x="${x}" y="${bottom + 74}" text-anchor="${anchor}" font-size="24" fill="#A9B8B3">${longRange ? time : day}</text>` : ""}`;
+    const primary = span >= 2 * 1440 * MINUTE ? nyDay(date) : nyTime(date, span <= 2 * MINUTE);
+    const secondary = span >= 2 * 1440 * MINUTE ? nyTime(date) : multiDay || fraction === 0 ? nyDay(date) : "";
+    return `<line x1="${x}" y1="${bottom}" x2="${x}" y2="${bottom + 10}" stroke="#6E7F79" stroke-width="2"/>
+      <text x="${x}" y="${bottom + 42}" text-anchor="${anchor}" font-size="27" font-weight="700" fill="#E9EEEA">${primary}</text>
+      ${secondary ? `<text x="${x}" y="${bottom + 74}" text-anchor="${anchor}" font-size="24" fill="#AEBDB7">${secondary}</text>` : ""}`;
   }).join("");
-  return { ...history, svg: grid + latestBand + bars + latestLabel + labels };
+  return { ...history, maximum, svg: grid + bars + marker + labels };
 }

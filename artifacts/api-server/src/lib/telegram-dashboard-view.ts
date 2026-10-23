@@ -1,9 +1,10 @@
 import { createHash } from "node:crypto";
-import { escapeHtml, readableBet } from "./telegram-market-card";
-import { rangeLabel, tradeRange, type TradeBand } from "./kalshi-trade-bands";
+import { escapeHtml, betLabelEs } from "./telegram-market-card";
+import { tradeRange, type TradeBand } from "./kalshi-trade-bands";
 import { gameBadge } from "./kalshi-game-status";
 import { gameDateLabel } from "./telegram-game-date";
 import { gameScope, scopedCatalog, type GameScope } from "./telegram-game-scope";
+import { spanishRange } from "./telegram-dashboard-caption";
 
 export type Screen = "sports" | "games" | "markets" | "chart";
 export type Selection = {
@@ -83,7 +84,7 @@ export function buildCatalog(rows: MarketSummary[]): CatalogMarket[] {
       gameName,
       gameLabel: `${dateLabel} · ${gameName}`,
       gameDateLabel: dateLabel,
-      betLabel: readableBet(row.marketTitle),
+      betLabel: betLabelEs(row.marketTitle),
     };
     const prior = unique.get(row.ticker);
     if (!prior) unique.set(row.ticker, entry);
@@ -168,8 +169,8 @@ export function chartKeyboard(selection: Selection, marketUrl: string, threshold
   return { inline_keyboard: [
     bandButtons(selection.band, threshold),
     scopeButtons(selection),
-    [{ text: "Back to markets", callback_data: "d:back" }, { text: "Sports", callback_data: "d:home" }],
-    [{ text: "Open market in Kalshi", url: marketUrl }, { text: "Refresh", callback_data: "d:refresh" }],
+    [{ text: "Mercados", callback_data: "d:back" }, { text: "Deportes", callback_data: "d:home" }],
+    [{ text: "Abrir en Kalshi", url: marketUrl }, { text: "Actualizar", callback_data: "d:refresh" }],
   ] };
 }
 
@@ -180,42 +181,55 @@ export function scopeButtons(selection: Selection): Button[] {
   ];
 }
 
-export function catalogGameBadge(markets: MarketSummary[]) {
+export function catalogGameBadge(markets: MarketSummary[], now?: Date) {
   const confirmed = markets.filter(m => m.gameState && m.gameState !== "unknown" && m.gameSource !== "market")
     .sort((a, b) => (b.gameCheckedAt ?? "").localeCompare(a.gameCheckedAt ?? ""));
   const latest = confirmed[0];
+  if (latest?.gameState === "live" && now) {
+    const checked = latest.gameCheckedAt ? new Date(latest.gameCheckedAt).getTime() : NaN;
+    if (latest.gameDelayed || !Number.isFinite(checked) || now.getTime() - checked > 5 * 60_000 || checked > now.getTime() + 60_000) {
+      return gameBadge("unknown", latest.gameSource, true);
+    }
+  }
   if (latest) return gameBadge(latest.gameState, latest.gameSource, latest.gameDelayed);
   if (markets.length && markets.every(m => m.gameState === "finished")) return gameBadge("finished", "market");
   return gameBadge("unknown");
 }
 
 type MenuItem = { label: string; detail: string; action: string; badge?: ReturnType<typeof gameBadge>; buttonLabel?: string };
+function spanishSportName(sport: string) {
+  const names: Record<string, string> = {
+    Football: "Fútbol americano", Basketball: "Baloncesto", Baseball: "Béisbol",
+    Soccer: "Fútbol", Hockey: "Hockey", Tennis: "Tenis", Golf: "Golf", Combat: "Combate",
+  };
+  return names[sport] ?? sport;
+}
 export function menuView(selection: Selection, catalog: CatalogMarket[], enabled: boolean, threshold: number, now = new Date()) {
   const historical = selection.scope === "history";
   catalog = scopedCatalog(catalog, historical ? "history" : "active", now);
-  const activeRange = rangeLabel(tradeRange(selection.band, threshold));
-  let title = "Choose a sport";
-  let subtitle = `${activeRange} only · separate trade section`;
+  const activeRange = spanishRange(tradeRange(selection.band, threshold));
+  let title = "Elige un deporte";
+  let subtitle = `${activeRange} · rangos separados`;
   let items: MenuItem[];
   const sportMarkets = catalog.filter(m => m.sportKey === selection.sportKey);
   if (selection.screen === "games") {
-    title = sportMarkets[0]?.sport ?? "Games";
-    subtitle = `${activeRange} only · choose a game`;
+    title = spanishSportName(sportMarkets[0]?.sport ?? "Partidos");
+    subtitle = `${activeRange} · elige un partido`;
     const grouped = new Map<string, CatalogMarket[]>();
     for (const market of sportMarkets) grouped.set(market.gameKey, [...(grouped.get(market.gameKey) ?? []), market]);
     items = [...grouped].map(([key, markets]) => ({
       label: markets[0].gameLabel,
       buttonLabel: markets[0].gameLabel,
-      detail: `${markets.length} ${markets.length === 1 ? "market" : "markets"} · ${markets.reduce((sum, m) => sum + m.trades, 0)} trades`,
+      detail: `${markets.length} ${markets.length === 1 ? "mercado" : "mercados"} · ${markets.reduce((sum, m) => sum + m.trades, 0)} operaciones`,
       action: `d:game:${key}`,
-      badge: catalogGameBadge(markets),
+      badge: catalogGameBadge(markets, now),
     })).sort((a, b) => a.badge.rank - b.badge.rank);
   } else if (selection.screen === "markets") {
-    title = sportMarkets.find(m => m.gameKey === selection.gameKey)?.gameLabel ?? "Markets";
-    subtitle = `${activeRange} only · choose a bet`;
-    const badge = catalogGameBadge(sportMarkets.filter(m => m.gameKey === selection.gameKey));
+    title = sportMarkets.find(m => m.gameKey === selection.gameKey)?.gameLabel ?? "Mercados";
+    subtitle = `${activeRange} · elige una apuesta`;
+    const badge = catalogGameBadge(sportMarkets.filter(m => m.gameKey === selection.gameKey), now);
     items = sportMarkets.filter(m => m.gameKey === selection.gameKey).map(m => ({
-      label: m.betLabel, detail: `${m.trades} ${m.trades === 1 ? "trade" : "trades"}${m.marketTerminal ? " · mercado cerrado" : ""}`,
+      label: m.betLabel, detail: `${m.trades} ${m.trades === 1 ? "operación" : "operaciones"}${m.marketTerminal ? " · mercado cerrado" : ""}`,
       action: `d:market:${m.id}`,
       badge,
     }));
@@ -224,8 +238,8 @@ export function menuView(selection: Selection, catalog: CatalogMarket[], enabled
     items = sports.map(sport => {
       const markets = catalog.filter(m => m.sport === sport);
       return {
-        label: sport,
-        detail: `${new Set(markets.map(m => m.gameKey)).size} games · ${markets.length} markets`,
+        label: spanishSportName(sport),
+        detail: `${new Set(markets.map(m => m.gameKey)).size} partidos · ${markets.length} mercados`,
         action: `d:sport:${markets[0].sportKey}`,
       };
     });
@@ -242,19 +256,19 @@ export function menuView(selection: Selection, catalog: CatalogMarket[], enabled
       : item.label).slice(0, 120), callback_data: item.action }]),
   ] };
   const paging: Button[] = [];
-  if (page > 0) paging.push({ text: "Previous", callback_data: `d:page:${page - 1}` });
-  if (page < pages - 1) paging.push({ text: "Next", callback_data: `d:page:${page + 1}` });
+  if (page > 0) paging.push({ text: "Anterior", callback_data: `d:page:${page - 1}` });
+  if (page < pages - 1) paging.push({ text: "Siguiente", callback_data: `d:page:${page + 1}` });
   if (paging.length) keyboard.inline_keyboard.push(paging);
   if (selection.screen !== "sports") keyboard.inline_keyboard.push([
-    { text: "Back", callback_data: "d:back" }, { text: "Sports", callback_data: "d:home" },
+    { text: "Volver", callback_data: "d:back" }, { text: "Deportes", callback_data: "d:home" },
   ]);
-  keyboard.inline_keyboard.push([{ text: "Refresh", callback_data: "d:refresh" }]);
+  keyboard.inline_keyboard.push([{ text: "Actualizar", callback_data: "d:refresh" }]);
   title = `${historical ? "Historial" : "Vigentes"} · ${title}`;
-  const status = historical ? "HISTORIAL · datos guardados" : enabled ? "LIVE · checks every 15 seconds" : "PAUSED · saved trade history";
+  const status = historical ? "HISTORIAL · datos guardados" : enabled ? "ACTIVO · se actualiza cada 15 segundos" : "PAUSADO · datos guardados";
   const caption = `<b>${escapeHtml(title)}</b>\nDeporte → Partido → Mercado.\n` +
     "⚪ Por empezar · 🟡 En juego · 🔴 Terminado\nAntiguos y terminados: en Historial. ◌ Sin confirmar: no se adivina el estado.\n" +
-    `<i>${status}. Captured trades ${escapeHtml(activeRange)} only; sections never mix.</i>\n` +
-    "Notifications: new trades over $10,000 only. Only the latest notice is kept.";
+    `<i>${status}. Operaciones ${escapeHtml(activeRange)}; los rangos no se mezclan.</i>\n` +
+    "Avisos: solo operaciones nuevas de más de $10,000. Se conserva el último aviso.";
   return { title, subtitle, items: visible, page, pages, keyboard, caption, status, historical };
 }
 
@@ -290,13 +304,13 @@ export function menuSvg(view: ReturnType<typeof menuView>) {
   return `<svg xmlns="http://www.w3.org/2000/svg" width="900" height="${height}">
     <rect width="900" height="${height}" fill="#0B1220"/>
     <g font-family="DejaVu Sans, Arial, sans-serif">
-    <text x="52" y="57" font-size="25" letter-spacing="3" fill="#94A3B8">KALSHI · LIVE DASHBOARD</text>
+    <text x="52" y="57" font-size="25" letter-spacing="3" fill="#94A3B8">KALSHI · ACTIVIDAD DEPORTIVA</text>
     ${heading.map((line, i) => `<text x="52" y="${126 + i * 53}" font-size="44" font-weight="700" fill="#F8FAFC">${escapeHtml(line)}</text>`).join("")}
     <text x="52" y="${subtitleY}" font-size="28" fill="#CBD5E1">${escapeHtml(view.subtitle)}</text>
     ${cards}
     ${view.items.length ? "" : `<text x="52" y="${subtitleY + 100}" font-size="28" fill="#CBD5E1">${view.historical ? "Sin partidos en Historial para este rango." : "Sin partidos vigentes para este rango."}</text>`}
     <text x="52" y="${height - 85}" font-size="25" fill="#61A9BD">${escapeHtml(view.status)}</text>
-    <text x="52" y="${height - 42}" font-size="25" fill="#94A3B8">Use the buttons below · Page ${view.page + 1} of ${view.pages}</text>
+    <text x="52" y="${height - 42}" font-size="25" fill="#94A3B8">Usa los botones · Página ${view.page + 1} de ${view.pages}</text>
     </g>
   </svg>`;
 }

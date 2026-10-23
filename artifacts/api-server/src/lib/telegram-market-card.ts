@@ -1,8 +1,9 @@
 import type { TradeBand } from "./kalshi-trade-bands";
-import { historyPlotSvg } from "./telegram-history-plot";
+import { chartDefs, DIRECTION_COLORS, historyPlotSvg, intervalLabelEs, RECENT_WINDOW_MS } from "./telegram-history-plot";
+import { elapsed, exactMoney, fitSize, nyDateTime, textBlock } from "./telegram-card-format";
 import { publicDirection, directionLabel, DIRECTION_NOTE } from "./telegram-trade-direction";
 
-export const MARKET_CARD_VERSION = 2;
+export const MARKET_CARD_VERSION = 3;
 
 export type MarketCardTrade = {
   eventTitle: string | null;
@@ -26,105 +27,163 @@ export function readableBet(title: string) {
     .replace(/ wins$/i, " to win");
 }
 
-function money(value: number, compact = false) {
-  if (compact && value >= 1_000_000) return `$${(value / 1_000_000).toFixed(1)}m`;
-  if (compact && value >= 1000) return `$${(value / 1000).toFixed(1)}k`;
-  return value.toLocaleString("en-US", {
-    style: "currency", currency: "USD",
-    minimumFractionDigits: Number.isInteger(value) ? 0 : 2,
-    maximumFractionDigits: 2,
-  });
-}
-
-function wrappedText(
-  text: string, x: number, y: number, fontSize: number,
-  maxChars: number, color = "#F8FAFC", weight = 600,
-) {
-  const words = text.split(/\s+/);
-  const lines: string[] = [];
-  let line = "";
-  for (const word of words) {
-    if (line && `${line} ${word}`.length > maxChars) {
-      lines.push(line);
-      line = word;
-    } else {
-      line = line ? `${line} ${word}` : word;
-    }
-  }
-  if (line) lines.push(line);
-  const lineHeight = fontSize * 1.22;
-  return {
-    svg: lines.map((value, index) =>
-      `<text x="${x}" y="${y + index * lineHeight}" font-size="${fontSize}" font-weight="${weight}" fill="${color}">${escapeHtml(value)}</text>`,
-    ).join(""),
-    height: lines.length * lineHeight,
-  };
+/** Translate only recognized bet phrases; preserve unfamiliar provider wording. */
+export function betLabelEs(title: string) {
+  return readableBet(title)
+    .replace(/ to win by more than ([\d.,-]+) points$/i, " gana por más de $1 puntos")
+    .replace(/ to win$/i, " gana")
+    .replace(/^Over ([\d.,]+) points$/i, "Más de $1 puntos")
+    .replace(/^Under ([\d.,]+) points$/i, "Menos de $1 puntos");
 }
 
 export function marketCardCaption(trade: MarketCardTrade, live = true) {
   const side = publicDirection(trade.outcomeSide);
   const position = directionLabel(side);
   return [
-    `<b>${escapeHtml(trade.eventTitle ?? "Game details unavailable")}</b>`,
-    `${position}${side === "unknown" ? " · " : " "}${escapeHtml(readableBet(trade.marketTitle ?? "Bet details unavailable"))}`,
+    `<b>${escapeHtml(trade.eventTitle ?? "Partido no disponible")}</b>`,
+    `${position}${side === "unknown" ? " · " : " «"}${escapeHtml(betLabelEs(trade.marketTitle ?? "Apuesta no disponible"))}${side === "unknown" ? "" : "»"}`,
     `<i>${DIRECTION_NOTE} ${live ? "Se actualiza aquí." : "Historial guardado."}</i>`,
   ].join("\n");
 }
+
+const BG = "#0E1A17";
+const PANEL = "#16271F";
+const INK = "#F7F3E8";
+const SOFT = "#D7E0DA";
+const MUTED = "#9FB0A9";
+const W = 900;
 
 export function marketCardSvg(trades: MarketCardTrade[], threshold: number, filterLabel?: string, band: TradeBand = "large", now = new Date(),
   gameStatus?: { label: string; color: string; stopped?: boolean }) {
   if (!trades.length) throw new Error("A market card needs at least one trade.");
   const ordered = [...trades].sort((a, b) => a.createdTime.getTime() - b.createdTime.getTime());
   const latest = ordered[ordered.length - 1];
+  const first = ordered[0];
+  const live = !gameStatus?.stopped;
   const side = publicDirection(latest.outcomeSide);
-  const sideColor = side === "no" ? "#FFB13B" : side === "yes" ? "#4FDDE8" : "#B4BDBA";
-  const sideText = side === "yes" ? "SÍ / A FAVOR DE ESTA APUESTA" : side === "no" ? "NO / EN CONTRA DE ESTA APUESTA" : "DIRECCIÓN NO DISPONIBLE";
-  const game = wrappedText(latest.eventTitle ?? "Game details unavailable", 52, 125, 46, 28, gameStatus?.color ?? "#F4F1E6", 700);
-  const betY = 125 + game.height + 30;
-  const bet = wrappedText(readableBet(latest.marketTitle ?? "Bet details unavailable"), 52, betY + 46, 39, 33, "#D9E2DC");
-  const panelY = betY + 46 + bet.height + 22;
-  const chartTitleY = panelY + 350;
-  const chartTop = chartTitleY + 150;
-  const chartBottom = chartTop + 360;
-  const height = chartBottom + 330;
-  const history = historyPlotSvg(ordered, now, chartTop, chartBottom, !gameStatus?.stopped);
-  const timestamp = latest.createdTime.toLocaleString("en-US", {
-    timeZone: "America/New_York", month: "short", day: "numeric",
-    hour: "numeric", minute: "2-digit", timeZoneName: "short",
-  });
+  const sideIndex = side === "yes" ? 0 : side === "no" ? 1 : 2;
+  const sideColor = DIRECTION_COLORS[sideIndex];
+  const sideText = side === "yes" ? "SÍ · A FAVOR DE LA APUESTA" : side === "no" ? "NO · EN CONTRA DE LA APUESTA" : "DIRECCIÓN NO DISPONIBLE";
+
+  // Direction totals from actual input.
+  const sums = [0, 0, 0];
+  const counts = [0, 0, 0];
+  let recentSum = 0;
+  for (const trade of ordered) {
+    const d = publicDirection(trade.outcomeSide);
+    const i = d === "yes" ? 0 : d === "no" ? 1 : 2;
+    sums[i] += trade.notional; counts[i] += 1;
+    const t = trade.createdTime.getTime();
+    if (live && t >= now.getTime() - RECENT_WINDOW_MS && t <= now.getTime()) recentSum += trade.notional;
+  }
+
+  const parts: string[] = [];
+  let y = 64;
+  parts.push(`<text x="52" y="${y}" font-size="25" font-weight="700" letter-spacing="3" fill="${MUTED}">KALSHI · OPERACIONES GRANDES</text>`);
+  if (gameStatus) {
+    y += 42;
+    parts.push(`<text x="52" y="${y}" font-size="25" font-weight="700" fill="${gameStatus.color}">${escapeHtml(gameStatus.label)}</text>`);
+  }
+  y += 62;
+  const game = textBlock(latest.eventTitle ?? "Partido no disponible", 52, y, 44, 796, INK, 700, Infinity);
+  parts.push(game.svg); y += game.height + 14;
+  parts.push(`<text x="52" y="${y}" font-size="24" font-weight="700" letter-spacing="3" fill="${MUTED}">LA APUESTA</text>`);
+  y += 44;
+  const bet = textBlock(betLabelEs(latest.marketTitle ?? "Apuesta no disponible"), 52, y, 36, 796, SOFT, 600, Infinity);
+  parts.push(bet.svg); y += bet.height + 6;
+
+  // Latest single trade panel.
+  const panelY = y;
+  const amount = exactMoney(latest.notional);
+  const amountSize = fitSize(amount, 740, 80, 48);
   const count = latest.count.toLocaleString("en-US", { maximumFractionDigits: 2 });
   const cents = (latest.price * 100).toLocaleString("en-US", { maximumFractionDigits: 2 });
-  const ly = chartBottom + 115;
-  return `<svg xmlns="http://www.w3.org/2000/svg" width="900" height="${height}" viewBox="0 0 900 ${height}">
-    <rect width="900" height="${height}" fill="#0C1714"/>
-    <rect width="900" height="14" fill="${gameStatus?.color ?? sideColor}"/>
-    <g font-family="DejaVu Sans, Arial, sans-serif">
-      <text x="52" y="62" font-size="25" font-weight="700" letter-spacing="3" fill="#8FA39C">KALSHI · SPORTS ALERT</text>
-       ${gameStatus ? `<text x="848" y="62" text-anchor="end" font-size="23" font-weight="700" fill="${gameStatus.color}">${escapeHtml(gameStatus.label)}</text>` : ""}
-      ${game.svg}
-      <text x="52" y="${betY}" font-size="24" font-weight="700" fill="#8FA39C" letter-spacing="3">THE BET</text>
-      ${bet.svg}
-      <rect x="36" y="${panelY}" width="828" height="300" rx="24" fill="#15251F"/>
-      <rect x="36" y="${panelY}" width="14" height="300" rx="7" fill="${sideColor}"/>
-      <text x="76" y="${panelY + 50}" font-size="26" font-weight="700" fill="#A9B8B3" letter-spacing="1">${band === "medium" ? "LATEST $5k–$10k TRADE" : "LATEST LARGE TRADE"} · ONE TRADE</text>
-      <text x="76" y="${panelY + 138}" font-size="84" font-weight="700" fill="#F4F1E6">${escapeHtml(money(latest.notional))}</text>
-      <text x="76" y="${panelY + 190}" font-size="32" font-weight="700" fill="${sideColor}">${sideText}</text>
-      <text x="76" y="${panelY + 238}" font-size="30" fill="#E8EDE9">${count} contracts at ${cents}¢</text>
-      <text x="76" y="${panelY + 275}" font-size="25" fill="#A9B8B3">${escapeHtml(timestamp)}</text>
-      <text x="52" y="${chartTitleY}" font-size="36" font-weight="700" fill="#F4F1E6">Money traded per ${history.widthLabel}</text>
-      <text x="52" y="${chartTitleY + 42}" font-size="26" fill="#A9B8B3">Total value per interval · not individual trades.</text>
-       <text x="52" y="${chartTitleY + 94}" font-size="28" font-weight="700" fill="#E8EDE9">${ordered.length.toLocaleString("en-US")} trades · ${gameStatus?.stopped ? "saved history" : `${history.recentCount.toLocaleString("en-US")} in last 15m`} · ${escapeHtml(money(history.total, true))} total</text>
-      ${history.svg}
-      <rect x="52" y="${ly - 22}" width="20" height="30" fill="#2F7F88"/><rect x="72" y="${ly - 22}" width="20" height="30" fill="#4FDDE8"/>
-      <text x="106" y="${ly + 4}" font-size="27" font-weight="700" fill="#E8EDE9">SÍ / A FAVOR</text>
-      <rect x="330" y="${ly - 22}" width="20" height="30" fill="#9A6420"/><rect x="350" y="${ly - 22}" width="20" height="30" fill="#FFB13B"/>
-      <text x="384" y="${ly + 4}" font-size="27" font-weight="700" fill="#E8EDE9">NO / EN CONTRA</text>
-      <rect x="700" y="${ly - 22}" width="20" height="30" fill="#B4BDBA"/>
-      <text x="734" y="${ly + 4}" font-size="23" fill="#E8EDE9">Sin dato</text>
-      <text x="52" y="${ly + 50}" font-size="25" fill="#E8EDE9">Dark = older · Bright = last 15 min</text>
-      <text x="52" y="${ly + 88}" font-size="25" fill="#E8EDE9">Outlined bar = interval of the latest trade</text>
-      <text x="52" y="${ly + 132}" font-size="24" fill="#8FA39C">${escapeHtml(filterLabel ?? `Trades ≥ ${money(threshold)}`)} · New York time</text>
-      <text x="52" y="${ly + 176}" font-size="24" fill="#A9B8B3">Dirección pública ≠ venta o cierre confirmado.</text>
-    </g>
+  const age = now.getTime() - latest.createdTime.getTime();
+  const ageText = live ? (age < 0 ? "Hora futura; sin confirmar" : age <= RECENT_WINDOW_MS ? `${elapsed(age)} · reciente` : elapsed(age)) : "Historial guardado";
+  const panelH = 330;
+  parts.push(`<rect x="36" y="${panelY}" width="828" height="${panelH}" rx="22" fill="${PANEL}"/>
+    <rect x="36" y="${panelY}" width="12" height="${panelH}" rx="6" fill="${sideColor}"/>
+    <text x="74" y="${panelY + 48}" font-size="25" font-weight="700" letter-spacing="1" fill="${MUTED}">ÚLTIMA OPERACIÓN · INDIVIDUAL</text>
+    <text x="74" y="${panelY + 58 + amountSize}" font-size="${amountSize}" font-weight="700" fill="${INK}">${escapeHtml(amount)}</text>
+    <text x="74" y="${panelY + 186}" font-size="31" font-weight="700" fill="${sideColor}">${sideText}</text>
+    <text x="74" y="${panelY + 232}" font-size="29" fill="${SOFT}">${count} contratos a ${cents}¢</text>
+    <text x="74" y="${panelY + 272}" font-size="26" fill="${MUTED}">${escapeHtml(nyDateTime(latest.createdTime))} · Nueva York</text>
+    <text x="74" y="${panelY + 308}" font-size="25" fill="${MUTED}">${ageText}</text>`);
+  y = panelY + panelH + 58;
+
+  // Totals for the selected range.
+  parts.push(`<text x="52" y="${y}" font-size="34" font-weight="700" fill="${INK}">Total en el rango elegido</text>`);
+  y += 40;
+  parts.push(`<text x="52" y="${y}" font-size="26" fill="${MUTED}">${escapeHtml(filterLabel ??
+    (band === "medium" ? "Operaciones > $5,000 y < $10,000" : `Operaciones ≥ ${exactMoney(threshold)}`))}</text>`);
+  y += 30;
+  const grand = sums[0] + sums[1] + sums[2];
+  const totalLabel = `${ordered.length.toLocaleString("en-US")} ${ordered.length === 1 ? "operación" : "operaciones"} · total`;
+  let bx = 52;
+  const barW = 796;
+  const fills = ["url(#dirYes)", "url(#dirNo)", "url(#dirUnknown)"];
+  const share: string[] = [];
+  for (let i = 0; i < 3; i++) {
+    if (!sums[i]) continue;
+    const w = grand ? sums[i] / grand * barW : 0;
+    share.push(`<rect x="${bx}" y="${y}" width="${w}" height="22" fill="${fills[i]}"/>`);
+    bx += w;
+  }
+  parts.push(`<rect x="52" y="${y}" width="${barW}" height="22" rx="4" fill="#24362F"/>${share.join("")}`);
+  y += 66;
+  const rows: [string, number][] = [["A favor (SÍ)", 0], ["En contra (NO)", 1]];
+  if (counts[2]) rows.push(["Dirección sin dato", 2]);
+  for (const [label, i] of rows) {
+    const pct = grand ? Math.round(sums[i] / grand * 100) : 0;
+    parts.push(`<rect x="52" y="${y - 24}" width="26" height="26" rx="4" fill="${fills[i]}"/>
+      <text x="92" y="${y}" font-size="29" font-weight="700" fill="${SOFT}">${label}</text>
+      <text x="848" y="${y}" text-anchor="end" font-size="29" font-weight="700" fill="${INK}">${escapeHtml(exactMoney(sums[i]))}</text>
+      <text x="92" y="${y + 34}" font-size="24" fill="${MUTED}">${counts[i].toLocaleString("en-US")} ${counts[i] === 1 ? "operación" : "operaciones"} · ${pct}%</text>`);
+    y += 82;
+  }
+  parts.push(`<line x1="52" y1="${y - 30}" x2="848" y2="${y - 30}" stroke="#2C3D38" stroke-width="2"/>
+    <text x="52" y="${y + 6}" font-size="${fitSize(totalLabel, 390, 29, 22)}" font-weight="700" fill="${INK}">${totalLabel}</text>
+    <text x="848" y="${y + 6}" text-anchor="end" font-size="${fitSize(exactMoney(grand), 360, 31, 22)}" font-weight="700" fill="${INK}">${escapeHtml(exactMoney(grand))}</text>`);
+  y += 44;
+  const coverage = textBlock(`Datos del ${nyDateTime(first.createdTime)} al ${nyDateTime(latest.createdTime)} (NY)`,
+    52, y, 24, 796, MUTED, 400, Infinity);
+  parts.push(coverage.svg);
+  y += coverage.height + 48;
+
+  // Chart.
+  const chartTitleY = y;
+  const chartTop = chartTitleY + 112;
+  const chartBottom = chartTop + 330;
+  const history = historyPlotSvg(ordered, now, chartTop, chartBottom, live);
+  parts.push(`<text x="52" y="${chartTitleY}" font-size="34" font-weight="700" fill="${INK}">Dinero por cada ${intervalLabelEs(history.width)}</text>
+    <text x="52" y="${chartTitleY + 40}" font-size="26" fill="${MUTED}">Cada barra suma el dinero de su intervalo.</text>`);
+  const recentLine = !live ? "Historial guardado · sin actividad en vivo"
+    : history.recentCount ? `Últimos 15 min: ${history.recentCount.toLocaleString("en-US")} op. · ${exactMoney(recentSum)}`
+    : "Sin operaciones en los últimos 15 min";
+  parts.push(`<text x="52" y="${chartTitleY + 78}" font-size="26" font-weight="700" fill="${history.recentCount ? INK : SOFT}">${escapeHtml(recentLine)}</text>`);
+  parts.push(history.svg);
+  y = chartBottom + 128;
+
+  // Legend: color = direction, stripes = recency, outline = latest trade.
+  const legend = (x: number, fill: string, label: string) =>
+    `<rect x="${x}" y="${y - 24}" width="28" height="28" rx="4" fill="${fill}"/><text x="${x + 40}" y="${y}" font-size="26" font-weight="700" fill="${SOFT}">${label}</text>`;
+  parts.push(legend(52, "url(#dirYes)", "SÍ / a favor") + legend(330, "url(#dirNo)", "NO / en contra") + legend(642, "url(#dirUnknown)", "Sin dato"));
+  y += 46;
+  if (live) {
+    parts.push(`<rect x="52" y="${y - 24}" width="28" height="28" rx="4" fill="url(#recentYes)"/>
+      <text x="92" y="${y}" font-size="25" fill="${SOFT}">Rayado = últimos 15 min · liso = anterior</text>`);
+    y += 42;
+  }
+  parts.push(`<path d="M55 ${y - 22} L77 ${y - 22} L66 ${y - 8} Z" fill="${INK}"/><rect x="54" y="${y - 4}" width="24" height="10" fill="none" stroke="${INK}" stroke-width="3"/>
+    <text x="92" y="${y}" font-size="25" fill="${SOFT}">Barra marcada = intervalo de la última operación</text>`);
+  y += 52;
+  parts.push(`<text x="52" y="${y}" font-size="23" fill="${MUTED}">Dirección pública: no es venta ni cierre confirmado</text>
+    <text x="52" y="${y + 32}" font-size="23" fill="${MUTED}">y no identifica al operador. Hora de Nueva York.</text>`);
+  const height = y + 64;
+  return `<svg xmlns="http://www.w3.org/2000/svg" width="${W}" height="${height}" viewBox="0 0 ${W} ${height}">
+    ${chartDefs()}
+    <rect width="${W}" height="${height}" fill="${BG}"/>
+    <rect width="${W}" height="12" fill="${gameStatus?.color ?? sideColor}"/>
+    <g font-family="DejaVu Sans, Arial, sans-serif">${parts.join("\n")}</g>
   </svg>`;
 }

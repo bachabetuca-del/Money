@@ -7,11 +7,13 @@ import { gameScope, scopedCatalog } from "./telegram-game-scope";
 import { buildCatalog, HOME, menuSvg, menuView, navigate, type MarketSummary } from "./telegram-dashboard-view";
 import { publicDirection } from "./telegram-trade-direction";
 import { marketCardCaption, marketCardSvg } from "./telegram-market-card";
-import { bucketHistory } from "./telegram-history-plot";
+import { bucketHistory, historyPlotSvg } from "./telegram-history-plot";
 import { notificationText } from "./telegram-trade-notifications";
 import { liveNotificationTrades } from "./telegram-trade-notifications";
 import { publicTradeExecution } from "./kalshi-trade-execution";
 import { inTradeRange, tradeRange } from "./kalshi-trade-bands";
+import { dashboardChartCaption } from "./telegram-dashboard-caption";
+import { catalogGameBadge } from "./telegram-dashboard-view";
 
 const now = new Date("2026-10-23T10:30:00Z");
 function row(day: string, name: string, extra: Partial<MarketSummary> = {}): MarketSummary {
@@ -145,7 +147,7 @@ test("notifications, captions and plot totals share direction and explicit limit
     bookSide: "bid", notional: 15000, price: 0.6, count: 25000, createdTime: now,
   };
   const message = notificationText(base);
-  assert.match(message, /En contra de Team A to win/);
+  assert.match(message, /En contra de «Team A gana»/);
   assert.match(message, /\$15,000.00/);
   assert.match(message, /25,000 contratos a 60¢/);
   assert.match(message, /no identifica al operador ni confirma una venta o cierre/);
@@ -177,4 +179,99 @@ test("new menus and direction cards render at phone width with saved history unc
     assert.doesNotMatch(svg, /\b(?:NaN|undefined|Infinity)\b/);
   }
   assert.equal(JSON.stringify(trade), original);
+});
+
+test("a stale live label is shown as unconfirmed, not as a current game or an invented final", () => {
+  const live = row("23", "Current", { gameState: "live", gameSource: "live", gameCheckedAt: now.toISOString() });
+  assert.equal(catalogGameBadge([live], now).rank, 0);
+  assert.equal(catalogGameBadge([{ ...live, gameCheckedAt: "2026-10-22T12:00:00Z" }], now).rank, 2);
+  assert.equal(catalogGameBadge([{ ...live, gameDelayed: true }], now).rank, 2);
+  assert.equal(catalogGameBadge([{ ...live, gameCheckedAt: undefined }], now).rank, 2);
+  assert.equal(catalogGameBadge([{ ...live, gameState: "finished" }], now).rank, 3);
+});
+
+test("photo captions remain within Telegram limits and explain partial, paused and saved history in Spanish", () => {
+  const options = {
+    trade: {
+      eventTitle: 'Equipo & <A> "largo" '.repeat(60), marketTitle: "Una apuesta con descripción muy larga ".repeat(60),
+      outcomeSide: "no", notional: 12000, count: 20000, price: 0.6, createdTime: now,
+    },
+    historical: false, stopped: false, confirmedClosed: false, enabled: true,
+    gameDate: "23 oct 2026", statusLabel: "Sin confirmar", checkedAt: now.toISOString(),
+    range: tradeRange("medium"), history: { phase: "recent", error: false, scanned: 100000 },
+  };
+  for (const variant of [
+    options, { ...options, enabled: false },
+    { ...options, history: { ...options.history, error: true } },
+    { ...options, historical: true, stopped: true },
+  ]) {
+    const caption = dashboardChartCaption(variant);
+    const parsed = caption.replace(/<[^>]*>/g, "").replace(/&(?:amp|lt|gt|quot|apos);/g, "x");
+    assert.ok(parsed.length <= 1024, `Caption has ${parsed.length} characters`);
+    assert.match(caption, /Rango: &gt; \$5,000 y &lt; \$10,000/);
+    assert.doesNotMatch(caption, /Loading|Notifications:|Section:|Bright|Dark/);
+  }
+  assert.match(dashboardChartCaption(options), /Cargando histórico; la gráfica aún es parcial/);
+  const paused = dashboardChartCaption({ ...options, enabled: false });
+  assert.match(paused, /pausad/);
+  assert.doesNotMatch(paused, /Se actualiza aquí cada 15/);
+  const saved = dashboardChartCaption({ ...options, stopped: true, historical: true });
+  assert.match(saved, /Archivado por fecha; no confirma que haya terminado/);
+  assert.doesNotMatch(saved, /Cargando histórico/);
+});
+
+test("redesigned charts preserve proportional geometry, exact sums and execution-time recency", () => {
+  const base = { eventTitle: "Boston vs Chicago", marketTitle: "Chicago wins",
+    price: 0.5, count: 60000, outcomeSide: "yes", notional: 30000, createdTime: new Date(now.getTime() - 3600000) };
+  const rows = [base,
+    { ...base, outcomeSide: "no", notional: 12000, count: 24000, createdTime: new Date(now.getTime() - 120000) },
+    { ...base, outcomeSide: "unknown", notional: 18000, count: 36000, createdTime: new Date(now.getTime() - 60000) }];
+  const svg = marketCardSvg(rows, 10000, undefined, "large", now);
+  assert.match(svg, /Chicago gana/);
+  assert.match(svg, /\$60,000/);
+  assert.match(svg, /Últimos 15 min: 2 op. · \$30,000/);
+  assert.match(svg, /Dirección sin dato/);
+  assert.match(svg, /Rayado = últimos 15 min/);
+  assert.match(svg, /2026/);
+  assert.doesNotMatch(svg, /Partido detenido|LATEST|trades · total/);
+  const stale = marketCardSvg(rows, 10000, undefined, "large", new Date(now.getTime() + 3600000));
+  assert.match(stale, /Sin operaciones en los últimos 15 min/);
+  const future = marketCardSvg([{ ...base, createdTime: new Date(now.getTime() + 60000) }], 10000, undefined, "large", now);
+  assert.match(future, /Hora futura; sin confirmar/);
+  const extreme = historyPlotSvg([base, { ...base, outcomeSide: "unknown", notional: 0.01 }], now, 100, 400);
+  const heights = [...extreme.svg.matchAll(/height="([\d.e+-]+)" fill="url\(#(?:dir|recent)/g)].map(match => Number(match[1]));
+  assert.ok(Math.abs(heights.reduce((n, h) => n + h, 0) - extreme.total / extreme.maximum * 300) < 1e-8,
+    "Tiny segments are not artificially enlarged");
+});
+
+test("phone previews cover real long latest names, dense history, huge amounts and stopped graphs", async () => {
+  const base = {
+    eventTitle: "Los Angeles Lakers vs Boston Celtics", marketTitle: "Boston Celtics wins by over 7.5 points",
+    price: 0.5, count: 30000, notional: 15000, outcomeSide: "yes", createdTime: now,
+  };
+  const dense = Array.from({ length: 120 }, (_, i) => ({
+    ...base, outcomeSide: ["yes", "no", "unknown"][i % 3], notional: 10000 + i * 1400, count: (10000 + i * 1400) / 0.5,
+    createdTime: new Date(now.getTime() - (119 - i) * 40 * 60000),
+  }));
+  const long = { ...base,
+    eventTitle: "Northwestern State University International Basketball Team vs Southeastern Metropolitan University Basketball Team",
+    marketTitle: "Southeastern Metropolitan University Basketball Team wins by over 17.5 points",
+    notional: 123456789.12, count: 246913578.24,
+  };
+  const cases = [
+    ["dense", marketCardSvg(dense, 10000, undefined, "large", now, { label: "Sin confirmar · datos retrasados", color: "#94A3B8" })],
+    ["long", marketCardSvg([long], 10000, undefined, "large", now)],
+    ["medium", marketCardSvg([{ ...base, notional: 7500, count: 15000 }], 5000, undefined, "medium", now)],
+    ["stopped", marketCardSvg(dense, 10000, undefined, "large", now, { label: "Historial", color: "#F87171", stopped: true })],
+  ];
+  assert.ok(cases[1][1].replace(/<[^>]*>/g, " ").replace(/\s+/g, " ").includes("17.5 puntos"),
+    "Do not cut the actual bet condition off long names");
+  for (const [name, svg] of cases) {
+    for (const width of [320, 390]) {
+      const png = await sharp(Buffer.from(svg)).resize({ width }).png().toBuffer();
+      await writeFile(`/tmp/kalshi-review-${name}-${width}.png`, png);
+      assert.equal((await sharp(png).metadata()).width, width);
+    }
+    assert.doesNotMatch(svg, /\b(?:NaN|undefined|Infinity)\b/);
+  }
 });

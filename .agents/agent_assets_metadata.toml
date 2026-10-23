@@ -28,3 +28,17 @@ mtime_ms = 1792701773511
 storage_uri = "gcs://replit-rams-assets-kirk/rams/assets/repl:217fd6cc-800e-4596-b158-396d253b647b/ebd1ca7b-90ee-47a7-9864-9381f3985274/22e3d6ac-77ab-4a29-8a1d-2abcb2841c03"
 storage_version_token = "1792701908730968"
 content_type = "image/png"
+
+[[outputs]]
+id = "MQ0IXpZlq5cKcPRrh_GO8"
+uri = "file://.local/outputs/telegram-chart-preview.png"
+type = "image"
+title = "Nueva gráfica de Telegram — ejemplo"
+description = "Vista de teléfono con datos ilustrativos, no operaciones reales: última operación, totales por dirección e historial con actividad reciente marcada."
+logical_id = "a6155b36-e077-4abb-8f45-7e1e7a454fef"
+content_hash = "sha256:fec680ed4d1e59595dbf0398424344636db761803025932ebe8f41b30d5a1840"
+size = 100774
+mtime_ms = 1792754833239
+storage_uri = "gcs://replit-rams-assets-kirk/rams/assets/repl:217fd6cc-800e-4596-b158-396d253b647b/a6155b36-e077-4abb-8f45-7e1e7a454fef/fc90be34-11f6-4147-b09a-d71f54d045e5"
+storage_version_token = "1792754852908887"
+content_type = "image/png"

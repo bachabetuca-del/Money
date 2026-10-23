@@ -178,7 +178,7 @@ test("finished charts are red, static across time and never present old trades a
   const later = marketCardSvg(trades, 10000, undefined, "large", new Date(now.getTime() + 86400000), display);
   assert.equal(first, later);
   assert.match(first, /Terminado/);
-  assert.match(first, /saved history/);
+  assert.match(first, /Historial guardado/);
   assert.doesNotMatch(first, /1 in last 15m/);
 });
 

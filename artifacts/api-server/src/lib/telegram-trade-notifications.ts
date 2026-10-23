@@ -1,4 +1,4 @@
-import { escapeHtml, readableBet, type MarketCardTrade } from "./telegram-market-card";
+import { escapeHtml, betLabelEs, type MarketCardTrade } from "./telegram-market-card";
 import { directionLabel, publicDirection, DIRECTION_NOTE } from "./telegram-trade-direction";
 
 export const NOTIFICATION_THRESHOLD = 10_000;
@@ -41,7 +41,7 @@ export function notificationText(trade: NotificationTrade) {
   return [
     `<b>${amount} · operación deportiva</b>`,
     `<b>${escapeHtml(trade.eventTitle ?? "Game details unavailable")}</b>`,
-    `${side}${direction === "unknown" ? " · " : " "}${escapeHtml(readableBet(trade.marketTitle ?? "Bet details unavailable"))}`,
+    `${side}${direction === "unknown" ? " · " : " «"}${escapeHtml(betLabelEs(trade.marketTitle ?? "Apuesta no disponible"))}${direction === "unknown" ? "" : "»"}`,
     `${contracts} contratos a ${price}¢`,
     time,
     `<i>${DIRECTION_NOTE}</i>`,

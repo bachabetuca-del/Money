@@ -104,7 +104,7 @@ test("a new qualifying trade sends a push-enabled text alert, not another graph"
   assert.equal(body.parse_mode, "HTML");
   assert.match(String(body.text), /\$15,000\.00/);
   assert.match(String(body.text), /New England &amp; Chicago/);
-  assert.match(String(body.text), /A favor de Chicago to win/);
+  assert.match(String(body.text), /A favor de «Chicago gana»/);
   assert.doesNotMatch(String(body.text), /KXNFLGAME/);
   assert.deepEqual(body.link_preview_options, { is_disabled: true });
   assert.match(JSON.stringify(body.reply_markup), /Abrir en Kalshi/);
@@ -226,7 +226,7 @@ test("a queued trade from a now-finished game is retired without notification or
 test("notification wording escapes names and distinguishes against/unknown direction", () => {
   const row = { ...sample(), eventTitle: "Chicago <final> & New England", outcomeSide: "no" };
   assert.match(notificationText(row), /Chicago &lt;final&gt; &amp; New England/);
-  assert.match(notificationText(row), /En contra de Chicago to win/);
+  assert.match(notificationText(row), /En contra de «Chicago gana»/);
   assert.match(notificationText({ ...row, outcomeSide: "unknown" }), /Dirección no disponible/);
   assert.match(notificationText(row), /no identifica al operador ni confirma una venta o cierre/);
 });

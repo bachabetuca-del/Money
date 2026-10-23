@@ -130,7 +130,7 @@ test("Sport → Game → Market, new trades, and back navigation all edit the sa
   await dashboard.sync(settings);
   assert.equal(api.photos().length, before + 1);
   assert.ok(api.photos().every(call => call.method === "editMessageMedia" && call.body.message_id === "400"));
-  assert.match(String(api.photos().at(-1)?.body.media), /Chicago to win/);
+  assert.match(String(api.photos().at(-1)?.body.media), /Chicago gana/);
   assert.doesNotMatch(String(api.photos().at(-1)?.body.media), /KXNFLGAME/);
   await press(dashboard, "d:back");
   assert.equal((await store.state(settings.chatId))?.screen, "markets");
@@ -227,7 +227,7 @@ test("game grouping combines Kalshi's separate moneyline, spread, and total even
   const markets = menuView(navigate(sportSelection, `d:game:${catalog[0].gameKey}`, catalog), catalog, true, 10000);
   assert.equal(markets.items.length, 3);
   assert.equal(markets.title, "Vigentes · 22 oct 2026 · New England vs Chicago");
-  assert.ok(markets.items.some(m => m.label === "Chicago to win by more than 2.5 points"));
+  assert.ok(markets.items.some(m => m.label === "Chicago gana por más de 2.5 puntos"));
   assert.ok(markets.keyboard.inline_keyboard.flat().every(button =>
     !button.callback_data || Buffer.byteLength(button.callback_data) <= 64));
   assert.doesNotMatch(menuSvg(markets), /KXNFL/);
@@ -241,11 +241,11 @@ test("menus paginate and clamp out-of-range pages without hiding navigation", ()
   const first = menuView(selection, catalog, true, 10000);
   assert.equal(first.items.length, 6);
   assert.equal(first.pages, 2);
-  assert.ok(first.keyboard.inline_keyboard.flat().some(b => b.text === "Next"));
+  assert.ok(first.keyboard.inline_keyboard.flat().some(b => b.text === "Siguiente"));
   const last = menuView({ ...selection, page: 99 }, catalog, true, 10000);
   assert.equal(last.page, 1);
   assert.equal(last.items.length, 2);
-  assert.ok(last.keyboard.inline_keyboard.flat().some(b => b.text === "Previous"));
+  assert.ok(last.keyboard.inline_keyboard.flat().some(b => b.text === "Anterior"));
 });
 
 test("an empty catalog still has one dashboard with clear waiting status", async () => {
@@ -272,8 +272,8 @@ test("the new section has strict $5k/$10k boundaries and never overlaps the exis
   assert.equal(tradeRange("large", 2000).minimum, 10000);
   assert.deepEqual(tradeRange("medium", 15000), medium);
   const card = marketCardSvg([{ ...trade(summary()), notional: 7500 }], 5000, undefined, "medium");
-  assert.match(card, /LATEST \$5k–\$10k TRADE/);
-  assert.doesNotMatch(card, /LATEST LARGE TRADE/);
+  assert.match(card, /Operaciones &gt; \$5,000 y &lt; \$10,000/);
+  assert.doesNotMatch(card, /Operaciones ≥/);
 });
 
 test("switching sections filters a shared market's graph, preserves the message, and persists after restart", async () => {
@@ -290,7 +290,7 @@ test("switching sections filters a shared market's graph, preserves the message,
   assert.equal((await store.state(settings.chatId))?.screen, "sports");
   await openChart(dashboard, store);
   assert.deepEqual(store.graphRows.at(-1)?.map(row => row.notional), [5000.01, 7500, 9999.99]);
-  assert.ok(String(api.photos().at(-1)?.body.media).includes("Section: &gt;$5,000 and &lt;$10,000 only."));
+  assert.ok(String(api.photos().at(-1)?.body.media).includes("Rango: &gt; $5,000 y &lt; $10,000."));
   assert.ok(api.photos().every(call => call.method === "editMessageMedia" && call.body.message_id === "400"));
   const restarted = new TelegramDashboard(store, api);
   await restarted.sync(settings);
@@ -331,7 +331,7 @@ test("the history plot uses every trade, not just the latest six, with exact tot
   assert.ok(history.buckets.length <= 38);
   assert.equal(history.recentCount, 16);
   assert.equal(history.buckets.reduce((sum, bucket) => sum + bucket.total, 0), history.total);
-  assert.match(marketCardSvg(rows, 10000, undefined, "large", now), /120 trades/);
+  assert.match(marketCardSvg(rows, 10000, undefined, "large", now), /120 operaciones/);
   assert.doesNotMatch(marketCardSvg(rows, 10000, undefined, "large", now), /Last 6 of/);
 });
 
@@ -452,11 +452,11 @@ test("loading and incomplete-history status edits the existing dashboard rather 
   withHistory.history = async () => ({ phase: "live", scanned: 2000, error });
   await dashboard.sync(settings);
   await openChart(dashboard, store);
-  assert.match(String(api.photos().at(-1)?.body.media), /Loading history/);
-  assert.match(String(api.photos().at(-1)?.body.media), /graph is partial/);
+  assert.match(String(api.photos().at(-1)?.body.media), /Cargando histórico/);
+  assert.match(String(api.photos().at(-1)?.body.media), /gráfica aún es parcial/);
   error = true;
   await dashboard.sync(settings);
-  assert.match(String(api.photos().at(-1)?.body.media), /History incomplete/);
+  assert.match(String(api.photos().at(-1)?.body.media), /Historial incompleto/);
   assert.ok(api.photos().every(call => call.method === "editMessageMedia"));
   assert.equal((await store.state(settings.chatId))?.messageId, 400);
 });
@@ -546,7 +546,7 @@ test("stale archived game callbacks cannot reopen it from Vigentes", () => {
   assert.throws(() => navigate(selected, `d:game:${catalog[0].gameKey}`, catalog, later), /no longer available/);
   const history = navigate(selected, "d:scope:history", catalog, later);
   const historySports = menuView(history, catalog, true, 10000, later);
-  assert.match(historySports.items[0].detail, /1 games · 1 markets/);
+  assert.match(historySports.items[0].detail, /1 partidos · 1 mercados/);
   const gameMenu = menuView({ ...history, screen: "games", sportKey: catalog[0].sportKey, page: 99 }, catalog, true, 10000, later);
   assert.equal(gameMenu.page, 0);
   assert.equal(gameMenu.items.length, 1);
