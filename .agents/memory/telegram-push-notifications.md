@@ -23,7 +23,7 @@ Use “a favor / en contra” as the public direction of an operation, not as a 
 
 The user does not need seller identity: they want executions explicitly labeled as sales above $10k, their market, push notifications, and corresponding graph marks.
 
-**Why:** They supplied a Kalshi screen showing Bought Yes and Sold No and explicitly said “no necesito saber quién la vendió”.
+**Why:** They supplied a Kalshi screen showing Bought Yes and Sold No, explicitly said “no necesito saber quién la vendió”, and confirmed that it is public Kalshi activity rather than personal account history.
 
 **How to apply:** Investigate the source of that activity screen rather than requiring account identity as a prerequisite. Distinguish public activity from personal account history. A verified sell-action field may support sale alerts without identifying the trader; directional exposure alone still does not establish a sale.
 
