@@ -14,6 +14,13 @@ contact detail in environment configuration, not project memory.
 
 **How to apply:** Never use first-visitor ownership or let `/start` replace the
 destination. Preserve current monitoring while preparing deployment. At cutover,
-pause development workers before starting production. A PostgreSQL lock only
-coordinates processes sharing a database; separate development and production
-databases do not prevent competing Telegram polling consumers.
+run Telegram workers only in the published production instance; keep development
+workers paused while leaving the development dashboard available. Publish code
+changes to the existing production deployment when the user requests it. A
+PostgreSQL lock only coordinates processes sharing a database; separate
+development and production databases do not prevent competing Telegram polling
+consumers.
+
+**Why:** The user explicitly wants just one active Telegram bot instance and
+wants improvements applied to the already-published bot, not a parallel
+development bot.

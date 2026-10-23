@@ -28,3 +28,6 @@ channel = "stable-25_05"
 [userenv.shared]
 OWNER_EMAIL = "bachabetuca@gmail.com"
 TELEGRAM_OWNER_CHAT_ID = "2141494802"
+
+[userenv.development]
+BOT_WORKERS_ENABLED = "false"
