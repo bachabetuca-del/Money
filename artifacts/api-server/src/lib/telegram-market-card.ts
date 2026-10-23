@@ -1,5 +1,6 @@
 import type { TradeBand } from "./kalshi-trade-bands";
 import { historyPlotSvg } from "./telegram-history-plot";
+import { publicDirection, directionLabel, DIRECTION_NOTE } from "./telegram-trade-direction";
 
 export const MARKET_CARD_VERSION = 2;
 
@@ -7,6 +8,7 @@ export type MarketCardTrade = {
   eventTitle: string | null;
   marketTitle: string | null;
   outcomeSide: string;
+  bookSide?: string;
   price: number;
   count: number;
   notional: number;
@@ -60,12 +62,12 @@ function wrappedText(
 }
 
 export function marketCardCaption(trade: MarketCardTrade, live = true) {
-  const side = trade.outcomeSide.toLowerCase();
-  const position = side === "yes" ? "YES · FOR" : side === "no" ? "NO · AGAINST" : "Direction unavailable";
+  const side = publicDirection(trade.outcomeSide);
+  const position = directionLabel(side);
   return [
     `<b>${escapeHtml(trade.eventTitle ?? "Game details unavailable")}</b>`,
-    `${position}: ${escapeHtml(readableBet(trade.marketTitle ?? "Bet details unavailable"))}`,
-    `<i>Public taker direction—not trader identity. ${live ? "Updates in place." : "Saved history only."}</i>`,
+    `${position}${side === "unknown" ? " · " : " "}${escapeHtml(readableBet(trade.marketTitle ?? "Bet details unavailable"))}`,
+    `<i>${DIRECTION_NOTE} ${live ? "Se actualiza aquí." : "Historial guardado."}</i>`,
   ].join("\n");
 }
 
@@ -74,9 +76,9 @@ export function marketCardSvg(trades: MarketCardTrade[], threshold: number, filt
   if (!trades.length) throw new Error("A market card needs at least one trade.");
   const ordered = [...trades].sort((a, b) => a.createdTime.getTime() - b.createdTime.getTime());
   const latest = ordered[ordered.length - 1];
-  const side = latest.outcomeSide.toLowerCase();
+  const side = publicDirection(latest.outcomeSide);
   const sideColor = side === "no" ? "#FFB13B" : side === "yes" ? "#4FDDE8" : "#B4BDBA";
-  const sideText = side === "yes" ? "YES  /  FOR THIS BET" : side === "no" ? "NO  /  AGAINST THIS BET" : "DIRECTION UNAVAILABLE";
+  const sideText = side === "yes" ? "SÍ / A FAVOR DE ESTA APUESTA" : side === "no" ? "NO / EN CONTRA DE ESTA APUESTA" : "DIRECCIÓN NO DISPONIBLE";
   const game = wrappedText(latest.eventTitle ?? "Game details unavailable", 52, 125, 46, 28, gameStatus?.color ?? "#F4F1E6", 700);
   const betY = 125 + game.height + 30;
   const bet = wrappedText(readableBet(latest.marketTitle ?? "Bet details unavailable"), 52, betY + 46, 39, 33, "#D9E2DC");
@@ -84,7 +86,7 @@ export function marketCardSvg(trades: MarketCardTrade[], threshold: number, filt
   const chartTitleY = panelY + 350;
   const chartTop = chartTitleY + 150;
   const chartBottom = chartTop + 360;
-  const height = chartBottom + 270;
+  const height = chartBottom + 330;
   const history = historyPlotSvg(ordered, now, chartTop, chartBottom, !gameStatus?.stopped);
   const timestamp = latest.createdTime.toLocaleString("en-US", {
     timeZone: "America/New_York", month: "short", day: "numeric",
@@ -114,12 +116,15 @@ export function marketCardSvg(trades: MarketCardTrade[], threshold: number, filt
        <text x="52" y="${chartTitleY + 94}" font-size="28" font-weight="700" fill="#E8EDE9">${ordered.length.toLocaleString("en-US")} trades · ${gameStatus?.stopped ? "saved history" : `${history.recentCount.toLocaleString("en-US")} in last 15m`} · ${escapeHtml(money(history.total, true))} total</text>
       ${history.svg}
       <rect x="52" y="${ly - 22}" width="20" height="30" fill="#2F7F88"/><rect x="72" y="${ly - 22}" width="20" height="30" fill="#4FDDE8"/>
-      <text x="106" y="${ly + 4}" font-size="27" font-weight="700" fill="#E8EDE9">YES / FOR</text>
+      <text x="106" y="${ly + 4}" font-size="27" font-weight="700" fill="#E8EDE9">SÍ / A FAVOR</text>
       <rect x="330" y="${ly - 22}" width="20" height="30" fill="#9A6420"/><rect x="350" y="${ly - 22}" width="20" height="30" fill="#FFB13B"/>
-      <text x="384" y="${ly + 4}" font-size="27" font-weight="700" fill="#E8EDE9">NO / AGAINST</text>
+      <text x="384" y="${ly + 4}" font-size="27" font-weight="700" fill="#E8EDE9">NO / EN CONTRA</text>
+      <rect x="700" y="${ly - 22}" width="20" height="30" fill="#B4BDBA"/>
+      <text x="734" y="${ly + 4}" font-size="23" fill="#E8EDE9">Sin dato</text>
       <text x="52" y="${ly + 50}" font-size="25" fill="#E8EDE9">Dark = older · Bright = last 15 min</text>
       <text x="52" y="${ly + 88}" font-size="25" fill="#E8EDE9">Outlined bar = interval of the latest trade</text>
       <text x="52" y="${ly + 132}" font-size="24" fill="#8FA39C">${escapeHtml(filterLabel ?? `Trades ≥ ${money(threshold)}`)} · New York time</text>
+      <text x="52" y="${ly + 176}" font-size="24" fill="#A9B8B3">Dirección pública ≠ venta o cierre confirmado.</text>
     </g>
   </svg>`;
 }

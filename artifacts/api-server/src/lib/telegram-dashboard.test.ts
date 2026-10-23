@@ -6,12 +6,16 @@ import {
   type DashboardStore, type DashboardTrade,
 } from "./telegram-dashboard";
 import {
-  buildCatalog, HOME, menuSvg, menuView, navigate, type MarketSummary,
+  buildCatalog, HOME, menuSvg, menuView as renderMenuView, navigate as navigateAt,
+  normalizeSelection, type MarketSummary,
 } from "./telegram-dashboard-view";
 import { inTradeRange, shouldCaptureTrade, tradeRange, type TradeRange } from "./kalshi-trade-bands";
 import { marketCardSvg } from "./telegram-market-card";
 import { bucketHistory, RECENT_WINDOW_MS } from "./telegram-history-plot";
 import { MarketHistory, type HistoryJob, type HistoryRepository } from "./kalshi-market-history";
+import { decodeScopeScreen, encodeScopeScreen } from "./telegram-game-scope";
+const menuView: typeof renderMenuView = (s, c, e, t, now = new Date("2026-10-22T18:01:00Z")) => renderMenuView(s, c, e, t, now);
+const navigate: typeof navigateAt = (s, a, c, now = new Date("2026-10-22T18:01:00Z")) => navigateAt(s, a, c, now);
 
 const settings = { chatId: "test-chat", minimumNotional: 10000, enabled: true };
 const moneyline = "KXNFLGAME-26OCT22NECHI-CHI";
@@ -62,7 +66,9 @@ class FakeApi implements DashboardApi {
   nextId = 900;
   failEdit: string | null = null;
   failDelete = false;
-  now() { return new Date("2026-10-22T18:01:00Z"); }
+  clock = new Date("2026-10-22T18:01:00Z");
+  contextCalls = 0;
+  now() { return this.clock; }
   constructor(private store: MemoryStore) {}
   async request<T>(method: string, body: Record<string, unknown> = {}) {
     this.calls.push({ method, body });
@@ -79,6 +85,7 @@ class FakeApi implements DashboardApi {
     return { result: { message_id: ++this.nextId } as T };
   }
   async context(ticker: string) {
+    this.contextCalls++;
     const row = this.store.rows.find(row => row.ticker === ticker)!;
     return { eventTitle: row.eventTitle!, marketTitle: row.marketTitle! };
   }
@@ -219,7 +226,7 @@ test("game grouping combines Kalshi's separate moneyline, spread, and total even
   assert.equal(games.items.length, 1);
   const markets = menuView(navigate(sportSelection, `d:game:${catalog[0].gameKey}`, catalog), catalog, true, 10000);
   assert.equal(markets.items.length, 3);
-  assert.equal(markets.title, "22 oct 2026 · New England vs Chicago");
+  assert.equal(markets.title, "Vigentes · 22 oct 2026 · New England vs Chicago");
   assert.ok(markets.items.some(m => m.label === "Chicago to win by more than 2.5 points"));
   assert.ok(markets.keyboard.inline_keyboard.flat().every(button =>
     !button.callback_data || Buffer.byteLength(button.callback_data) <= 64));
@@ -247,7 +254,7 @@ test("an empty catalog still has one dashboard with clear waiting status", async
   await dashboard.sync(settings);
   assert.equal(api.photos().length, 1);
   assert.equal((await store.state(settings.chatId))?.screen, "sports");
-  assert.match(menuSvg(menuView(HOME, [], true, 10000)), /Waiting for a qualifying sports trade/);
+  assert.match(menuSvg(menuView(HOME, [], true, 10000)), /Sin partidos vigentes/);
 });
 
 test("the new section has strict $5k/$10k boundaries and never overlaps the existing section", () => {
@@ -473,4 +480,74 @@ test("phone cards render safely for sparse history, long names, large amounts an
     assert.equal((await sharp(phone).metadata()).width, 390);
     assert.equal(JSON.stringify(rows), before, "Presentation must not mutate the actual trade history");
   }
+});
+
+test("calendar rollover archives yesterday without a new trade or new graph message", async () => {
+  const { store, api, dashboard } = setup();
+  await dashboard.sync(settings);
+  const market = buildCatalog(store.rows)[0];
+  await press(dashboard, `d:sport:${market.sportKey}`);
+  assert.equal((await store.state(settings.chatId))?.screen, "games");
+  const beforeRows = JSON.stringify([...store.tradesByTicker]);
+  api.clock = new Date("2026-10-23T04:01:00Z");
+  await dashboard.sync(settings);
+  const keyboard = JSON.parse(String(api.photos().at(-1)?.body.reply_markup));
+  assert.ok(!keyboard.inline_keyboard.flat().some((b: { callback_data?: string }) => b.callback_data?.startsWith("d:game:")));
+  await press(dashboard, "d:scope:history");
+  await openChart(dashboard, store);
+  assert.equal((await store.state(settings.chatId))?.scope, "history");
+  assert.equal((await store.state(settings.chatId))?.ticker, moneyline);
+  assert.equal(api.contextCalls, 0, "Archived charts use saved names, not external requests");
+  assert.match(String(api.photos().at(-1)?.body.media), /Archivado por fecha/);
+  assert.doesNotMatch(String(api.photos().at(-1)?.body.media), /Terminado\/cerrado/);
+  const restarted = new TelegramDashboard(store, api);
+  await restarted.sync(settings);
+  assert.equal((await store.state(settings.chatId))?.scope, "history");
+  await press(restarted, "d:home");
+  assert.equal((await store.state(settings.chatId))?.scope, "history");
+  await press(restarted, "d:scope:active");
+  assert.equal((await store.state(settings.chatId))?.scope, "active");
+  assert.ok(api.photos().every(call => call.method === "editMessageMedia" && call.body.message_id === "400"));
+  assert.equal(JSON.stringify([...store.tradesByTicker]), beforeRows);
+});
+
+test("a selected game finishing moves to historical context without metadata or history probes", async () => {
+  const { store, api, dashboard } = setup();
+  await dashboard.sync(settings);
+  await openChart(dashboard, store);
+  const before = api.contextCalls;
+  store.rows = store.rows.map(row => ({ ...row, gameState: "finished", gameSource: "live" }));
+  await dashboard.sync(settings);
+  assert.equal((await store.state(settings.chatId))?.scope, "history");
+  assert.equal((await store.state(settings.chatId))?.ticker, moneyline);
+  assert.equal(api.contextCalls, before);
+  assert.match(String(api.photos().at(-1)?.body.media), /Historial/);
+  await press(dashboard, "d:band:medium");
+  assert.equal((await store.state(settings.chatId))?.scope, "history");
+  assert.equal((await store.state(settings.chatId))?.band, "medium");
+  assert.equal((await store.state(settings.chatId))?.messageId, 400);
+  await dashboard.sync(settings, true);
+  assert.equal((await store.state(settings.chatId))?.scope, "active", "/menu opens the main list");
+});
+
+test("stored history navigation is backward compatible without changing the database schema", () => {
+  for (const screen of ["sports", "games", "markets", "chart"] as const) {
+    assert.deepEqual(decodeScopeScreen(screen), { screen, scope: "active" });
+    assert.deepEqual(decodeScopeScreen(encodeScopeScreen(screen, "history")), { screen, scope: "history" });
+  }
+  assert.equal(decodeScopeScreen("history:invalid").screen, "sports");
+});
+
+test("stale archived game callbacks cannot reopen it from Vigentes", () => {
+  const catalog = buildCatalog([summary()]);
+  const later = new Date("2026-10-23T12:00:00Z");
+  const selected = normalizeSelection({ ...HOME, screen: "games", sportKey: catalog[0].sportKey, page: 99 }, catalog, later);
+  assert.equal(selected.screen, "sports");
+  assert.throws(() => navigate(selected, `d:game:${catalog[0].gameKey}`, catalog, later), /no longer available/);
+  const history = navigate(selected, "d:scope:history", catalog, later);
+  const historySports = menuView(history, catalog, true, 10000, later);
+  assert.match(historySports.items[0].detail, /1 games · 1 markets/);
+  const gameMenu = menuView({ ...history, screen: "games", sportKey: catalog[0].sportKey, page: 99 }, catalog, true, 10000, later);
+  assert.equal(gameMenu.page, 0);
+  assert.equal(gameMenu.items.length, 1);
 });

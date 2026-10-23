@@ -1,4 +1,5 @@
 import type { MarketCardTrade } from "./telegram-market-card";
+import { publicDirection } from "./telegram-trade-direction";
 
 const MINUTE = 60_000;
 export const RECENT_WINDOW_MS = 15 * MINUTE;
@@ -35,7 +36,8 @@ export function bucketHistory(trades: MarketCardTrade[], now: Date, highlightRec
   for (const trade of trades) {
     const time = trade.createdTime.getTime();
     const recent = highlightRecent && time >= now.getTime() - RECENT_WINDOW_MS && time <= now.getTime();
-    const side = trade.outcomeSide.toLowerCase() === "yes" ? 0 : trade.outcomeSide.toLowerCase() === "no" ? 1 : 2;
+    const direction = publicDirection(trade.outcomeSide);
+    const side = direction === "yes" ? 0 : direction === "no" ? 1 : 2;
     const bucket = buckets[Math.floor((time - start) / width)];
     bucket.values[side + (recent ? 3 : 0)] += trade.notional;
     bucket.total += trade.notional;

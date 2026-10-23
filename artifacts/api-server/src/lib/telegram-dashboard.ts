@@ -60,7 +60,7 @@ export class TelegramDashboard {
   async sync(settings: DashboardSettings, home = false) {
     if (!settings.chatId) return;
     const chatId = settings.chatId;
-    return this.serialized(chatId, () => this.render(chatId, settings, home ? "d:home" : undefined));
+    return this.serialized(chatId, () => this.render(chatId, settings, home ? "d:main" : undefined));
   }
 
   async callback(query: CallbackQuery, settings: DashboardSettings) {
@@ -92,6 +92,7 @@ export class TelegramDashboard {
 
   private async render(chatId: string, settings: DashboardSettings, action?: string) {
     const cutoff = new Date();
+    const now = this.api.now?.() ?? new Date();
     let state = await this.store.state(chatId);
     if (!state) {
       const old = await this.store.oldCards(chatId);
@@ -117,24 +118,26 @@ export class TelegramDashboard {
       summaries = await this.store.markets(range);
     }
     const catalog = buildCatalog(summaries);
-    let selection = normalizeSelection({ ...state, band }, catalog);
-    if (action) selection = normalizeSelection(navigate(selection, action, catalog), catalog);
+    let selection = normalizeSelection({ ...state, band }, catalog, now);
+    if (action) selection = normalizeSelection(navigate(selection, action, catalog, now), catalog, now);
     let svg: string;
     let caption: string;
     let keyboard;
     if (selection.screen === "chart") {
       const market = catalog.find(item => item.ticker === selection.ticker)!;
       const badge = catalogGameBadge(catalog.filter(item => item.gameKey === market.gameKey));
-      const stopped = badge.rank === 3 || market.marketTerminal;
+      const historical = selection.scope === "history";
+      const stopped = historical || badge.rank === 3 || market.marketTerminal;
       const context = stopped ? { eventTitle: market.eventTitle!, marketTitle: market.marketTitle! } :
         await this.api.context(market.ticker);
-      await this.store.context(market.ticker, context);
+      if (!stopped) await this.store.context(market.ticker, context);
       const rows = (await this.store.trades(market.ticker, range)).map(row => ({ ...row, ...context }));
       if (!rows.length) throw new Error("No qualifying trades are available for this market.");
-      const history = await this.api.history?.(market.ticker);
-      svg = marketCardSvg(rows, range.minimum, rangeFooter(range), selection.band, this.api.now?.() ?? new Date(),
+      const history = stopped ? undefined : await this.api.history?.(market.ticker);
+      svg = marketCardSvg(rows, range.minimum, rangeFooter(range), selection.band, now,
         { label: badge.label, color: badge.color, stopped });
       caption = marketCardCaption(rows[rows.length - 1], !stopped) +
+        (historical ? "\n<b>Historial · datos guardados</b>" : "\n<b>Vigentes</b>") +
         `\nFecha del partido: ${escapeHtml(market.gameDateLabel)}` +
         `\n${badge.marker} ${escapeHtml(badge.label)}` +
         (market.gameCheckedAt ? ` · comprobado ${new Date(market.gameCheckedAt).toLocaleTimeString("en-US",
@@ -148,11 +151,13 @@ export class TelegramDashboard {
         (stopped ? "\nSaved history · recent-activity highlighting disabled." :
           "\nBars sum trade value per interval. Bright portions: last 15 minutes. White outline: latest interval.") +
         "\nNotifications: new trades over $10,000 only; latest notice kept." +
-        (stopped ? "\nTerminado/cerrado · sin consultas automáticas." :
+        (stopped ? badge.rank === 3 || market.marketTerminal
+          ? "\nTerminado/cerrado · sin consultas automáticas."
+          : "\nArchivado por fecha; no confirma que haya terminado." :
           settings.enabled ? "\nLive · checks every 15 seconds." : "\nMonitoring paused · saved history.");
       keyboard = chartKeyboard(selection, market.marketUrl, settings.minimumNotional);
     } else {
-      const view = menuView(selection, catalog, settings.enabled, settings.minimumNotional);
+      const view = menuView(selection, catalog, settings.enabled, settings.minimumNotional, now);
       selection = { ...selection, page: view.page };
       svg = menuSvg(view);
       caption = view.caption;

@@ -1,4 +1,5 @@
 import { escapeHtml, readableBet, type MarketCardTrade } from "./telegram-market-card";
+import { directionLabel, publicDirection, DIRECTION_NOTE } from "./telegram-trade-direction";
 
 export const NOTIFICATION_THRESHOLD = 10_000;
 export type NotificationTrade = MarketCardTrade & { tradeId: string; ticker: string; marketUrl: string };
@@ -31,19 +32,19 @@ export interface NotificationApi {
 
 export function notificationText(trade: NotificationTrade) {
   const amount = trade.notional.toLocaleString("en-US", { style: "currency", currency: "USD" });
-  const side = trade.outcomeSide.toLowerCase() === "yes" ? "FOR" :
-    trade.outcomeSide.toLowerCase() === "no" ? "AGAINST" : "Direction unavailable";
+  const direction = publicDirection(trade.outcomeSide);
+  const side = directionLabel(direction);
   const contracts = trade.count.toLocaleString("en-US", { maximumFractionDigits: 2 });
   const price = (trade.price * 100).toLocaleString("en-US", { maximumFractionDigits: 2 });
   const time = trade.createdTime.toLocaleString("en-US", { timeZone: "America/New_York",
     month: "short", day: "numeric", hour: "numeric", minute: "2-digit", timeZoneName: "short" });
   return [
-    `<b>${amount} sports trade</b>`,
+    `<b>${amount} · operación deportiva</b>`,
     `<b>${escapeHtml(trade.eventTitle ?? "Game details unavailable")}</b>`,
-    `${side} · ${escapeHtml(readableBet(trade.marketTitle ?? "Bet details unavailable"))}`,
-    `${contracts} contracts at ${price}¢`,
+    `${side}${direction === "unknown" ? " · " : " "}${escapeHtml(readableBet(trade.marketTitle ?? "Bet details unavailable"))}`,
+    `${contracts} contratos a ${price}¢`,
     time,
-    "<i>Public trade · direction, not buyer identity.</i>",
+    `<i>${DIRECTION_NOTE}</i>`,
   ].join("\n");
 }
 
@@ -79,7 +80,7 @@ export class TelegramTradeNotifications {
             parse_mode: "HTML",
             disable_notification: false,
             link_preview_options: { is_disabled: true },
-            reply_markup: { inline_keyboard: [[{ text: "Open in Kalshi", url: job.marketUrl }]] },
+            reply_markup: { inline_keyboard: [[{ text: "Abrir en Kalshi", url: job.marketUrl }]] },
           });
           if (!result.result?.message_id) throw new Error("Telegram did not confirm the notification message.");
           await this.store.sent(job, result.result.message_id, this.now());

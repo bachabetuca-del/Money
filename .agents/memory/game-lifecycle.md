@@ -14,3 +14,9 @@ Distinguish a finished game from a settled individual bet. When only market sett
 **Why:** An individual bet can resolve before its game ends; accurate state labels must not silently stop monitoring games that are actually still in progress.
 
 **How to apply:** Use actual game-status data where available, keep the status label alongside its color, and expose delayed data rather than presenting it as guaranteed current.
+
+Calendar archival is a navigation decision, not evidence that a game ended. Use the New York calendar and official scheduled date when available. Keep an overnight game in the main list only when current, undelayed live data supports it.
+
+**Why:** The user wants yesterday's games removed even when the provider has not confirmed a final. A stale cached “live” state must not keep an old game in the main list indefinitely, but crossing midnight must not hide a genuinely ongoing game.
+
+**How to apply:** Preserve the original status and saved trades when archiving by date. Do not label an uncertain archived game red or “Terminado” merely because its date passed.

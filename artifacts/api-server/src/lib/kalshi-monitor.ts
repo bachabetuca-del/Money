@@ -16,6 +16,7 @@ import { GameStatusMonitor } from "./kalshi-game-status";
 import { KalshiGameStatusSource } from "./kalshi-game-status-source";
 import { canMonitorMarket, gameStatusRepository, readGameStatus } from "./kalshi-game-status-store";
 import { isOwnerChat, ownerChatId } from "./owner-policy";
+import { publicTradeExecution } from "./kalshi-trade-execution";
 
 const KALSHI_API = "https://external-api.kalshi.com/trade-api/v2";
 const TELEGRAM_API = "https://api.telegram.org";
@@ -229,11 +230,6 @@ async function readHistoryPage(job: HistoryJob) {
   return { rows, scanned: response.trades.length, cursor: response.cursor || null };
 }
 
-function dollars(rawDollars: string | undefined, cents: number | undefined) {
-  if (rawDollars !== undefined) return Number(rawDollars);
-  return typeof cents === "number" ? cents / 100 : Number.NaN;
-}
-
 function resolveSeries(ticker: string, index: Map<string, KalshiSeries>) {
   const separator = ticker.indexOf("-");
   if (separator < 1) return undefined;
@@ -247,17 +243,9 @@ function toPublicTrade(
   const series = resolveSeries(trade.ticker, index);
   if (!series || !trade.trade_id) return undefined;
 
-  const outcomeSide = (
-    trade.taker_outcome_side ??
-    trade.taker_side ??
-    "unknown"
-  ).toLowerCase();
-  const price =
-    outcomeSide === "no"
-      ? dollars(trade.no_price_dollars, trade.no_price)
-      : dollars(trade.yes_price_dollars, trade.yes_price);
-  const count = Number(trade.count_fp ?? trade.count);
-  const notional = price * count;
+  const execution = publicTradeExecution(trade);
+  if (!execution) return undefined;
+  const { outcomeSide, price, count, notional } = execution;
   const createdAt = new Date(trade.created_time);
 
   if (
@@ -500,7 +488,6 @@ async function pollOnce() {
       await enqueueLiveNotifications(settings.chatId,
         liveNotificationTrades(newTrades, lastPollBoundary).map(trade => trade.tradeId));
     }
-    if (settings.chatId && botToken()) await telegramDashboard.sync(settings);
     lastPollBoundary = pollStartedAt;
     lastChecked = new Date().toISOString();
     lastError = null;
@@ -615,6 +602,19 @@ async function telegramPollingLoop() {
 export function startKalshiMonitor() {
   if (monitorStarted) return;
   monitorStarted = true;
+  // Calendar rollover and game completion refresh even when the trade feed fails
+  // or there is no new execution. Telegram's serialized edits keep one message.
+  let dashboardRefreshInProgress = false;
+  const refreshDashboard = () => {
+    if (dashboardRefreshInProgress) return;
+    dashboardRefreshInProgress = true;
+    void readSettings().then(async settings => {
+      if (settings.chatId && botToken()) await telegramDashboard.sync(settings);
+    }).catch(error => logger.warn({ error: error instanceof Error ? error.message : "Dashboard refresh failed" },
+      "Telegram dashboard refresh failed")).finally(() => { dashboardRefreshInProgress = false; });
+  };
+  refreshDashboard();
+  setInterval(refreshDashboard, POLL_INTERVAL_MS);
   void pollOnce();
   setInterval(() => void pollOnce(), POLL_INTERVAL_MS);
   setInterval(() => {

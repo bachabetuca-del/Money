@@ -4,12 +4,13 @@ import sharp from "sharp";
 import { writeFile } from "node:fs/promises";
 import { GameStatusMonitor, gameBadge, monitoringStopped, providerGameState, type GameStatus } from "./kalshi-game-status";
 import { KalshiGameStatusSource } from "./kalshi-game-status-source";
-import { bandButtons, buildCatalog, catalogGameBadge, HOME, menuSvg, menuView, type MarketSummary } from "./telegram-dashboard-view";
+import { bandButtons, buildCatalog, catalogGameBadge, HOME, menuSvg, menuView as renderMenuView, type MarketSummary } from "./telegram-dashboard-view";
 import { gameDateLabel } from "./telegram-game-date";
 import { MarketHistory } from "./kalshi-market-history";
 import { marketCardSvg } from "./telegram-market-card";
 
 const now = new Date("2026-10-22T21:00:00Z");
+const menuView: typeof renderMenuView = (s, c, e, t, clock = now) => renderMenuView(s, c, e, t, clock);
 const base: GameStatus = {
   ticker: "KXNFLGAME-26OCT22TEST-CHI", eventTicker: "EVENT", milestoneId: "game-1",
   state: "live", source: "live", marketStatus: "active", marketTerminal: false,
@@ -144,14 +145,16 @@ function menuRows(): MarketSummary[] {
     gameCheckedAt: now.toISOString(),
   }));
 }
-test("menus show white/yellow/red status on cards and buttons, with ended games at the bottom", async () => {
+test("menus show active colors separately from red ended games in Historial", async () => {
   const catalog = buildCatalog(menuRows());
   const view = menuView({ ...HOME, screen: "games", sportKey: catalog[0].sportKey }, catalog, true, 10000);
-  assert.deepEqual(view.items.map(item => item.badge?.label), ["En juego", "Por empezar", "Terminado"]);
-  const buttonText = JSON.stringify(view.keyboard);
+  assert.deepEqual(view.items.map(item => item.badge?.label), ["En juego", "Por empezar"]);
+  const archived = menuView({ ...HOME, scope: "history", screen: "games", sportKey: catalog[0].sportKey }, catalog, true, 10000);
+  assert.deepEqual(archived.items.map(item => item.badge?.label), ["Terminado"]);
+  const buttonText = JSON.stringify([view.keyboard, archived.keyboard]);
   for (const marker of ["🟡", "⚪", "🔴"]) assert.ok(buttonText.includes(marker));
   const svg = menuSvg(view);
-  for (const color of ["#F8FAFC", "#FACC15", "#F87171"]) assert.ok(svg.includes(color));
+  for (const color of ["#F8FAFC", "#FACC15", "#F87171"]) assert.ok((svg + menuSvg(archived)).includes(color));
   const png = await sharp(Buffer.from(svg)).resize({ width: 390 }).png().toBuffer();
   assert.equal((await sharp(png).metadata()).width, 390);
   await writeFile("/tmp/kalshi-game-status-preview.png", png);

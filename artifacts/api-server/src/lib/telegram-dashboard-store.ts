@@ -3,7 +3,7 @@ import {
   db, kalshiAlertsTable, kalshiTelegramChartsTable, telegramDashboardTable, kalshiGameStatusTable,
 } from "@workspace/db";
 import type { DashboardState, DashboardStore } from "./telegram-dashboard";
-import type { Screen } from "./telegram-dashboard-view";
+import { decodeScopeScreen, encodeScopeScreen } from "./telegram-game-scope";
 import type { TradeRange } from "./kalshi-trade-bands";
 
 function rangeCondition(range: TradeRange) {
@@ -18,12 +18,14 @@ export const telegramDashboardStore: DashboardStore = {
     const [state] = await db.select().from(telegramDashboardTable)
       .where(eq(telegramDashboardTable.chatId, chatId)).limit(1);
     if (!state) return undefined;
-    const screen: Screen = ["sports", "games", "markets", "chart"].includes(state.screen) ? state.screen as Screen : "sports";
-    return { ...state, screen, band: state.band === "medium" ? "medium" : "large" };
+    return { ...state, ...decodeScopeScreen(state.screen), band: state.band === "medium" ? "medium" : "large" };
   },
   async save(state: DashboardState) {
-    await db.insert(telegramDashboardTable).values({ ...state, updatedAt: new Date() })
-      .onConflictDoUpdate({ target: telegramDashboardTable.chatId, set: { ...state, updatedAt: new Date() } });
+    // Use the existing text screen field, preserving old rows without a schema migration.
+    const { scope, ...rest } = state;
+    const saved = { ...rest, screen: encodeScopeScreen(state.screen, scope), updatedAt: new Date() };
+    await db.insert(telegramDashboardTable).values(saved)
+      .onConflictDoUpdate({ target: telegramDashboardTable.chatId, set: saved });
   },
   async markets(range) {
     const rows = await db.select({

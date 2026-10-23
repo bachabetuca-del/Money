@@ -20,3 +20,9 @@ Use “a favor / en contra” as the public direction of an operation, not as a 
 **Why:** The user wanted to know when large traders sell their positions, then explicitly accepted public direction as the alternative after the limitations were explained. Public direction cannot identify the trader or distinguish buying NO from selling SÍ.
 
 **How to apply:** Keep the bet name and direction explicit in notices and graph legends. Never imply the same previous large trader has exited or abandoned a prediction.
+
+Keep purchase-amount calculations independent of book-side terminology. Explicit YES/NO outcome is authoritative; use only a validated YES/NO legacy fallback. Preserve bid/ask as metadata rather than letting it override the outcome or choose a price.
+
+**Why:** Choosing the opposite outcome's quote can make an operation incorrectly cross the $10k notification boundary. Missing direction is not permission to assume the YES price.
+
+**How to apply:** Calculate notional from the explicit outcome's quote and test both book-side values against both outcomes around the threshold. If the execution cannot be priced reliably, do not invent a qualifying amount.
