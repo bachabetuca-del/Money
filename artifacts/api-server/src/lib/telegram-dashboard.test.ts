@@ -254,7 +254,7 @@ test("an empty catalog still has one dashboard with clear waiting status", async
   await dashboard.sync(settings);
   assert.equal(api.photos().length, 1);
   assert.equal((await store.state(settings.chatId))?.screen, "sports");
-  assert.match(menuSvg(menuView(HOME, [], true, 10000)), /Sin partidos vigentes/);
+  assert.match(menuSvg(menuView(HOME, [], true, 10000)), /Sin partidos en juego o programados/);
 });
 
 test("the new section has strict $5k/$10k boundaries and never overlaps the existing section", () => {

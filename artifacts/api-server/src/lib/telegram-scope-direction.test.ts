@@ -3,7 +3,7 @@ import { test } from "node:test";
 import { writeFile } from "node:fs/promises";
 import sharp from "sharp";
 import { gameCalendarDay, newYorkDay } from "./telegram-game-date";
-import { gameScope, scopedCatalog } from "./telegram-game-scope";
+import { gameScope, isWithinNext48Hours, scopedCatalog } from "./telegram-game-scope";
 import { buildCatalog, HOME, menuSvg, menuView, navigate, type MarketSummary } from "./telegram-dashboard-view";
 import { publicDirection } from "./telegram-trade-direction";
 import { marketCardCaption, marketCardSvg } from "./telegram-market-card";
@@ -49,6 +49,50 @@ test("yesterday is archived without inventing a final, while fresh overnight gam
   assert.equal(scope({ ...live, gameCheckedAt: "2026-10-22T10:30:00Z" }), "history");
   assert.equal(scope(row("23", "Today")), "active");
   assert.equal(scope(row("24", "Tomorrow")), "active");
+});
+
+test("Vigentes includes live matches and games starting within the next 48 hours only", () => {
+  const current = new Date("2026-10-23T14:00:00Z");
+  const inThreeHours = row("23", "Soon", { gameStartsAt: "2026-10-23T17:00:00Z" });
+  const in24Hours = row("24", "Tomorrow", { gameStartsAt: "2026-10-24T14:00:00Z" });
+  const cutoff = row("25", "AtLimit", { gameStartsAt: "2026-10-25T14:00:00Z" });
+  const afterCutoff = row("25", "TooLate", { gameStartsAt: "2026-10-25T14:00:00.001Z" });
+  const oldScheduled = row("23", "SchedulePassed", { gameStartsAt: "2026-10-23T13:59:00Z" });
+  const liveYesterday = row("22", "OvernightLive", {
+    gameState: "live", gameSource: "live", gameCheckedAt: current.toISOString(),
+    gameStartsAt: "2026-10-22T20:00:00Z",
+  });
+  const dateOnlyTwoDaysAway = row("25", "DateFallback");
+  const beyondDateWindow = row("26", "Beyond");
+  const noDate = row("NO-DATE-SEASON", "Season");
+  const finished = row("24", "Finished", { gameState: "finished", gameSource: "live" });
+
+  for (const upcoming of [inThreeHours, in24Hours, cutoff, liveYesterday, dateOnlyTwoDaysAway]) {
+    assert.equal(isWithinNext48Hours(buildCatalog([upcoming]), current), true, upcoming.eventTitle!);
+  }
+  for (const excluded of [afterCutoff, oldScheduled, beyondDateWindow, noDate, finished, row("22", "Yesterday")]) {
+    assert.equal(isWithinNext48Hours(buildCatalog([excluded]), current), false, excluded.eventTitle!);
+  }
+
+  const catalog = buildCatalog([
+    inThreeHours, in24Hours, cutoff, afterCutoff, liveYesterday, dateOnlyTwoDaysAway,
+    beyondDateWindow, noDate, finished, row("22", "Yesterday"),
+  ]);
+  const active = scopedCatalog(catalog, "active", current);
+  assert.deepEqual(new Set(active.map(m => m.eventTitle)), new Set([
+    "Soon vs Opponent", "Tomorrow vs Opponent", "AtLimit vs Opponent",
+    "OvernightLive vs Opponent", "DateFallback vs Opponent",
+  ]));
+  const archive = scopedCatalog(catalog, "history", current);
+  assert.ok(archive.some(m => m.eventTitle === "Yesterday vs Opponent"));
+  assert.ok(archive.some(m => m.eventTitle === "Finished vs Opponent"));
+  assert.ok(!archive.some(m => m.eventTitle === "TooLate vs Opponent"), "Undated or distant-future events do not appear as past history");
+  const sportKey = catalog[0].sportKey;
+  const activeMenu = menuView({ ...HOME, screen: "games", sportKey }, catalog, true, 10000, current);
+  assert.ok(activeMenu.items.some(item => item.label.includes("Soon vs Opponent")));
+  assert.ok(!activeMenu.items.some(item => item.label.includes("Yesterday") || item.label.includes("TooLate")));
+  const historyMenu = menuView({ ...HOME, scope: "history", screen: "games", sportKey }, catalog, true, 10000, current);
+  assert.ok(historyMenu.items.some(item => item.label.includes("Yesterday vs Opponent")));
 });
 
 test("official reschedules and undated season events stay visible; confirmed finals do not", () => {

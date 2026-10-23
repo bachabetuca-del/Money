@@ -20,3 +20,9 @@ Calendar archival is a navigation decision, not evidence that a game ended. Use 
 **Why:** The user wants yesterday's games removed even when the provider has not confirmed a final. A stale cached “live” state must not keep an old game in the main list indefinitely, but crossing midnight must not hide a genuinely ongoing game.
 
 **How to apply:** Preserve the original status and saved trades when archiving by date. Do not label an uncertain archived game red or “Terminado” merely because its date passed.
+
+The Vigentes selector must show only games with fresh, confirmed live status and scheduled games within the next 48 hours. Keep older confirmed history in the separate Historial selector.
+
+**Why:** The user saw too many future games in Vigentes and explicitly approved limiting that list while retaining prior games and their saved graphs in Historial.
+
+**How to apply:** Use the real schedule timestamp in New York-aware time comparisons when available. A date-only ticker cannot provide kickoff time, so keep its existing validated date fallback; a genuinely live game remains visible beyond 48 hours.

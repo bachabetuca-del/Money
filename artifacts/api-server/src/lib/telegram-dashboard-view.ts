@@ -266,6 +266,8 @@ export function menuView(selection: Selection, catalog: CatalogMarket[], enabled
   title = `${historical ? "Historial" : "Vigentes"} · ${title}`;
   const status = historical ? "HISTORIAL · datos guardados" : enabled ? "ACTIVO · se actualiza cada 15 segundos" : "PAUSADO · datos guardados";
   const caption = `<b>${escapeHtml(title)}</b>\nDeporte → Partido → Mercado.\n` +
+    (historical ? "Partidos anteriores; las operaciones guardadas siguen disponibles.\n" :
+      "Vigentes: partidos en juego o programados en las próximas 48 h.\n") +
     "⚪ Por empezar · 🟡 En juego · 🔴 Terminado\nAntiguos y terminados: en Historial. ◌ Sin confirmar: no se adivina el estado.\n" +
     `<i>${status}. Operaciones ${escapeHtml(activeRange)}; los rangos no se mezclan.</i>\n` +
     "Avisos: solo operaciones nuevas de más de $10,000. Se conserva el último aviso.";
@@ -308,7 +310,7 @@ export function menuSvg(view: ReturnType<typeof menuView>) {
     ${heading.map((line, i) => `<text x="52" y="${126 + i * 53}" font-size="44" font-weight="700" fill="#F8FAFC">${escapeHtml(line)}</text>`).join("")}
     <text x="52" y="${subtitleY}" font-size="28" fill="#CBD5E1">${escapeHtml(view.subtitle)}</text>
     ${cards}
-    ${view.items.length ? "" : `<text x="52" y="${subtitleY + 100}" font-size="28" fill="#CBD5E1">${view.historical ? "Sin partidos en Historial para este rango." : "Sin partidos vigentes para este rango."}</text>`}
+    ${view.items.length ? "" : `<text x="52" y="${subtitleY + 100}" font-size="28" fill="#CBD5E1">${view.historical ? "Sin partidos en Historial para este rango." : "Sin partidos en juego o programados en las próximas 48 horas para este rango."}</text>`}
     <text x="52" y="${height - 85}" font-size="25" fill="#61A9BD">${escapeHtml(view.status)}</text>
     <text x="52" y="${height - 42}" font-size="25" fill="#94A3B8">Usa los botones · Página ${view.page + 1} de ${view.pages}</text>
     </g>

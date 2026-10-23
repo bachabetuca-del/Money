@@ -151,6 +151,7 @@ test("menus show active colors separately from red ended games in Historial", as
   assert.deepEqual(view.items.map(item => item.badge?.label), ["En juego", "Por empezar"]);
   const archived = menuView({ ...HOME, scope: "history", screen: "games", sportKey: catalog[0].sportKey }, catalog, true, 10000);
   assert.deepEqual(archived.items.map(item => item.badge?.label), ["Terminado"]);
+  assert.match(view.caption, /próximas 48 h/);
   const buttonText = JSON.stringify([view.keyboard, archived.keyboard]);
   for (const marker of ["🟡", "⚪", "🔴"]) assert.ok(buttonText.includes(marker));
   const svg = menuSvg(view);
