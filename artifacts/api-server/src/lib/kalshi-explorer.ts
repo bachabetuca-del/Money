@@ -36,6 +36,7 @@ export async function getKalshiExplorer(filters: ExplorerFilters, now = new Date
     ticker: m.ticker, sport: m.sport, gameKey: m.gameKey, gameName: m.gameName,
     gameDateLabel: scheduled ? gameDateLabel(scheduled.ticker, scheduled.gameStartsAt) : m.gameDateLabel,
     gameTimeLabel: gameTimeLabel(scheduled?.gameStartsAt),
+    gameStartsAt: scheduled?.gameStartsAt ? new Date(scheduled.gameStartsAt).toISOString() : null,
     betLabel: m.betLabel, marketUrl: m.marketUrl,
     trades: m.trades, lastTradeAt: m.lastTradeAt,
     state: explorerState(games.get(m.gameKey)!, now),

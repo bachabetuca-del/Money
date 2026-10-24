@@ -212,6 +212,9 @@ components:
         gameTimeLabel:
           type: string
           description: Scheduled kickoff in America/New_York with ET suffix, or Hora por confirmar
+        gameStartsAt:
+          type: [string, "null"]
+          description: Confirmed scheduled kickoff as an ISO timestamp; null when unknown
         betLabel: { type: string }
         marketUrl: { type: string }
         trades: { type: integer }

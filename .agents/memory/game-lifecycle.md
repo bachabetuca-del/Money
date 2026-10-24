@@ -3,6 +3,12 @@ name: Game lifecycle
 description: User's game-status colors and requirement to stop spending requests on completed games.
 ---
 
+Within each sport on the website, show games in scheduled kickoff order, earliest first; games without a confirmed time go last.
+
+**Why:** The user asked that expanding a sport such as tennis show games in order of when they begin.
+
+**How to apply:** Compare actual kickoff timestamps across dates and time zones, not formatted clock labels or the time of the latest trade. Preserve the existing sport and market organization.
+
 Mark games that have not started in white, games in progress in yellow, and finished games in red. Remove old and finished games from the main list and make their saved history available separately.
 
 **Why:** The user disliked seeing completed games kept in the bot as if still active, and wanted to ensure no time was wasted checking games that had already ended. They later clarified that putting yesterday's finished games at the bottom still leaves unwanted games in the main list.

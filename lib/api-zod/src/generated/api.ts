@@ -34,6 +34,7 @@ export const GetKalshiExplorerResponse = zod.object({
   "gameName": zod.string(),
   "gameDateLabel": zod.string(),
   "gameTimeLabel": zod.string().optional().describe('Scheduled kickoff in America/New_York with ET suffix, or Hora por confirmar'),
+  "gameStartsAt": zod.string().nullish().describe('Confirmed scheduled kickoff as an ISO timestamp; null when unknown'),
   "betLabel": zod.string(),
   "marketUrl": zod.string(),
   "trades": zod.number().int(),

@@ -16,6 +16,11 @@ export interface ExplorerMarket {
   gameDateLabel: string;
   /** Scheduled kickoff in America/New_York with ET suffix, or Hora por confirmar */
   gameTimeLabel?: string;
+  /**
+     * Confirmed scheduled kickoff as an ISO timestamp; null when unknown
+     * @nullable
+     */
+  gameStartsAt?: string | null;
   betLabel: string;
   marketUrl: string;
   trades: number;

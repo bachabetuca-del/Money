@@ -13,7 +13,7 @@ import {
   ZAxis,
 } from 'recharts';
 import { useGetKalshiExplorer } from '@workspace/api-client-react';
-import { MINUTE, RECENT_MS, yesQuote, bubbleRadius, buildBuckets, type Bucket, type Dir } from '@/lib/explorer-model';
+import { MINUTE, RECENT_MS, yesQuote, bubbleRadius, buildBuckets, groupMarkets, type Bucket, type Dir } from '@/lib/explorer-model';
 import type {
   ExplorerMarket,
   ExplorerTrade,
@@ -317,27 +317,6 @@ function TradeTable({ trades, now, highlight, report }: {
       {rows.length > limit && <button className="ws-more" onClick={() => setLimit(limit + 200)} data-testid="button-more-trades">Mostrar más ({rows.length - limit} restantes)</button>}
     </section>
   );
-}
-
-function groupMarkets(markets: ExplorerMarket[], term: string) {
-  const t = term.trim().toLowerCase();
-  const sports = new Map<string, Map<string, { name: string; date: string; last: string; markets: ExplorerMarket[] }>>();
-  for (const m of markets) {
-    if (t && !`${m.sport} ${m.gameName} ${m.betLabel} ${m.ticker}`.toLowerCase().includes(t)) continue;
-    const games = sports.get(m.sport) ?? new Map();
-    const g = games.get(m.gameKey) ?? { name: m.gameName,
-      date: `${m.gameDateLabel} · ${m.gameTimeLabel ?? 'Hora por confirmar'}`,
-      last: m.lastTradeAt, markets: [] };
-    g.markets.push(m);
-    if (m.lastTradeAt > g.last) g.last = m.lastTradeAt;
-    games.set(m.gameKey, g);
-    sports.set(m.sport, games);
-  }
-  return [...sports.entries()].map(([sport, games]) => {
-    const list = [...games.entries()].map(([key, g]) => ({ key, ...g, markets: g.markets.sort((a, b) => b.trades - a.trades), trades: g.markets.reduce((s, m) => s + m.trades, 0) }))
-      .sort((a, b) => (a.last < b.last ? 1 : -1));
-    return { sport, games: list, trades: list.reduce((s, g) => s + g.trades, 0) };
-  }).sort((a, b) => b.trades - a.trades);
 }
 
 export function Explorer() {

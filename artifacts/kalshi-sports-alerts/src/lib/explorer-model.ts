@@ -1,4 +1,37 @@
-import type { ExplorerTrade } from '@workspace/api-client-react';
+import type { ExplorerMarket, ExplorerTrade } from '@workspace/api-client-react';
+
+export function groupMarkets(markets: ExplorerMarket[], term: string) {
+  const t = term.trim().toLowerCase();
+  type Game = { name: string; date: string; startsAt: number; markets: ExplorerMarket[] };
+  const sports = new Map<string, Map<string, Game>>();
+  for (const m of markets) {
+    if (t && !`${m.sport} ${m.gameName} ${m.betLabel} ${m.ticker}`.toLowerCase().includes(t)) continue;
+    const games = sports.get(m.sport) ?? new Map<string, Game>();
+    const timestamp = m.gameStartsAt ? Date.parse(m.gameStartsAt) : NaN;
+    const startsAt = Number.isFinite(timestamp) ? timestamp : Infinity;
+    const g = games.get(m.gameKey) ?? { name: m.gameName,
+      date: `${m.gameDateLabel} · ${m.gameTimeLabel ?? 'Hora por confirmar'}`,
+      startsAt, markets: [] };
+    // Sibling markets share a game; a confirmed schedule takes precedence.
+    if (startsAt < g.startsAt) {
+      g.startsAt = startsAt;
+      g.date = `${m.gameDateLabel} · ${m.gameTimeLabel ?? 'Hora por confirmar'}`;
+    }
+    g.markets.push(m);
+    games.set(m.gameKey, g);
+    sports.set(m.sport, games);
+  }
+  return [...sports.entries()].map(([sport, games]) => {
+    const list = [...games.entries()].map(([key, g]) => ({ key, ...g,
+      markets: g.markets.sort((a, b) => b.trades - a.trades),
+      trades: g.markets.reduce((s, m) => s + m.trades, 0) }))
+      .sort((a, b) => {
+        if (a.startsAt !== b.startsAt) return a.startsAt < b.startsAt ? -1 : 1;
+        return a.name.localeCompare(b.name) || a.key.localeCompare(b.key);
+      });
+    return { sport, games: list, trades: list.reduce((s, g) => s + g.trades, 0) };
+  }).sort((a, b) => b.trades - a.trades);
+}
 
 export const MINUTE = 60_000;
 export const RECENT_MS = 15 * MINUTE;
