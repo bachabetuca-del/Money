@@ -40,6 +40,7 @@ export const GetKalshiExplorerResponse = zod.object({
   "state": zod.enum(['upcoming', 'live', 'finished', 'unknown']),
   "gameResult": zod.string().nullable().describe('Confirmed final scoreboard from Kalshi; null if unavailable, not inferred from settlement'),
   "scoreStatus": zod.enum(['confirmed', 'pending', 'unavailable']).optional().describe('Whether a final score is saved, queued for retrieval, or unavailable after bounded attempts'),
+  "scoreMessage": zod.string().nullish().describe('Honest explanation of queued, temporarily failed, or missing provider score'),
   "marketResult": zod.string().nullable().describe('Kalshi settlement of this specific bet, separate from the game\'s score')
 })),
   "trades": zod.array(zod.object({

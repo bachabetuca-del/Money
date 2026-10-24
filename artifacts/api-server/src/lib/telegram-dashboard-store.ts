@@ -5,6 +5,7 @@ import {
 import type { DashboardState, DashboardStore } from "./telegram-dashboard";
 import { decodeScopeScreen, encodeScopeScreen } from "./telegram-game-scope";
 import type { TradeRange } from "./kalshi-trade-bands";
+import { scoreDisplay } from "./kalshi-score-queue";
 
 function rangeCondition(range: TradeRange) {
   return and(
@@ -51,9 +52,8 @@ export const telegramDashboardStore: DashboardStore = {
         gameResult: resultByTicker.get(row.ticker)?.gameResult ??
           (status?.milestoneId ? resultByMilestone.get(status.milestoneId) : null) ?? null,
         marketResult: resultByTicker.get(row.ticker)?.marketResult ?? null,
-        scoreStatus: (resultByTicker.get(row.ticker)?.gameResult ||
-          (status?.milestoneId && resultByMilestone.get(status.milestoneId))) ? "confirmed" as const :
-          (resultByTicker.get(row.ticker)?.attempts ?? 0) >= 3 ? "unavailable" as const : "pending" as const,
+        ...scoreDisplay(resultByTicker.get(row.ticker),
+          status?.milestoneId ? resultByMilestone.get(status.milestoneId) : null),
         gameState: status?.state, gameSource: status?.source, gameDelayed: status?.delayed,
         gameStartsAt: status?.startsAt?.toISOString(),
         gameCheckedAt: status?.checkedAt.toISOString(), marketTerminal: status?.marketTerminal };

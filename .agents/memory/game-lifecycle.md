@@ -32,3 +32,9 @@ Historical results in Telegram and the website must show only the game's final s
 **Why:** The user clarified: “No quiero que me digas si la posición acertó o no solo quiero el resultado del partido me refiero al score.”
 
 **How to apply:** A bounded final-result enrichment is an exception to stopping live monitoring: save finals once per game, share across its markets, and stop retrying unavailable data after limited attempts. Pending retrieval is not proof the score is unavailable. Do not resume trade/history polling or send new trade alerts for finished games.
+
+An opened historical game must take priority over bulk score backfill. “Pending” means not attempted yet, not a failed/missing provider response waiting silently for hours.
+
+**Why:** The user repeatedly saw “Marcador pendiente de cargar” without a result: the game was behind a bulk queue, and null provider responses kept that label throughout long retry waits.
+
+**How to apply:** Reprioritize the existing production worker from validated historical selections, without creating workers or provider requests in web/Telegram handlers. Preserve the failure reason, use bounded retries, and expose missing, unconfirmed or failed provider data honestly after an attempt.

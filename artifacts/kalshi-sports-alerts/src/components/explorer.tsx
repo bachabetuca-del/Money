@@ -421,6 +421,7 @@ export function Explorer() {
                           <ChevronRight className={gOpen ? 'open' : ''} size={13} />
                           <span className="name">{g.name}<small>{g.date}</small>
                             {scope === 'history' && <small className="ws-history-result">{g.markets.find(m => m.gameResult)?.gameResult ??
+                              g.markets.find(m => m.scoreMessage)?.scoreMessage ??
                               (g.markets.every(m => m.scoreStatus === 'unavailable') ? 'Marcador no disponible' : 'Marcador pendiente de cargar')}</small>}
                           </span><span className="count">{g.trades}</span>
                         </button>
@@ -460,6 +461,7 @@ export function Explorer() {
                 <p className="bet">{selected.betLabel}</p>
                 {scope === 'history' && <div className="ws-result" data-testid="historical-result">
                   <p><strong>Marcador final</strong><br />{selected.gameResult ??
+                    selected.scoreMessage ??
                     (selected.scoreStatus === 'unavailable' ? 'Marcador no disponible en la fuente' : 'Marcador pendiente de cargar')}</p>
                 </div>}
                 <div className="links">

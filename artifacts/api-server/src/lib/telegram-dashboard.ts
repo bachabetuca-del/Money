@@ -1,5 +1,6 @@
 import sharp from "sharp";
 import { logger } from "./logger";
+import { scoreQueue } from "./kalshi-score-queue";
 import { marketCardSvg, type MarketCardTrade } from "./telegram-market-card";
 import { dashboardChartCaption, spanishRange } from "./telegram-dashboard-caption";
 import { tradeRange, type TradeRange } from "./kalshi-trade-bands";
@@ -128,6 +129,7 @@ export class TelegramDashboard {
       const market = catalog.find(item => item.ticker === selection.ticker)!;
       const badge = catalogGameBadge(catalog.filter(item => item.gameKey === market.gameKey), now);
       const historical = selection.scope === "history";
+      if (historical) scoreQueue.request(market.ticker);
       const stopped = historical || badge.rank === 3 || market.marketTerminal;
       const context = stopped ? { eventTitle: market.eventTitle!, marketTitle: market.marketTitle! } :
         await this.api.context(market.ticker);
@@ -144,6 +146,7 @@ export class TelegramDashboard {
         enabled: settings.enabled, gameDate: market.gameDateLabel, statusLabel: badge.label,
         checkedAt: market.gameCheckedAt, range, history,
         gameResult: market.gameResult, scoreStatus: market.scoreStatus,
+        scoreMessage: market.scoreMessage,
       });
       keyboard = chartKeyboard(selection, market.marketUrl, settings.minimumNotional);
     } else {

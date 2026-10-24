@@ -221,6 +221,9 @@ components:
           type: string
           enum: [confirmed, pending, unavailable]
           description: Whether a final score is saved, queued for retrieval, or unavailable after bounded attempts
+        scoreMessage:
+          type: [string, "null"]
+          description: Honest explanation of queued, temporarily failed, or missing provider score
         marketResult:
           type: [string, "null"]
           description: Kalshi settlement of this specific bet, separate from the game's score

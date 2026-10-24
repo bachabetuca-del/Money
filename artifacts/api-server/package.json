@@ -8,7 +8,7 @@
     "build": "node ./build.mjs",
     "start": "node --enable-source-maps ./dist/index.mjs",
     "typecheck": "tsc -p tsconfig.json --noEmit",
-    "test:telegram": "esbuild src/lib/telegram-dashboard.test.ts src/lib/telegram-trade-notifications.test.ts src/lib/telegram-game-status.test.ts src/lib/telegram-scope-direction.test.ts src/lib/owner-policy.test.ts src/lib/kalshi-results-source.test.ts --bundle --platform=node --format=esm --packages=external --outdir=.local/tests --out-extension:.js=.mjs && NODE_ENV=production node --test .local/tests/*test.mjs"
+    "test:telegram": "esbuild src/lib/telegram-dashboard.test.ts src/lib/telegram-trade-notifications.test.ts src/lib/telegram-game-status.test.ts src/lib/telegram-scope-direction.test.ts src/lib/owner-policy.test.ts src/lib/kalshi-results-source.test.ts src/lib/kalshi-score-queue.test.ts --bundle --platform=node --format=esm --packages=external --outdir=.local/tests --out-extension:.js=.mjs && NODE_ENV=production node --test .local/tests/*test.mjs"
   },
   "dependencies": {
     "@clerk/express": "^2.1.82",

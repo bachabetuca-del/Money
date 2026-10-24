@@ -37,7 +37,7 @@ test("unknown milestone uses historical market discovery only on 404, never its 
     if (path === "/historical/markets/T") return { market: { status: "settled", result: "no" } } as T;
     throw new Error("HTTP 404");
   });
-  assert.deepEqual(await source.resolve("T", null), { gameResult: null, marketResult: null });
+  assert.deepEqual(await source.resolve("T", null), { gameResult: null, marketResult: null, unavailableReason: "no_milestone" });
   assert.ok(calls.includes("/historical/markets/T"));
   const failed = new KalshiResultsSource(async () => { throw new Error("HTTP 500"); });
   await assert.rejects(failed.resolve("T", null), /HTTP 500/);

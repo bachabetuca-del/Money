@@ -33,6 +33,7 @@ export type MarketSummary = {
   gameResult?: string | null;
   marketResult?: string | null;
   scoreStatus?: "confirmed" | "pending" | "unavailable";
+  scoreMessage?: string | null;
 };
 export type CatalogMarket = MarketSummary & {
   id: string;
@@ -224,6 +225,7 @@ export function menuView(selection: Selection, catalog: CatalogMarket[], enabled
       label: markets[0].gameLabel,
       buttonLabel: markets[0].gameLabel,
       detail: historical ? markets.find(m => m.gameResult)?.gameResult ??
+        markets.find(m => m.scoreMessage)?.scoreMessage ??
         (markets.every(m => m.scoreStatus === "unavailable") ? "Marcador no disponible" : "Marcador pendiente de cargar") :
         `${markets.length} ${markets.length === 1 ? "mercado" : "mercados"} · ${markets.reduce((sum, m) => sum + m.trades, 0)} operaciones`,
       action: `d:game:${key}`,
@@ -233,6 +235,7 @@ export function menuView(selection: Selection, catalog: CatalogMarket[], enabled
     title = sportMarkets.find(m => m.gameKey === selection.gameKey)?.gameLabel ?? "Mercados";
     const gameResult = sportMarkets.find(m => m.gameKey === selection.gameKey && m.gameResult)?.gameResult;
     subtitle = historical ? gameResult ??
+      sportMarkets.find(m => m.gameKey === selection.gameKey && m.scoreMessage)?.scoreMessage ??
       (sportMarkets.filter(m => m.gameKey === selection.gameKey).every(m => m.scoreStatus === "unavailable")
         ? "Marcador no disponible" : "Marcador pendiente de cargar") : `${activeRange} · elige una apuesta`;
     const badge = catalogGameBadge(sportMarkets.filter(m => m.gameKey === selection.gameKey), now);

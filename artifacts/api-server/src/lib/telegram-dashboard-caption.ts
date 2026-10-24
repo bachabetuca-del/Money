@@ -24,6 +24,7 @@ type CaptionOptions = {
   checkedAt?: string;
   gameResult?: string | null;
   scoreStatus?: string;
+  scoreMessage?: string | null;
   range: TradeRange;
   history?: { phase: string; error: boolean; scanned: number };
 };
@@ -45,6 +46,7 @@ export function dashboardChartCaption(options: CaptionOptions) {
     `Partido: ${escapeHtml(options.gameDate)} · ${escapeHtml(options.statusLabel)}`,
     ...(historical ? [
       `Marcador final: ${escapeHtml(shortName(options.gameResult ??
+        options.scoreMessage ??
         (options.scoreStatus === "unavailable" ? "No disponible en la fuente" : "Pendiente de cargar"), 240)!)}`,
     ] : []),
     ...(statusTime ? [`Estado consultado: ${statusTime} · Nueva York`] : []),

@@ -46,6 +46,11 @@ export interface ExplorerMarket {
   /** Whether a final score is saved, queued for retrieval, or unavailable after bounded attempts */
   scoreStatus?: ExplorerMarketScoreStatus;
   /**
+     * Honest explanation of queued, temporarily failed, or missing provider score
+     * @nullable
+     */
+  scoreMessage?: string | null;
+  /**
      * Kalshi settlement of this specific bet, separate from the game's score
      * @nullable
      */

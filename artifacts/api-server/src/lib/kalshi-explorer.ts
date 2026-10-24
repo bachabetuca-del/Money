@@ -7,6 +7,7 @@ import { tradeRange, type TradeBand } from "./kalshi-trade-bands";
 import { publicDirection } from "./telegram-trade-direction";
 import { marketHistoryStore } from "./kalshi-market-history-store";
 import { explorerState, explorerSince, type ExplorerWindow } from "./kalshi-explorer-view";
+import { scoreQueue } from "./kalshi-score-queue";
 
 export type ExplorerFilters = {
   band: TradeBand;
@@ -35,6 +36,7 @@ export async function getKalshiExplorer(filters: ExplorerFilters, now = new Date
     gameResult: m.gameResult ?? games.get(m.gameKey)?.find(game => game.gameResult)?.gameResult ?? null,
     marketResult: m.marketResult ?? null,
     scoreStatus: m.scoreStatus ?? "pending",
+    scoreMessage: m.scoreMessage ?? null,
   })).sort((a, b) => b.lastTradeAt.localeCompare(a.lastTradeAt));
   const empty = {
     generatedAt: now.toISOString(), workersPaused: process.env.BOT_WORKERS_ENABLED === "false",
@@ -42,6 +44,7 @@ export async function getKalshiExplorer(filters: ExplorerFilters, now = new Date
   };
   // A hidden/old selection cannot leak trades from another band or scope.
   if (!filters.ticker || !catalog.some(m => m.ticker === filters.ticker)) return empty;
+  if (filters.scope === "history") scoreQueue.request(filters.ticker);
 
   const since = explorerSince(filters.window, now);
   const condition = and(

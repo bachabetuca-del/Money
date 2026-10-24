@@ -2,7 +2,10 @@ import { providerGameState } from "./kalshi-game-status";
 
 type Fields = Record<string, unknown>;
 type Request = <T>(path: string) => Promise<T>;
-export type FinalResult = { gameResult: string | null; marketResult: string | null };
+export type FinalResult = {
+  gameResult: string | null; marketResult: string | null;
+  unavailableReason?: "no_milestone" | "no_feed" | "not_final" | "delayed" | "incomplete_score";
+};
 
 const text = (value: unknown) => typeof value === "string" && value.trim() ? value.trim().slice(0, 100) : null;
 const score = (value: unknown) => typeof value === "number" && Number.isFinite(value) && value >= 0 ? value : null;
@@ -72,15 +75,18 @@ export class KalshiResultsSource {
         if (choices.length === 1) milestoneId = choices[0].id;
       }
     }
-    if (!milestoneId) return { gameResult: null, marketResult };
+    if (!milestoneId) return { gameResult: null, marketResult, unavailableReason: "no_milestone" };
     try {
       const [live, milestone] = await Promise.all([
         this.cached<{ live_data: { details: Fields } }>(`/live_data/milestone/${encodeURIComponent(milestoneId)}`),
         this.cached<{ milestone: { details: Fields } }>(`/milestones/${encodeURIComponent(milestoneId)}`),
       ]);
       const details = live.live_data.details;
-      if (providerGameState(details.status) !== "finished" || details.live_data_delayed === true) {
-        return { gameResult: null, marketResult };
+      if (details.live_data_delayed === true) {
+        return { gameResult: null, marketResult, unavailableReason: "delayed" };
+      }
+      if (providerGameState(details.status) !== "finished") {
+        return { gameResult: null, marketResult, unavailableReason: "not_final" };
       }
       const meta = milestone.milestone.details;
       const ids = [...new Set([details.competitor1_id, details.competitor2_id, meta.home_team_id, meta.away_team_id]
@@ -92,9 +98,13 @@ export class KalshiResultsSource {
         const name = text(target.structured_target.name);
         if (name) names[id] = name;
       }));
-      return { gameResult: finalScore(details, meta, names), marketResult };
+      const gameResult = finalScore(details, meta, names);
+      return gameResult ? { gameResult, marketResult } :
+        { gameResult: null, marketResult, unavailableReason: "incomplete_score" };
     } catch (error) {
-      if (error instanceof Error && /HTTP 404/.test(error.message)) return { gameResult: null, marketResult };
+      if (error instanceof Error && /HTTP 404/.test(error.message)) {
+        return { gameResult: null, marketResult, unavailableReason: "no_feed" };
+      }
       throw error;
     }
   }
