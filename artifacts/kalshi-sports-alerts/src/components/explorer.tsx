@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { AlertCircle, ChevronRight, ExternalLink, RefreshCw, Search } from 'lucide-react';
+import { AlertCircle, ChevronRight, Download, ExternalLink, RefreshCw, Search } from 'lucide-react';
 import {
   Bar,
   CartesianGrid,
@@ -244,16 +244,35 @@ function Charts({ trades, scope, now, truncated, total }: { trades: ExplorerTrad
   );
 }
 
-function TradeTable({ trades, now, highlight }: { trades: ExplorerTrade[]; now: number; highlight: boolean }) {
+function TradeTable({ trades, now, highlight, report }: {
+  trades: ExplorerTrade[]; now: number; highlight: boolean;
+  report: Omit<import('@/lib/trade-pdf').TradePdfInput, 'trades' | 'directionLabel' | 'search'>;
+}) {
   const [dir, setDir] = useState<'all' | Dir>('all');
   const [q, setQ] = useState('');
   const [limit, setLimit] = useState(100);
+  const [exporting, setExporting] = useState(false);
+  const [exportError, setExportError] = useState('');
   const rows = useMemo(() => {
     const term = q.trim().toLowerCase();
     return [...trades]
       .filter((t) => (dir === 'all' || t.direction === dir) && (!term || t.tradeId.toLowerCase().includes(term)))
       .sort((a, b) => new Date(b.createdTime).getTime() - new Date(a.createdTime).getTime());
   }, [trades, dir, q]);
+  async function downloadPdf() {
+    setExporting(true);
+    setExportError('');
+    // Snapshot the displayed selection before loading the PDF library.
+    const input = { ...report, trades: rows, directionLabel: dir === 'all' ? 'Todas' : DIR_LABEL[dir], search: q };
+    try {
+      const { buildTradePdf, tradePdfFilename } = await import('@/lib/trade-pdf');
+      await buildTradePdf(input).save(tradePdfFilename(input.market.ticker, input.generatedAt), { returnPromise: true });
+    } catch {
+      setExportError('No se pudo generar el PDF. Inténtalo de nuevo.');
+    } finally {
+      setExporting(false);
+    }
+  }
   return (
     <section className="ws-card">
       <header className="row">
@@ -262,10 +281,14 @@ function TradeTable({ trades, now, highlight }: { trades: ExplorerTrade[]; now: 
           <p>{rows.length.toLocaleString('en-US')} de {trades.length.toLocaleString('en-US')} cargadas · más recientes primero</p>
         </div>
         <div className="ws-tools">
+          <button className="button secondary" onClick={() => void downloadPdf()} disabled={exporting || rows.length === 0} data-testid="button-download-trades-pdf">
+            <Download size={15} /> {exporting ? 'Generando PDF…' : 'Descargar PDF'}
+          </button>
           <Seg label="dir" value={dir} onChange={(v) => { setDir(v); setLimit(100); }} options={[['all', 'Todas'], ['yes', 'SÍ'], ['no', 'NO'], ['unknown', 'Sin dato']]} />
           <label className="ws-search small"><Search size={13} /><input value={q} onChange={(e) => { setQ(e.target.value); setLimit(100); }} placeholder="ID de operación" aria-label="Buscar operación" data-testid="input-search-trade" /></label>
         </div>
       </header>
+      {exportError && <p role="alert">{exportError}</p>}
       {rows.length === 0 ? <div className="ws-empty small">Ninguna operación coincide con este filtro.</div> : (
         <div className="ws-table-wrap">
           <table className="ws-table">
@@ -499,7 +522,17 @@ export function Explorer() {
                   ) : (
                     <>
                       <Charts trades={trades} scope={scope} now={now} truncated={dData.truncated} total={dData.totalTrades} />
-                      <TradeTable trades={trades} now={now} highlight={scope === 'active'} />
+                      <TradeTable key={`${selected.ticker}:${band}:${win}:${scope}`} trades={trades} now={now} highlight={scope === 'active'} report={{
+                        market: selected,
+                        bandLabel: band === 'small' ? '$1,000 a $5,000 (incluidos)' : band === 'medium' ? 'Más de $5,000 y menos de $10,000' : '$10,000+ (umbral configurado)',
+                        windowLabel: win === 'all' ? 'Todo lo guardado' : win === '1h' ? 'Última hora' : 'Últimas 24 horas',
+                        scopeLabel: scope === 'active' ? 'Vigentes - 48 h' : 'Historial',
+                        loadedCount: trades.length,
+                        totalCount: dData.totalTrades,
+                        truncated: dData.truncated,
+                        historyStatus: dData.historyStatus,
+                        generatedAt: dData.generatedAt,
+                      }} />
                     </>
                   )}
                 </>
