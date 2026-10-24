@@ -9,6 +9,52 @@ import * as zod from 'zod';
 
 
 /**
+ * @summary Browse saved sports markets and selected market executions
+ */
+export const getKalshiExplorerQueryBandDefault = `large`;
+export const getKalshiExplorerQueryScopeDefault = `active`;
+export const getKalshiExplorerQueryTickerMax = 200;
+
+export const getKalshiExplorerQueryWindowDefault = `all`;
+
+export const GetKalshiExplorerQueryParams = zod.object({
+  "band": zod.enum(['large', 'medium']).default(getKalshiExplorerQueryBandDefault),
+  "scope": zod.enum(['active', 'history']).default(getKalshiExplorerQueryScopeDefault),
+  "ticker": zod.coerce.string().max(getKalshiExplorerQueryTickerMax).optional(),
+  "window": zod.enum(['1h', '24h', 'all']).default(getKalshiExplorerQueryWindowDefault)
+})
+
+export const GetKalshiExplorerResponse = zod.object({
+  "generatedAt": zod.string(),
+  "workersPaused": zod.boolean(),
+  "markets": zod.array(zod.object({
+  "ticker": zod.string(),
+  "sport": zod.string(),
+  "gameKey": zod.string(),
+  "gameName": zod.string(),
+  "gameDateLabel": zod.string(),
+  "betLabel": zod.string(),
+  "marketUrl": zod.string(),
+  "trades": zod.number().int(),
+  "lastTradeAt": zod.string(),
+  "state": zod.enum(['upcoming', 'live', 'finished', 'unknown'])
+})),
+  "trades": zod.array(zod.object({
+  "tradeId": zod.string(),
+  "ticker": zod.string(),
+  "direction": zod.enum(['yes', 'no', 'unknown']),
+  "price": zod.number(),
+  "count": zod.number(),
+  "notional": zod.number(),
+  "createdTime": zod.string()
+})),
+  "totalTrades": zod.number().int(),
+  "truncated": zod.boolean(),
+  "historyStatus": zod.string().describe('Stored import status; never claims all Kalshi history is complete')
+})
+
+
+/**
  * Returns server health status
  * @summary Health check
  */

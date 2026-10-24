@@ -15,6 +15,54 @@ tags:
   - name: kalshi
     description: Kalshi sports trade monitoring and Telegram alerts
 paths:
+  /kalshi/explorer:
+    get:
+      operationId: getKalshiExplorer
+      tags: [kalshi]
+      summary: Browse saved sports markets and selected market executions
+      parameters:
+        - in: query
+          name: band
+          schema:
+            type: string
+            enum: [large, medium]
+            default: large
+        - in: query
+          name: scope
+          schema:
+            type: string
+            enum: [active, history]
+            default: active
+        - in: query
+          name: ticker
+          schema:
+            type: string
+            maxLength: 200
+        - in: query
+          name: window
+          schema:
+            type: string
+            enum: [1h, 24h, all]
+            default: all
+      responses:
+        "401":
+          $ref: "#/components/responses/SignInRequired"
+        "403":
+          $ref: "#/components/responses/OwnerRequired"
+        "503":
+          $ref: "#/components/responses/OwnerUnavailable"
+        "400":
+          description: Invalid explorer filters
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+        "200":
+          description: Saved catalog and selected market activity, newest 5000 executions at most
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/KalshiExplorer"
   /healthz:
     get:
       security: []
@@ -152,6 +200,48 @@ components:
           schema:
             $ref: "#/components/schemas/ApiError"
   schemas:
+    ExplorerMarket:
+      type: object
+      required: [ticker, sport, gameKey, gameName, gameDateLabel, betLabel, marketUrl, trades, lastTradeAt, state]
+      properties:
+        ticker: { type: string }
+        sport: { type: string }
+        gameKey: { type: string }
+        gameName: { type: string }
+        gameDateLabel: { type: string }
+        betLabel: { type: string }
+        marketUrl: { type: string }
+        trades: { type: integer }
+        lastTradeAt: { type: string }
+        state: { type: string, enum: [upcoming, live, finished, unknown] }
+    ExplorerTrade:
+      type: object
+      required: [tradeId, ticker, direction, price, count, notional, createdTime]
+      properties:
+        tradeId: { type: string }
+        ticker: { type: string }
+        direction: { type: string, enum: [yes, no, unknown] }
+        price: { type: number }
+        count: { type: number }
+        notional: { type: number }
+        createdTime: { type: string }
+    KalshiExplorer:
+      type: object
+      required: [generatedAt, workersPaused, markets, trades, totalTrades, truncated, historyStatus]
+      properties:
+        generatedAt: { type: string }
+        workersPaused: { type: boolean }
+        markets:
+          type: array
+          items: { $ref: "#/components/schemas/ExplorerMarket" }
+        trades:
+          type: array
+          items: { $ref: "#/components/schemas/ExplorerTrade" }
+        totalTrades: { type: integer }
+        truncated: { type: boolean }
+        historyStatus:
+          type: string
+          description: Stored import status; never claims all Kalshi history is complete
     HealthStatus:
       type: object
       properties:

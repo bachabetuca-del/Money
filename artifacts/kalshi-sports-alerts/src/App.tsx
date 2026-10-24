@@ -38,6 +38,7 @@ import {
   Router as WouterRouter,
 } from 'wouter';
 import type { ReactNode } from 'react';
+import { Explorer, setUrlParams } from '@/components/explorer';
 import { UserButton } from '@clerk/react';
 import { OwnerAuthProvider, ClearOwnerCache, OwnerLanding, RequireSignIn, OwnerSignIn, OwnerSignUp } from '@/components/owner-access';
 
@@ -110,6 +111,8 @@ function Home() {
   const [testMessage, setTestMessage] = useState('');
   const [testError, setTestError] = useState(false);
   const [savedMessage, setSavedMessage] = useState('');
+  const [tab, setTab] = useState<'analysis' | 'settings'>(() => new URLSearchParams(window.location.search).get('tab') === 'settings' ? 'settings' : 'analysis');
+  function pickTab(next: 'analysis' | 'settings') { setTab(next); setUrlParams({ tab: next === 'settings' ? 'settings' : null }); }
 
   useEffect(() => {
     if (!dashboard) return;
@@ -182,7 +185,6 @@ function Home() {
       <div className="app-shell">
         <Header />
         <main className="page-wrap">
-          <Hero />
           <LoadingDashboard />
         </main>
       </div>
@@ -193,7 +195,6 @@ function Home() {
     <div className="app-shell">
       <Header />
       <main className="page-wrap">
-        <Hero />
         {isError && (
           <div className="error-box" role="alert" data-testid="status-dashboard-error">
             <div className="error-copy">
@@ -217,28 +218,35 @@ function Home() {
                 <AlertCircle size={18} />
               </div>
             )}
-            <section className="stats-grid" aria-label="Monitor summary">
+            <section className="stats-grid" aria-label="Resumen global del monitor">
               <div className="stat-card">
-                <div className="stat-label">Individual trade threshold</div>
+                <div className="stat-label">Umbral principal configurado</div>
                 <div className="stat-value" data-testid="text-minimum-notional">{money(dashboard.minimumNotional)}</div>
-                <div className="stat-foot">Per public trade · price × contracts</div>
+                <div className="stat-foot">Por operación · precio × contratos</div>
                 <div className="stat-glyph"><ArrowDownUp /></div>
               </div>
               <div className="stat-card">
-                <div className="stat-label">Qualifying trades</div>
+                <div className="stat-label">Operaciones guardadas · global</div>
                 <div className="stat-value" data-testid="text-qualifying-trades">{dashboard.qualifyingTrades.toLocaleString()}</div>
-                <div className="stat-foot">Captured by this monitor</div>
+                <div className="stat-foot">Desde el umbral principal · todos los partidos</div>
                 <div className="stat-glyph"><Activity /></div>
               </div>
               <div className="stat-card">
-                <div className="stat-label">Large trades in live dashboard</div>
+                <div className="stat-label">Operaciones publicadas · global</div>
                 <div className="stat-value" data-testid="text-alerts-sent">{dashboard.alertsSent.toLocaleString()}</div>
-                <div className="stat-foot">Available in your single Telegram dashboard</div>
+                <div className="stat-foot">Histórico disponible en el panel de Telegram</div>
                 <div className="stat-glyph"><Bell /></div>
               </div>
             </section>
 
-            <div className="main-grid">
+            <nav className="ws-tabs" aria-label="Secciones">
+              <button className={tab === 'analysis' ? 'on' : ''} onClick={() => pickTab('analysis')} data-testid="tab-analysis">Análisis de mercados</button>
+              <button className={tab === 'settings' ? 'on' : ''} onClick={() => pickTab('settings')} data-testid="tab-settings">Ajustes y Telegram</button>
+            </nav>
+
+            {tab === 'analysis' && <Explorer />}
+
+            {tab === 'settings' && <div className="main-grid">
               <section className="panel" aria-labelledby="monitor-settings-heading">
                 <div className="panel-head">
                   <div>
@@ -399,12 +407,12 @@ function Home() {
                   <span>Large trades are a signal to investigate, not a prediction or endorsement. Always review the market context.</span>
                 </div>
               </div>
-            </div>
+            </div>}
 
-            <section className="panel activity-panel" aria-labelledby="recent-trades-heading">
+            {tab === 'settings' && <section className="panel activity-panel" aria-labelledby="recent-trades-heading">
               <div className="panel-head">
                 <div>
-                  <div className="panel-title" id="recent-trades-heading"><Activity /> Recent matching trades</div>
+                  <div className="panel-title" id="recent-trades-heading"><Activity /> Actividad global reciente · sin filtros del análisis</div>
                   <div className="panel-subtitle">Public sports-market executions meeting your threshold.</div>
                 </div>
                 <div className="activity-meta"><span className="count-chip" data-testid="text-recent-trade-count">{dashboard.recentTrades.length}</span> recent</div>
@@ -444,7 +452,7 @@ function Home() {
                   ))}
                 </div>
               )}
-            </section>
+            </section>}
             <footer className="footer">
               <span>Kalshi sports alerts <span aria-hidden="true">·</span> public market activity</span>
               <span>Updated {dateTime(dashboard.lastChecked)}{isFetching ? ' · refreshing' : ''}</span>
@@ -469,25 +477,6 @@ function Header() {
         <span className="live-pill"><i className="live-dot" /> Public feed</span>
       </div>
     </header>
-  );
-}
-
-function Hero() {
-  return (
-    <div className="hero">
-      <div>
-        <div className="eyebrow">Market activity · Sports</div>
-        <h1>Follow the flow.<br />Skip the noise.</h1>
-        <p>Get a quiet signal when a single public sports-market trade clears your threshold. No buyer identities, no account history — just the trade in context.</p>
-      </div>
-      <div className="hero-mark" aria-hidden="true">
-        <span>Market pulse</span>
-        <svg className="pulse-line" viewBox="0 0 145 46" fill="none">
-          <path d="M1 32h25l7-8 8 15 9-28 10 24 9-12 8 8h14l8-19 9 17 8-8h28" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
-          <path d="M1 41h143" stroke="currentColor" strokeOpacity=".18" />
-        </svg>
-      </div>
-    </div>
   );
 }
 

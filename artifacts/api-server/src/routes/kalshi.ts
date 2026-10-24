@@ -6,6 +6,8 @@ import {
   SaveKalshiSettingsResponse,
   SendTelegramTestBody,
   SendTelegramTestResponse,
+  GetKalshiExplorerQueryParams,
+  GetKalshiExplorerResponse,
 } from "@workspace/api-zod";
 import {
   findTelegramChat,
@@ -14,8 +16,22 @@ import {
   sendTelegramTest,
 } from "../lib/kalshi-monitor";
 import { isOwnerChat } from "../lib/owner-policy";
+import { getKalshiExplorer } from "../lib/kalshi-explorer";
 
 const router: IRouter = Router();
+
+router.get("/kalshi/explorer", async (req, res): Promise<void> => {
+  const parsed = GetKalshiExplorerQueryParams.safeParse(req.query);
+  if (!parsed.success) {
+    res.status(400).json({ error: "Filtros de mercado no válidos." });
+    return;
+  }
+  const data = await getKalshiExplorer({
+    band: parsed.data.band ?? "large", scope: parsed.data.scope ?? "active",
+    ticker: parsed.data.ticker, window: parsed.data.window ?? "all",
+  });
+  res.json(GetKalshiExplorerResponse.parse(data));
+});
 
 function telegramErrorMessage(error: unknown) {
   const message =

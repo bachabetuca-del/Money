@@ -14,6 +14,7 @@ import { publicTradeExecution } from "./kalshi-trade-execution";
 import { inTradeRange, tradeRange } from "./kalshi-trade-bands";
 import { dashboardChartCaption } from "./telegram-dashboard-caption";
 import { catalogGameBadge } from "./telegram-dashboard-view";
+import { explorerSince, explorerState } from "./kalshi-explorer-view";
 
 const now = new Date("2026-10-23T10:30:00Z");
 function row(day: string, name: string, extra: Partial<MarketSummary> = {}): MarketSummary {
@@ -24,6 +25,23 @@ function row(day: string, name: string, extra: Partial<MarketSummary> = {}): Mar
   };
 }
 const scope = (value: MarketSummary) => gameScope(buildCatalog([value]), now);
+
+test("website time windows use execution time and preserve all-history selection", () => {
+  assert.equal(explorerSince("all", now), undefined);
+  assert.equal(explorerSince("1h", now)?.toISOString(), "2026-10-23T09:30:00.000Z");
+  assert.equal(explorerSince("24h", now)?.toISOString(), "2026-10-22T10:30:00.000Z");
+});
+
+test("website lifecycle matches Telegram and never claims delayed games are live", () => {
+  const market = row("23", "Live", { gameState: "live", gameSource: "live", gameCheckedAt: now.toISOString() });
+  const state = (extra: Partial<MarketSummary> = {}) => explorerState(buildCatalog([{ ...market, ...extra }]), now);
+  assert.equal(state(), "live");
+  assert.equal(state({ gameDelayed: true }), "unknown");
+  assert.equal(state({ gameCheckedAt: "2026-10-22T10:00:00Z" }), "unknown");
+  assert.equal(state({ gameState: "scheduled" }), "upcoming");
+  assert.equal(state({ gameState: "finished" }), "finished");
+  assert.equal(state({ gameState: "finished", gameSource: "market" }), "finished");
+});
 
 test("calendar keys validate dates and preserve New York day around midnight and DST", () => {
   assert.equal(gameCalendarDay("KXGAME-26OCT22A"), "2026-10-22");

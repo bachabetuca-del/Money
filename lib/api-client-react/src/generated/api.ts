@@ -26,8 +26,10 @@ import type {
 
 import type {
   ApiError,
+  GetKalshiExplorerParams,
   HealthStatus,
   KalshiDashboard,
+  KalshiExplorer,
   KalshiSettingsInput,
   OwnerRequiredResponse,
   OwnerUnavailableResponse,
@@ -63,6 +65,114 @@ const withQueryKey = <T extends object, K>(query: T, queryKey: K): T & { queryKe
   }
   return result;
 };
+
+export const getGetKalshiExplorerUrl = (params?: GetKalshiExplorerParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/api/kalshi/explorer?${stringifiedParams}` : `/api/kalshi/explorer`
+}
+
+/**
+ * @summary Browse saved sports markets and selected market executions
+ */
+export const getKalshiExplorer = async (params?: GetKalshiExplorerParams, options?: Parameters<typeof customFetch>[1]): Promise<KalshiExplorer> => {
+
+  return customFetch<KalshiExplorer>(getGetKalshiExplorerUrl(params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetKalshiExplorerQueryKey = (params?: GetKalshiExplorerParams,) => {
+    return [
+    `/api/kalshi/explorer`, ...(params ? [params] : [])
+    ] as const;
+    }
+
+
+export const getGetKalshiExplorerQueryOptions = <TData = Awaited<ReturnType<typeof getKalshiExplorer>>, TError = ErrorType<ApiError | SignInRequiredResponse | OwnerRequiredResponse | OwnerUnavailableResponse>>(params?: GetKalshiExplorerParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getKalshiExplorer>>, TError, TData>>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetKalshiExplorerQueryKey(params);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getKalshiExplorer>>> = ({ signal }) => getKalshiExplorer(params, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getKalshiExplorer>>, TError, TData> & { queryKey: DataTag<QueryKey, TData, TError> }
+}
+
+export type GetKalshiExplorerQueryResult = NonNullable<Awaited<ReturnType<typeof getKalshiExplorer>>>
+export type GetKalshiExplorerQueryError = ErrorType<ApiError | SignInRequiredResponse | OwnerRequiredResponse | OwnerUnavailableResponse>
+
+
+export function useGetKalshiExplorer<TData = Awaited<ReturnType<typeof getKalshiExplorer>>, TError = ErrorType<ApiError | SignInRequiredResponse | OwnerRequiredResponse | OwnerUnavailableResponse>>(
+ params: undefined |  GetKalshiExplorerParams, options: { query:Partial<UseQueryOptions<Awaited<ReturnType<typeof getKalshiExplorer>>, TError, TData>> & Pick<
+        DefinedInitialDataOptions<
+          Awaited<ReturnType<typeof getKalshiExplorer>>,
+          TError,
+          Awaited<ReturnType<typeof getKalshiExplorer>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient
+  ):  DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useGetKalshiExplorer<TData = Awaited<ReturnType<typeof getKalshiExplorer>>, TError = ErrorType<ApiError | SignInRequiredResponse | OwnerRequiredResponse | OwnerUnavailableResponse>>(
+ params?: GetKalshiExplorerParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getKalshiExplorer>>, TError, TData>> & Pick<
+        UndefinedInitialDataOptions<
+          Awaited<ReturnType<typeof getKalshiExplorer>>,
+          TError,
+          Awaited<ReturnType<typeof getKalshiExplorer>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useGetKalshiExplorer<TData = Awaited<ReturnType<typeof getKalshiExplorer>>, TError = ErrorType<ApiError | SignInRequiredResponse | OwnerRequiredResponse | OwnerUnavailableResponse>>(
+ params?: GetKalshiExplorerParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getKalshiExplorer>>, TError, TData>>, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+/**
+ * @summary Browse saved sports markets and selected market executions
+ */
+
+export function useGetKalshiExplorer<TData = Awaited<ReturnType<typeof getKalshiExplorer>>, TError = ErrorType<ApiError | SignInRequiredResponse | OwnerRequiredResponse | OwnerUnavailableResponse>>(
+ params?: GetKalshiExplorerParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getKalshiExplorer>>, TError, TData>>, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient
+ ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
+
+  const queryOptions = getGetKalshiExplorerQueryOptions(params,options)
+
+  const query = useQuery(queryOptions, queryClient) as  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
 
 export const getHealthCheckUrl = () => {
 

@@ -5,6 +5,59 @@
  * API specification
  * OpenAPI spec version: 0.1.0
  */
+export type ExplorerMarketState = typeof ExplorerMarketState[keyof typeof ExplorerMarketState];
+
+
+export const ExplorerMarketState = {
+  upcoming: 'upcoming',
+  live: 'live',
+  finished: 'finished',
+  unknown: 'unknown',
+} as const;
+
+export interface ExplorerMarket {
+  ticker: string;
+  sport: string;
+  gameKey: string;
+  gameName: string;
+  gameDateLabel: string;
+  betLabel: string;
+  marketUrl: string;
+  trades: number;
+  lastTradeAt: string;
+  state: ExplorerMarketState;
+}
+
+export type ExplorerTradeDirection = typeof ExplorerTradeDirection[keyof typeof ExplorerTradeDirection];
+
+
+export const ExplorerTradeDirection = {
+  yes: 'yes',
+  no: 'no',
+  unknown: 'unknown',
+} as const;
+
+export interface ExplorerTrade {
+  tradeId: string;
+  ticker: string;
+  direction: ExplorerTradeDirection;
+  price: number;
+  count: number;
+  notional: number;
+  createdTime: string;
+}
+
+export interface KalshiExplorer {
+  generatedAt: string;
+  workersPaused: boolean;
+  markets: ExplorerMarket[];
+  trades: ExplorerTrade[];
+  totalTrades: number;
+  truncated: boolean;
+  /** Stored import status; never claims all Kalshi history is complete */
+  historyStatus: string;
+}
+
 export interface HealthStatus {
   status: string;
 }
@@ -85,4 +138,39 @@ export type OwnerRequiredResponse = ApiError;
  * Owner authorization is unavailable or not configured
  */
 export type OwnerUnavailableResponse = ApiError;
+
+export type GetKalshiExplorerParams = {
+band?: GetKalshiExplorerBand;
+scope?: GetKalshiExplorerScope;
+/**
+ * @maxLength 200
+ */
+ticker?: string;
+window?: GetKalshiExplorerWindow;
+};
+
+export type GetKalshiExplorerBand = typeof GetKalshiExplorerBand[keyof typeof GetKalshiExplorerBand];
+
+
+export const GetKalshiExplorerBand = {
+  large: 'large',
+  medium: 'medium',
+} as const;
+
+export type GetKalshiExplorerScope = typeof GetKalshiExplorerScope[keyof typeof GetKalshiExplorerScope];
+
+
+export const GetKalshiExplorerScope = {
+  active: 'active',
+  history: 'history',
+} as const;
+
+export type GetKalshiExplorerWindow = typeof GetKalshiExplorerWindow[keyof typeof GetKalshiExplorerWindow];
+
+
+export const GetKalshiExplorerWindow = {
+  '1h': '1h',
+  '24h': '24h',
+  all: 'all',
+} as const;
 

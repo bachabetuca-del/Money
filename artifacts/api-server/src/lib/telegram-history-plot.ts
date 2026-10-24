@@ -118,7 +118,8 @@ export function historyPlotSvg(trades: MarketCardTrade[], now: Date, top: number
       const cx = x + barWidth / 2;
       const ty = bottom - used - 14;
       marker = `<rect x="${x - 4}" y="${bottom - used - 4}" width="${barWidth + 8}" height="${used + 4}" fill="none" stroke="#F7F3E8" stroke-width="4" rx="4"/>
-        <path d="M${cx - 11} ${ty - 14} L${cx + 11} ${ty - 14} L${cx} ${ty} Z" fill="#F7F3E8"/>`;
+        <path d="M${cx - 11} ${ty - 14} L${cx + 11} ${ty - 14} L${cx} ${ty} Z" fill="#F7F3E8"/>
+        <text x="${cx > right - 90 ? right : cx < left + 90 ? left : cx}" y="${ty - 24}" text-anchor="${cx > right - 90 ? "end" : cx < left + 90 ? "start" : "middle"}" font-size="25" font-weight="700" fill="#F7F3E8">${axisMoney(bucket.total)}</text>`;
     }
     return segments;
   }).join("");

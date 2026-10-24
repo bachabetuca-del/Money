@@ -3,7 +3,7 @@ import { chartDefs, DIRECTION_COLORS, historyPlotSvg, intervalLabelEs, RECENT_WI
 import { elapsed, exactMoney, fitSize, nyDateTime, textBlock } from "./telegram-card-format";
 import { publicDirection, directionLabel, directionMeaning, DIRECTION_NOTE } from "./telegram-trade-direction";
 
-export const MARKET_CARD_VERSION = 4;
+export const MARKET_CARD_VERSION = 5;
 
 export type MarketCardTrade = {
   eventTitle: string | null;
@@ -154,15 +154,16 @@ export function marketCardSvg(trades: MarketCardTrade[], threshold: number, filt
 
   // Chart.
   const chartTitleY = y;
-  const chartTop = chartTitleY + 112;
+  const chartTop = chartTitleY + 192;
   const chartBottom = chartTop + 330;
   const history = historyPlotSvg(ordered, now, chartTop, chartBottom, live);
   parts.push(`<text x="52" y="${chartTitleY}" font-size="34" font-weight="700" fill="${INK}">Dinero por cada ${intervalLabelEs(history.width)}</text>
-    <text x="52" y="${chartTitleY + 40}" font-size="26" fill="${MUTED}">Cada barra suma el dinero de su intervalo.</text>`);
+    <text x="52" y="${chartTitleY + 40}" font-size="26" fill="${MUTED}">Cada barra suma USD de un intervalo.</text>
+    <text x="52" y="${chartTitleY + 76}" font-size="26" fill="${MUTED}">El número indica el total de la última barra.</text>`);
   const recentLine = !live ? "Historial guardado · sin actividad en vivo"
     : history.recentCount ? `Últimos 15 min: ${history.recentCount.toLocaleString("en-US")} op. · ${exactMoney(recentSum)}`
     : "Sin operaciones en los últimos 15 min";
-  parts.push(`<text x="52" y="${chartTitleY + 78}" font-size="26" font-weight="700" fill="${history.recentCount ? INK : SOFT}">${escapeHtml(recentLine)}</text>`);
+  parts.push(`<text x="52" y="${chartTitleY + 114}" font-size="26" font-weight="700" fill="${history.recentCount ? INK : SOFT}">${escapeHtml(recentLine)}</text>`);
   parts.push(history.svg);
   y = chartBottom + 128;
 

@@ -7,8 +7,17 @@
  */
 
 export * from './apiError';
+export * from './explorerMarket';
+export * from './explorerMarketState';
+export * from './explorerTrade';
+export * from './explorerTradeDirection';
+export * from './getKalshiExplorerBand';
+export * from './getKalshiExplorerParams';
+export * from './getKalshiExplorerScope';
+export * from './getKalshiExplorerWindow';
 export * from './healthStatus';
 export * from './kalshiDashboard';
+export * from './kalshiExplorer';
 export * from './kalshiSettingsInput';
 export * from './kalshiTrade';
 export * from './ownerRequiredResponse';
