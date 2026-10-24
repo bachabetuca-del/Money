@@ -14,6 +14,8 @@ export interface ExplorerMarket {
   gameKey: string;
   gameName: string;
   gameDateLabel: string;
+  /** Scheduled kickoff in America/New_York with ET suffix, or Hora por confirmar */
+  gameTimeLabel?: string;
   betLabel: string;
   marketUrl: string;
   trades: number;

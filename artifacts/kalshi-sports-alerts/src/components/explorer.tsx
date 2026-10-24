@@ -302,7 +302,9 @@ function groupMarkets(markets: ExplorerMarket[], term: string) {
   for (const m of markets) {
     if (t && !`${m.sport} ${m.gameName} ${m.betLabel} ${m.ticker}`.toLowerCase().includes(t)) continue;
     const games = sports.get(m.sport) ?? new Map();
-    const g = games.get(m.gameKey) ?? { name: m.gameName, date: m.gameDateLabel, last: m.lastTradeAt, markets: [] };
+    const g = games.get(m.gameKey) ?? { name: m.gameName,
+      date: `${m.gameDateLabel} · ${m.gameTimeLabel ?? 'Hora por confirmar'}`,
+      last: m.lastTradeAt, markets: [] };
     g.markets.push(m);
     if (m.lastTradeAt > g.last) g.last = m.lastTradeAt;
     games.set(m.gameKey, g);
@@ -456,6 +458,7 @@ export function Explorer() {
                 <div className="meta">
                   <span className={`ws-state ${selected.state}`}>{STATE_LABEL[selected.state]}</span>
                   <span>{selected.sport}</span><span>{selected.gameDateLabel}</span>
+                  <span>{selected.gameTimeLabel ?? 'Hora por confirmar'}</span>
                 </div>
                 <h2>{selected.gameName}</h2>
                 <p className="bet">{selected.betLabel}</p>

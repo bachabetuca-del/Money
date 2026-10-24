@@ -8,6 +8,7 @@ import { publicDirection } from "./telegram-trade-direction";
 import { marketHistoryStore } from "./kalshi-market-history-store";
 import { explorerState, explorerSince, type ExplorerWindow } from "./kalshi-explorer-view";
 import { scoreQueue } from "./kalshi-score-queue";
+import { gameDateLabel, gameTimeLabel } from "./telegram-game-date";
 
 export type ExplorerFilters = {
   band: TradeBand;
@@ -28,16 +29,22 @@ export async function getKalshiExplorer(filters: ExplorerFilters, now = new Date
     group.push(market);
     games.set(market.gameKey, group);
   }
-  const markets = catalog.map(m => ({
+  const markets = catalog.map(m => {
+    const scheduled = games.get(m.gameKey)?.find(game =>
+      game.gameStartsAt && Number.isFinite(new Date(game.gameStartsAt).getTime()));
+    return {
     ticker: m.ticker, sport: m.sport, gameKey: m.gameKey, gameName: m.gameName,
-    gameDateLabel: m.gameDateLabel, betLabel: m.betLabel, marketUrl: m.marketUrl,
+    gameDateLabel: scheduled ? gameDateLabel(scheduled.ticker, scheduled.gameStartsAt) : m.gameDateLabel,
+    gameTimeLabel: gameTimeLabel(scheduled?.gameStartsAt),
+    betLabel: m.betLabel, marketUrl: m.marketUrl,
     trades: m.trades, lastTradeAt: m.lastTradeAt,
     state: explorerState(games.get(m.gameKey)!, now),
     gameResult: m.gameResult ?? games.get(m.gameKey)?.find(game => game.gameResult)?.gameResult ?? null,
     marketResult: m.marketResult ?? null,
     scoreStatus: m.scoreStatus ?? "pending",
     scoreMessage: m.scoreMessage ?? null,
-  })).sort((a, b) => b.lastTradeAt.localeCompare(a.lastTradeAt));
+  };
+  }).sort((a, b) => b.lastTradeAt.localeCompare(a.lastTradeAt));
   const empty = {
     generatedAt: now.toISOString(), workersPaused: process.env.BOT_WORKERS_ENABLED === "false",
     markets, trades: [], totalTrades: 0, truncated: false, historyStatus: "Sin mercado seleccionado",

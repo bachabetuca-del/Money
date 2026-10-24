@@ -209,6 +209,9 @@ components:
         gameKey: { type: string }
         gameName: { type: string }
         gameDateLabel: { type: string }
+        gameTimeLabel:
+          type: string
+          description: Scheduled kickoff in America/New_York with ET suffix, or Hora por confirmar
         betLabel: { type: string }
         marketUrl: { type: string }
         trades: { type: integer }
