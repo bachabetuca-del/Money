@@ -15,6 +15,18 @@ export const ExplorerMarketState = {
   unknown: 'unknown',
 } as const;
 
+/**
+ * Whether a final score is saved, queued for retrieval, or unavailable after bounded attempts
+ */
+export type ExplorerMarketScoreStatus = typeof ExplorerMarketScoreStatus[keyof typeof ExplorerMarketScoreStatus];
+
+
+export const ExplorerMarketScoreStatus = {
+  confirmed: 'confirmed',
+  pending: 'pending',
+  unavailable: 'unavailable',
+} as const;
+
 export interface ExplorerMarket {
   ticker: string;
   sport: string;
@@ -31,6 +43,8 @@ export interface ExplorerMarket {
      * @nullable
      */
   gameResult: string | null;
+  /** Whether a final score is saved, queued for retrieval, or unavailable after bounded attempts */
+  scoreStatus?: ExplorerMarketScoreStatus;
   /**
      * Kalshi settlement of this specific bet, separate from the game's score
      * @nullable

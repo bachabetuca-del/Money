@@ -27,8 +27,8 @@ The Vigentes selector must show only games with fresh, confirmed live status and
 
 **How to apply:** Use the real schedule timestamp in New York-aware time comparisons when available. A date-only ticker cannot provide kickoff time, so keep its existing validated date fallback; a genuinely live game remains visible beyond 48 hours.
 
-Historical results must show a confirmed final scoreboard, separately from each bet's SÍ/NO settlement. Show unavailable or unconfirmed results honestly; do not derive winners from trade direction or prices.
+Historical results in Telegram and the website must show only the game's final score (including tennis sets when available). Do not show position outcomes, SÍ/NO settlement, or whether a bet won or lost.
 
-**Why:** The user asked for the result of each game in both the Telegram and website Historial.
+**Why:** The user clarified: “No quiero que me digas si la posición acertó o no solo quiero el resultado del partido me refiero al score.”
 
-**How to apply:** A bounded final-result enrichment is an exception to stopping live monitoring: save finals once, share the game's result across markets, and stop retrying unavailable data after a limited number of attempts. It must not resume trade/history polling or send new trade alerts for finished games.
+**How to apply:** A bounded final-result enrichment is an exception to stopping live monitoring: save finals once per game, share across its markets, and stop retrying unavailable data after limited attempts. Pending retrieval is not proof the score is unavailable. Do not resume trade/history polling or send new trade alerts for finished games.

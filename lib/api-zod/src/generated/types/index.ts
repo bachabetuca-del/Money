@@ -8,6 +8,7 @@
 
 export * from './apiError';
 export * from './explorerMarket';
+export * from './explorerMarketScoreStatus';
 export * from './explorerMarketState';
 export * from './explorerTrade';
 export * from './explorerTradeDirection';

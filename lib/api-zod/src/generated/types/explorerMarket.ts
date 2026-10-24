@@ -5,6 +5,7 @@
  * API specification
  * OpenAPI spec version: 0.1.0
  */
+import type { ExplorerMarketScoreStatus } from './explorerMarketScoreStatus';
 import type { ExplorerMarketState } from './explorerMarketState';
 
 export interface ExplorerMarket {
@@ -23,6 +24,8 @@ export interface ExplorerMarket {
      * @nullable
      */
   gameResult: string | null;
+  /** Whether a final score is saved, queued for retrieval, or unavailable after bounded attempts */
+  scoreStatus?: ExplorerMarketScoreStatus;
   /**
      * Kalshi settlement of this specific bet, separate from the game's score
      * @nullable

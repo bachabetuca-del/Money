@@ -32,6 +32,7 @@ export type MarketSummary = {
   marketTerminal?: boolean;
   gameResult?: string | null;
   marketResult?: string | null;
+  scoreStatus?: "confirmed" | "pending" | "unavailable";
 };
 export type CatalogMarket = MarketSummary & {
   id: string;
@@ -222,7 +223,8 @@ export function menuView(selection: Selection, catalog: CatalogMarket[], enabled
     items = [...grouped].map(([key, markets]) => ({
       label: markets[0].gameLabel,
       buttonLabel: markets[0].gameLabel,
-      detail: historical ? markets.find(m => m.gameResult)?.gameResult ?? "Resultado no disponible" :
+      detail: historical ? markets.find(m => m.gameResult)?.gameResult ??
+        (markets.every(m => m.scoreStatus === "unavailable") ? "Marcador no disponible" : "Marcador pendiente de cargar") :
         `${markets.length} ${markets.length === 1 ? "mercado" : "mercados"} · ${markets.reduce((sum, m) => sum + m.trades, 0)} operaciones`,
       action: `d:game:${key}`,
       badge: catalogGameBadge(markets, now),
@@ -230,11 +232,12 @@ export function menuView(selection: Selection, catalog: CatalogMarket[], enabled
   } else if (selection.screen === "markets") {
     title = sportMarkets.find(m => m.gameKey === selection.gameKey)?.gameLabel ?? "Mercados";
     const gameResult = sportMarkets.find(m => m.gameKey === selection.gameKey && m.gameResult)?.gameResult;
-    subtitle = historical ? gameResult ?? "Resultado no disponible" : `${activeRange} · elige una apuesta`;
+    subtitle = historical ? gameResult ??
+      (sportMarkets.filter(m => m.gameKey === selection.gameKey).every(m => m.scoreStatus === "unavailable")
+        ? "Marcador no disponible" : "Marcador pendiente de cargar") : `${activeRange} · elige una apuesta`;
     const badge = catalogGameBadge(sportMarkets.filter(m => m.gameKey === selection.gameKey), now);
     items = sportMarkets.filter(m => m.gameKey === selection.gameKey).map(m => ({
-      label: m.betLabel, detail: historical ? `Resolución: ${m.marketResult ?? "sin confirmar"}` :
-        `${m.trades} ${m.trades === 1 ? "operación" : "operaciones"}${m.marketTerminal ? " · mercado cerrado" : ""}`,
+      label: m.betLabel, detail: `${m.trades} ${m.trades === 1 ? "operación" : "operaciones"}${m.marketTerminal ? " · mercado cerrado" : ""}`,
       action: `d:market:${m.id}`,
       badge,
     }));

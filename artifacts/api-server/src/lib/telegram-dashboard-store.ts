@@ -51,6 +51,9 @@ export const telegramDashboardStore: DashboardStore = {
         gameResult: resultByTicker.get(row.ticker)?.gameResult ??
           (status?.milestoneId ? resultByMilestone.get(status.milestoneId) : null) ?? null,
         marketResult: resultByTicker.get(row.ticker)?.marketResult ?? null,
+        scoreStatus: (resultByTicker.get(row.ticker)?.gameResult ||
+          (status?.milestoneId && resultByMilestone.get(status.milestoneId))) ? "confirmed" as const :
+          (resultByTicker.get(row.ticker)?.attempts ?? 0) >= 3 ? "unavailable" as const : "pending" as const,
         gameState: status?.state, gameSource: status?.source, gameDelayed: status?.delayed,
         gameStartsAt: status?.startsAt?.toISOString(),
         gameCheckedAt: status?.checkedAt.toISOString(), marketTerminal: status?.marketTerminal };

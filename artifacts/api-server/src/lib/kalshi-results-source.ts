@@ -24,18 +24,18 @@ export function finalScore(
   }
   if (!firstId || !secondId || first === null || second === null || !names[firstId] || !names[secondId]) return null;
   const winner = text(live.winner);
-  const winnerName = winner && names[winner];
-  return `${names[firstId]} ${first}–${second} ${names[secondId]}` +
-    (winnerName ? ` · Ganó ${winnerName}` : ["draw", "tie"].includes(winner ?? "") ? " · Empate" : "");
-}
-
-export function settledOutcome(market: Fields): string | null {
-  if (!["determined", "finalized", "settled"].includes(String(market.status))) return null;
-  if (market.result === "yes") return "SÍ";
-  if (market.result === "no") return "NO";
-  // A scalar/void payout is not a binary win or loss.
-  if (market.result === "scalar") return "Liquidación no binaria";
-  return null;
+  let sets = "";
+  if (Array.isArray(live.competitor1_round_scores) && Array.isArray(live.competitor2_round_scores) &&
+      live.competitor1_round_scores.length === live.competitor2_round_scores.length) {
+    const rounds = live.competitor1_round_scores.map((round, i) => {
+      const a = score((round as Fields)?.score);
+      const b = score((live.competitor2_round_scores as Fields[])[i]?.score);
+      return a !== null && b !== null ? `${a}–${b}` : null;
+    });
+    if (rounds.length && rounds.every(Boolean)) sets = ` · Sets: ${rounds.join(", ")}`;
+  }
+  return `${names[firstId]} ${first}–${second} ${names[secondId]}${sets}` +
+    (["draw", "tie"].includes(winner ?? "") ? " · Empate" : "");
 }
 
 export class KalshiResultsSource {
@@ -51,22 +51,26 @@ export class KalshiResultsSource {
     return value;
   }
   async resolve(ticker: string, milestoneId: string | null): Promise<FinalResult> {
-    let market: Fields;
-    try {
-      market = (await this.cached<{ market: Fields }>(`/markets/${encodeURIComponent(ticker)}`)).market;
-    } catch (error) {
-      if (!(error instanceof Error) || !/HTTP 404/.test(error.message)) throw error;
-      market = (await this.cached<{ market: Fields }>(`/historical/markets/${encodeURIComponent(ticker)}`)).market;
-    }
-    const marketResult = settledOutcome(market);
-    // Older stored statuses may not have linked a milestone yet.
-    if (!milestoneId && typeof market.event_ticker === "string") {
-      const response = await this.cached<{ milestones: { id: string; primary_event_tickers?: string[] }[] }>(
-        `/milestones?limit=100&related_event_ticker=${encodeURIComponent(market.event_ticker)}`);
-      const all = response.milestones ?? [];
-      const primary = all.filter(m => m.primary_event_tickers?.includes(String(market.event_ticker)));
-      const choices = primary.length ? primary : all;
-      if (choices.length === 1) milestoneId = choices[0].id;
+    // Known games do not need an individual market/settlement request.
+    // Keep the legacy nullable field for database compatibility only.
+    const marketResult = null;
+    if (!milestoneId) {
+      let market: Fields;
+      try {
+        market = (await this.cached<{ market: Fields }>(`/markets/${encodeURIComponent(ticker)}`)).market;
+      } catch (error) {
+        if (!(error instanceof Error) || !/HTTP 404/.test(error.message)) throw error;
+        market = (await this.cached<{ market: Fields }>(`/historical/markets/${encodeURIComponent(ticker)}`)).market;
+      }
+      // Older stored statuses may not have linked a milestone yet.
+      if (typeof market.event_ticker === "string") {
+        const response = await this.cached<{ milestones: { id: string; primary_event_tickers?: string[] }[] }>(
+          `/milestones?limit=100&related_event_ticker=${encodeURIComponent(market.event_ticker)}`);
+        const all = response.milestones ?? [];
+        const primary = all.filter(m => m.primary_event_tickers?.includes(String(market.event_ticker)));
+        const choices = primary.length ? primary : all;
+        if (choices.length === 1) milestoneId = choices[0].id;
+      }
     }
     if (!milestoneId) return { gameResult: null, marketResult };
     try {
@@ -90,9 +94,7 @@ export class KalshiResultsSource {
       }));
       return { gameResult: finalScore(details, meta, names), marketResult };
     } catch (error) {
-      // Preserve a confirmed market settlement even if its scoreboard is absent.
       if (error instanceof Error && /HTTP 404/.test(error.message)) return { gameResult: null, marketResult };
-      if (marketResult) return { gameResult: null, marketResult };
       throw error;
     }
   }

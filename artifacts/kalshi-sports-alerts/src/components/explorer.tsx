@@ -420,14 +420,14 @@ export function Explorer() {
                         }} data-testid={`button-game-${g.key}`}>
                           <ChevronRight className={gOpen ? 'open' : ''} size={13} />
                           <span className="name">{g.name}<small>{g.date}</small>
-                            {scope === 'history' && <small className="ws-history-result">{g.markets.find(m => m.gameResult)?.gameResult ?? 'Resultado no disponible'}</small>}
+                            {scope === 'history' && <small className="ws-history-result">{g.markets.find(m => m.gameResult)?.gameResult ??
+                              (g.markets.every(m => m.scoreStatus === 'unavailable') ? 'Marcador no disponible' : 'Marcador pendiente de cargar')}</small>}
                           </span><span className="count">{g.trades}</span>
                         </button>
                         {gOpen && g.markets.map((m) => (
                           <button key={m.ticker} className={`ws-row market ${m.ticker === ticker ? 'sel' : ''}`} onClick={() => change({ ticker: m.ticker })} aria-current={m.ticker === ticker} data-testid={`button-market-${m.ticker}`}>
                             <span className={`ws-state ${m.state}`}>{STATE_LABEL[m.state]}</span>
                             <span className="name">{m.betLabel}
-                              {scope === 'history' && <small>Resolución: {m.marketResult ?? 'sin confirmar'}</small>}
                             </span><span className="count">{m.trades}</span>
                           </button>
                         ))}
@@ -459,9 +459,8 @@ export function Explorer() {
                 <h2>{selected.gameName}</h2>
                 <p className="bet">{selected.betLabel}</p>
                 {scope === 'history' && <div className="ws-result" data-testid="historical-result">
-                  <p><strong>Resultado final del partido</strong><br />{selected.gameResult ?? 'Resultado no disponible en Kalshi'}</p>
-                  <p><strong>Resolución de esta apuesta</strong><br />{selected.marketResult ?? 'Sin confirmar'}</p>
-                  <small>El marcador y la resolución de un mercado son datos diferentes. No indican quién obtuvo ganancias.</small>
+                  <p><strong>Marcador final</strong><br />{selected.gameResult ??
+                    (selected.scoreStatus === 'unavailable' ? 'Marcador no disponible en la fuente' : 'Marcador pendiente de cargar')}</p>
                 </div>}
                 <div className="links">
                   <span className="mono">{selected.ticker}</span>

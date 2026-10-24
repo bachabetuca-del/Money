@@ -34,6 +34,7 @@ export async function getKalshiExplorer(filters: ExplorerFilters, now = new Date
     state: explorerState(games.get(m.gameKey)!, now),
     gameResult: m.gameResult ?? games.get(m.gameKey)?.find(game => game.gameResult)?.gameResult ?? null,
     marketResult: m.marketResult ?? null,
+    scoreStatus: m.scoreStatus ?? "pending",
   })).sort((a, b) => b.lastTradeAt.localeCompare(a.lastTradeAt));
   const empty = {
     generatedAt: now.toISOString(), workersPaused: process.env.BOT_WORKERS_ENABLED === "false",

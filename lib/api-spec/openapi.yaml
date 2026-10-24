@@ -217,6 +217,10 @@ components:
         gameResult:
           type: [string, "null"]
           description: Confirmed final scoreboard from Kalshi; null if unavailable, not inferred from settlement
+        scoreStatus:
+          type: string
+          enum: [confirmed, pending, unavailable]
+          description: Whether a final score is saved, queued for retrieval, or unavailable after bounded attempts
         marketResult:
           type: [string, "null"]
           description: Kalshi settlement of this specific bet, separate from the game's score

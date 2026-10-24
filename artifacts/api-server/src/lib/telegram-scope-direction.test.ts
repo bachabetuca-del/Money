@@ -26,19 +26,22 @@ function row(day: string, name: string, extra: Partial<MarketSummary> = {}): Mar
 }
 const scope = (value: MarketSummary) => gameScope(buildCatalog([value]), now);
 
-test("history shows final score and separate settlement in Telegram without fabricating unavailable results", () => {
+test("history shows only the game score, never the position outcome, and distinguishes pending scores", () => {
   const catalog = buildCatalog([row("22", "Madrid", { gameState: "finished", gameSource: "live",
-    gameResult: "Madrid 2–1 Barcelona · Ganó Madrid", marketResult: "NO" })]);
+    gameResult: "Madrid 2–1 Barcelona", marketResult: "NO" })]);
   const games = menuView({ ...HOME, scope: "history", screen: "games", sportKey: catalog[0].sportKey },
     catalog, true, 10000, now);
   assert.match(games.items[0].detail, /Madrid 2–1 Barcelona/);
   const markets = menuView({ ...HOME, scope: "history", screen: "markets",
     sportKey: catalog[0].sportKey, gameKey: catalog[0].gameKey }, catalog, true, 10000, now);
-  assert.match(markets.subtitle, /Ganó Madrid/);
-  assert.equal(markets.items[0].detail, "Resolución: NO");
+  assert.match(markets.subtitle, /Madrid 2–1 Barcelona/);
+  assert.doesNotMatch(markets.items[0].detail, /Resolución|NO|SÍ/);
   const missing = menuView({ ...HOME, scope: "history", screen: "games", sportKey: catalog[0].sportKey },
     buildCatalog([row("22", "Madrid", { gameState: "finished" })]), true, 10000, now);
-  assert.equal(missing.items[0].detail, "Resultado no disponible");
+  assert.equal(missing.items[0].detail, "Marcador pendiente de cargar");
+  const unavailable = menuView({ ...HOME, scope: "history", screen: "games", sportKey: catalog[0].sportKey },
+    buildCatalog([row("22", "Madrid", { gameState: "finished", scoreStatus: "unavailable" })]), true, 10000, now);
+  assert.equal(unavailable.items[0].detail, "Marcador no disponible");
 });
 
 test("website time windows use execution time and preserve all-history selection", () => {

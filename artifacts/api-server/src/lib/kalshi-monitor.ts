@@ -626,7 +626,7 @@ export function startKalshiMonitor() {
     void readSettings().then(async settings => {
       if (settings.enabled) await finalResultsWorker.tick();
     }).catch(error => logger.warn({ error: String(error) }, "Final result worker failed"));
-  }, 60_000);
+  }, 5_000);
   setInterval(() => {
     void readSettings().then(async settings => {
       if (settings.enabled) await gameStatusMonitor.tick();
