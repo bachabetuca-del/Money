@@ -1,5 +1,14 @@
 const MONTHS = ["JAN", "FEB", "MAR", "APR", "MAY", "JUN", "JUL", "AUG", "SEP", "OCT", "NOV", "DEC"];
 
+/** Only a provider schedule supplies a kickoff time; never infer it from a ticker. */
+export function gameTimeLabel(startsAt?: string | null) {
+  const date = startsAt ? new Date(startsAt) : null;
+  if (!date || !Number.isFinite(date.getTime())) return "Hora por confirmar";
+  return new Intl.DateTimeFormat("en-US", {
+    timeZone: "America/New_York", hour: "numeric", minute: "2-digit", hour12: true,
+  }).format(date) + " ET";
+}
+
 /** Prefer the real schedule; ticker dates are a fallback, never trade/import dates. */
 export function gameDateLabel(ticker: string, startsAt?: string | null) {
   if (startsAt) {

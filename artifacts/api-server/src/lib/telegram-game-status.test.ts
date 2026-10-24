@@ -195,7 +195,8 @@ test("game dates precede long team names on Telegram buttons, without a redundan
   for (const button of buttons) {
     assert.match(button.text, /^⚪ 2[34] oct 2026 · /);
     assert.doesNotMatch(button.text, /Por empezar/);
-    assert.ok(button.text.length < 52);
+    assert.match(button.text, /Hora por confirmar/);
+    assert.ok(button.text.length < 80, "date and kickoff stay before potentially truncated team names");
   }
   assert.match(view.items[0].label, /^2[34] oct 2026 · /);
   const png = await sharp(Buffer.from(menuSvg(view))).resize({ width: 320 }).png().toBuffer();

@@ -213,6 +213,22 @@ test("a cleanup permission failure is recorded without losing trade history or r
   assert.equal(store.tradesByTicker.get(moneyline)?.length, 1);
 });
 
+test("game menu includes New York kickoff before matchup names and shares a sibling's schedule", () => {
+  const catalog = buildCatalog([summary(), { ...summary(spread), gameStartsAt: "2026-10-22T23:30:00Z" }]);
+  const selection = navigate(HOME, `d:sport:${catalog[0].sportKey}`, catalog);
+  const view = menuView(selection, catalog, true, 10000);
+  assert.equal(view.items.length, 1);
+  assert.equal(view.items[0].label, "22 oct 2026 · 7:30 PM ET · New England vs Chicago");
+  assert.match(view.keyboard.inline_keyboard.flat().find(b => b.callback_data?.startsWith("d:game:"))!.text, /7:30 PM ET/);
+  assert.match(menuSvg(view), /7:30 PM ET/);
+});
+
+test("game menu never invents kickoff times from ticker dates or invalid schedules", () => {
+  const catalog = buildCatalog([{ ...summary(), gameStartsAt: "invalid" }]);
+  const view = menuView(navigate(HOME, `d:sport:${catalog[0].sportKey}`, catalog), catalog, true, 10000);
+  assert.match(view.items[0].label, /22 oct 2026 · Hora por confirmar/);
+});
+
 test("game grouping combines Kalshi's separate moneyline, spread, and total events", () => {
   const rows = [summary(), summary(spread), {
     ...summary("KXNFLTOTAL-26OCT22NECHI-47"), eventTitle: "New England vs Chicago: Total Points",

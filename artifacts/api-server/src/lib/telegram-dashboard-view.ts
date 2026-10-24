@@ -2,7 +2,7 @@ import { createHash } from "node:crypto";
 import { escapeHtml, betLabelEs } from "./telegram-market-card";
 import { tradeRange, type TradeBand } from "./kalshi-trade-bands";
 import { gameBadge } from "./kalshi-game-status";
-import { gameDateLabel } from "./telegram-game-date";
+import { gameDateLabel, gameTimeLabel } from "./telegram-game-date";
 import { gameScope, scopedCatalog, type GameScope } from "./telegram-game-scope";
 import { spanishRange } from "./telegram-dashboard-caption";
 
@@ -221,16 +221,21 @@ export function menuView(selection: Selection, catalog: CatalogMarket[], enabled
     subtitle = `${activeRange} · elige un partido`;
     const grouped = new Map<string, CatalogMarket[]>();
     for (const market of sportMarkets) grouped.set(market.gameKey, [...(grouped.get(market.gameKey) ?? []), market]);
-    items = [...grouped].map(([key, markets]) => ({
-      label: markets[0].gameLabel,
-      buttonLabel: markets[0].gameLabel,
+    items = [...grouped].map(([key, markets]) => {
+      const scheduled = markets.find(m => m.gameStartsAt && Number.isFinite(new Date(m.gameStartsAt).getTime()));
+      const date = scheduled ? gameDateLabel(scheduled.ticker, scheduled.gameStartsAt) : markets[0].gameDateLabel;
+      const label = `${date} · ${gameTimeLabel(scheduled?.gameStartsAt)} · ${markets[0].gameName}`;
+      return {
+      label,
+      buttonLabel: label,
       detail: historical ? markets.find(m => m.gameResult)?.gameResult ??
         markets.find(m => m.scoreMessage)?.scoreMessage ??
         (markets.every(m => m.scoreStatus === "unavailable") ? "Marcador no disponible" : "Marcador pendiente de cargar") :
         `${markets.length} ${markets.length === 1 ? "mercado" : "mercados"} · ${markets.reduce((sum, m) => sum + m.trades, 0)} operaciones`,
       action: `d:game:${key}`,
       badge: catalogGameBadge(markets, now),
-    })).sort((a, b) => a.badge.rank - b.badge.rank);
+    };
+    }).sort((a, b) => a.badge.rank - b.badge.rank);
   } else if (selection.screen === "markets") {
     title = sportMarkets.find(m => m.gameKey === selection.gameKey)?.gameLabel ?? "Mercados";
     const gameResult = sportMarkets.find(m => m.gameKey === selection.gameKey && m.gameResult)?.gameResult;
