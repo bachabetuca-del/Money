@@ -21,6 +21,29 @@ test("tennis uses competitor IDs, never event-title or home/away order assumptio
   {}, { a: "Kawa", b: "Rybakina" }), "Rybakina 2–1 Kawa");
 });
 
+test("soccer uses this game's goals, not aggregate or regulation scores", () => {
+  const live = { status: "closed", home_same_game_score: 2, away_same_game_score: 1,
+    home_aggregate_score: 3, away_aggregate_score: 4, home_regulation_score: 1, away_regulation_score: 1 };
+  const meta = { home_team_id: "h", away_team_id: "a" };
+  assert.equal(finalScore(live, meta, { h: "Home", a: "Away" }), "Home 2–1 Away");
+  assert.equal(finalScore({ status: "closed", home_same_game_score: 0, away_same_game_score: 0 },
+    meta, { h: "Home", a: "Away" }), "Home 0–0 Away");
+  assert.equal(finalScore({ status: "closed", home_aggregate_score: 3, away_aggregate_score: 4 },
+    meta, { h: "Home", a: "Away" }), null);
+});
+
+test("esports resolves competitor target names and uses series score, not kills or rounds", async () => {
+  const source = new KalshiResultsSource(async <T>(path: string): Promise<T> => {
+    if (path.startsWith("/milestones/")) return { milestone: { details: {
+      home_competitor_id: "h", away_competitor_id: "a" } } } as T;
+    if (path.startsWith("/live_data/")) return { live_data: { details: {
+      status: "closed", home_score: 2, away_score: 1,
+      home_periods: { period_1: 13 }, away_periods: { period_1: 16 } } } } as T;
+    return { structured_target: { name: path.endsWith("/h") ? "MOUZ" : "Liquid" } } as T;
+  });
+  assert.equal((await source.resolve("KXCS2GAME", "m")).gameResult, "MOUZ 2–1 Liquid");
+});
+
 test("tennis includes completed set scores in the same participant order", () => {
   assert.equal(finalScore({ status: "closed", competitor1_id: "s", competitor2_id: "p",
     competitor1_overall_score: 1, competitor2_overall_score: 2,

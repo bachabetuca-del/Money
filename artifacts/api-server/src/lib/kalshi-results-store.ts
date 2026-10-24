@@ -1,7 +1,7 @@
 import { db, kalshiGameStatusTable as games, kalshiResultsTable as results } from "@workspace/db";
 import { and, asc, eq, isNull, lt, lte, or, sql } from "drizzle-orm";
 import type { FinalResult } from "./kalshi-results-source";
-import { scoreQueue, scoreCanRetry, scoreRetryDelay } from "./kalshi-score-queue";
+import { scoreQueue, scoreCanRetry, scoreRetryDelay, scoreNeedsParserRetry } from "./kalshi-score-queue";
 
 /** Bounded final enrichment, NOT renewed trade/history polling for finished games.
  * One game per 5 seconds, at most 3 attempts (5m, then 30m); successful results are permanent.
@@ -29,7 +29,8 @@ export class FinalResultsWorker {
         .where(and(
           or(eq(games.state, "finished"), and(lte(games.startsAt, new Date(now.getTime() - 6 * 3_600_000)),
             sql`${games.state} <> 'live'`)),
-          or(isNull(results.ticker), and(lt(results.attempts, 3),
+          or(isNull(results.ticker), and(isNull(results.gameResult), eq(results.error, "score:incomplete_score")),
+            and(lt(results.attempts, 3),
             or(lte(results.nextCheckAt, now),
               sql`${results.checkedAt} <= ${now}::timestamptz -
                 CASE WHEN ${results.attempts} <= 1 THEN interval '5 minutes' ELSE interval '30 minutes' END`),
@@ -45,18 +46,20 @@ export class FinalResultsWorker {
       let error: string | null = null;
       try {
         if (!value.gameResult) value = await this.resolve(candidate.game.ticker, candidate.game.milestoneId);
-        if (value.unavailableReason) error = `score:${value.unavailableReason}`;
+        if (value.unavailableReason) error = `score:${value.unavailableReason}` +
+          (value.unavailableReason === "incomplete_score" ? ":v2" : "");
       }
       catch (failure) {
         error = failure instanceof Error ? failure.message : "Final result unavailable";
         this.warn(error);
       }
+      const attempts = (scoreNeedsParserRetry(candidate.result) ? 0 : candidate.result?.attempts ?? 0) + 1;
       const row = {
         ticker: candidate.game.ticker,
         gameResult: value.gameResult ?? candidate.result?.gameResult ?? null,
         marketResult: value.marketResult ?? candidate.result?.marketResult ?? null,
-        attempts: (candidate.result?.attempts ?? 0) + 1, checkedAt: now,
-        nextCheckAt: new Date(now.getTime() + scoreRetryDelay((candidate.result?.attempts ?? 0) + 1)), error,
+        attempts, checkedAt: now,
+        nextCheckAt: new Date(now.getTime() + scoreRetryDelay(attempts)), error,
       };
       await db.transaction(async tx => {
         await tx.insert(results).values(row).onConflictDoUpdate({ target: results.ticker, set: row });
@@ -71,7 +74,8 @@ export class FinalResultsWorker {
             await tx.insert(results).values(otherRows)
               .onConflictDoUpdate({ target: results.ticker, set: {
                 gameResult: sql`coalesce(${results.gameResult}, excluded.game_result)`,
-                attempts: sql`greatest(${results.attempts}, excluded.attempts)`,
+                attempts: sql`CASE WHEN ${results.error} = 'score:incomplete_score'
+                  THEN excluded.attempts ELSE greatest(${results.attempts}, excluded.attempts) END`,
                 checkedAt: now, nextCheckAt: row.nextCheckAt, error,
               } });
           }

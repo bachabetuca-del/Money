@@ -2,6 +2,18 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { ScoreQueue, scoreCanRetry, scoreDisplay, scoreRetryDelay } from "./kalshi-score-queue";
 
+test("parser upgrade recovers exhausted incomplete scores once, without unlimited retries", () => {
+  const now = new Date();
+  const row = { gameResult: null, attempts: 3, checkedAt: now,
+    nextCheckAt: new Date(now.getTime() + 86_400_000), error: "score:incomplete_score" };
+  assert.equal(scoreCanRetry(row, now), true);
+  assert.equal(scoreCanRetry({ ...row, error: "score:incomplete_score:v2" }, now), false);
+  assert.equal(scoreCanRetry({ ...row, gameResult: "Home 1–0 Away" }, now), false);
+  assert.equal(scoreCanRetry({ ...row, error: "score:no_feed" }, now), false);
+  assert.equal(scoreDisplay({ ...row, error: "score:incomplete_score:v2" }).scoreMessage,
+    "Kalshi devuelve un marcador incompleto; no se puede confirmar el resultado");
+});
+
 test("selected historical games have bounded, deduplicated priority", () => {
   const queue = new ScoreQueue();
   queue.request("SELECTED"); queue.request("SELECTED"); queue.request("OTHER");

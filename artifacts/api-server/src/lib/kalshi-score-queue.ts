@@ -14,14 +14,20 @@ export class ScoreQueue {
 }
 export const scoreQueue = new ScoreQueue();
 
+/** One parser-upgrade retry for failures saved before soccer/esports support.
+ * New incomplete results carry a suffix, so this cannot repeat indefinitely. */
+export function scoreNeedsParserRetry(row: { gameResult: string | null; error?: string | null } | null) {
+  return !!row && !row.gameResult && row.error === "score:incomplete_score";
+}
+
 export function scoreRetryDelay(attempts: number) {
   return attempts <= 1 ? 5 * 60_000 : 30 * 60_000;
 }
 
 export function scoreCanRetry(row: {
-  gameResult: string | null; attempts: number; checkedAt: Date | null; nextCheckAt: Date;
+  gameResult: string | null; attempts: number; checkedAt: Date | null; nextCheckAt: Date; error?: string | null;
 } | null, now: Date) {
-  return !row || (!row.gameResult && row.attempts < 3 &&
+  return !row || scoreNeedsParserRetry(row) || (!row.gameResult && row.attempts < 3 &&
     (row.nextCheckAt <= now || (row.checkedAt !== null &&
       row.checkedAt.getTime() + scoreRetryDelay(row.attempts) <= now.getTime())));
 }
@@ -30,7 +36,7 @@ export function scoreDisplay(result: { gameResult: string | null; attempts: numb
   sharedScore?: string | null) {
   if (result?.gameResult || sharedScore) return { scoreStatus: "confirmed" as const, scoreMessage: null };
   if (!result || result.attempts === 0) return { scoreStatus: "pending" as const, scoreMessage: "Marcador en cola de consulta" };
-  const reason = result.error?.startsWith("score:") ? result.error.slice(6) : null;
+  const reason = result.error?.startsWith("score:") ? result.error.split(":")[1] : null;
   if (reason) {
     const messages: Record<string, string> = {
       no_milestone: "Kalshi no tiene una ficha de marcador vinculada a este partido",

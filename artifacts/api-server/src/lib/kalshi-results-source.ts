@@ -20,10 +20,12 @@ export function finalScore(
   let first = score(live.competitor1_overall_score);
   let second = score(live.competitor2_overall_score);
   if (!firstId || !secondId || first === null || second === null) {
-    firstId = text(milestone.home_team_id);
-    secondId = text(milestone.away_team_id);
-    first = score(live.home_points ?? live.home_score ?? live.home_runs ?? live.home_goals ?? live.home_overall_score);
-    second = score(live.away_points ?? live.away_score ?? live.away_runs ?? live.away_goals ?? live.away_overall_score);
+    firstId = text(milestone.home_team_id ?? milestone.home_competitor_id);
+    secondId = text(milestone.away_team_id ?? milestone.away_competitor_id);
+    // Soccer's same-game score includes extra time, unlike regulation, and
+    // excludes other legs of an aggregate tie. Never substitute aggregate goals.
+    first = score(live.home_same_game_score ?? live.home_points ?? live.home_score ?? live.home_runs ?? live.home_goals ?? live.home_overall_score);
+    second = score(live.away_same_game_score ?? live.away_points ?? live.away_score ?? live.away_runs ?? live.away_goals ?? live.away_overall_score);
   }
   if (!firstId || !secondId || first === null || second === null || !names[firstId] || !names[secondId]) return null;
   const winner = text(live.winner);
@@ -89,7 +91,8 @@ export class KalshiResultsSource {
         return { gameResult: null, marketResult, unavailableReason: "not_final" };
       }
       const meta = milestone.milestone.details;
-      const ids = [...new Set([details.competitor1_id, details.competitor2_id, meta.home_team_id, meta.away_team_id]
+      const ids = [...new Set([details.competitor1_id, details.competitor2_id,
+        meta.home_team_id, meta.away_team_id, meta.home_competitor_id, meta.away_competitor_id]
         .filter((id): id is string => typeof id === "string" && id.length > 0))];
       const names: Record<string, string> = {};
       await Promise.all(ids.map(async id => {
