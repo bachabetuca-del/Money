@@ -26,3 +26,9 @@ The Vigentes selector must show only games with fresh, confirmed live status and
 **Why:** The user saw too many future games in Vigentes and explicitly approved limiting that list while retaining prior games and their saved graphs in Historial.
 
 **How to apply:** Use the real schedule timestamp in New York-aware time comparisons when available. A date-only ticker cannot provide kickoff time, so keep its existing validated date fallback; a genuinely live game remains visible beyond 48 hours.
+
+Historical results must show a confirmed final scoreboard, separately from each bet's SÍ/NO settlement. Show unavailable or unconfirmed results honestly; do not derive winners from trade direction or prices.
+
+**Why:** The user asked for the result of each game in both the Telegram and website Historial.
+
+**How to apply:** A bounded final-result enrichment is an exception to stopping live monitoring: save finals once, share the game's result across markets, and stop retrying unavailable data after a limited number of attempts. It must not resume trade/history polling or send new trade alerts for finished games.

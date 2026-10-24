@@ -419,12 +419,16 @@ export function Explorer() {
                           setOpenGames(next);
                         }} data-testid={`button-game-${g.key}`}>
                           <ChevronRight className={gOpen ? 'open' : ''} size={13} />
-                          <span className="name">{g.name}<small>{g.date}</small></span><span className="count">{g.trades}</span>
+                          <span className="name">{g.name}<small>{g.date}</small>
+                            {scope === 'history' && <small className="ws-history-result">{g.markets.find(m => m.gameResult)?.gameResult ?? 'Resultado no disponible'}</small>}
+                          </span><span className="count">{g.trades}</span>
                         </button>
                         {gOpen && g.markets.map((m) => (
                           <button key={m.ticker} className={`ws-row market ${m.ticker === ticker ? 'sel' : ''}`} onClick={() => change({ ticker: m.ticker })} aria-current={m.ticker === ticker} data-testid={`button-market-${m.ticker}`}>
                             <span className={`ws-state ${m.state}`}>{STATE_LABEL[m.state]}</span>
-                            <span className="name">{m.betLabel}</span><span className="count">{m.trades}</span>
+                            <span className="name">{m.betLabel}
+                              {scope === 'history' && <small>Resolución: {m.marketResult ?? 'sin confirmar'}</small>}
+                            </span><span className="count">{m.trades}</span>
                           </button>
                         ))}
                       </div>
@@ -454,6 +458,11 @@ export function Explorer() {
                 </div>
                 <h2>{selected.gameName}</h2>
                 <p className="bet">{selected.betLabel}</p>
+                {scope === 'history' && <div className="ws-result" data-testid="historical-result">
+                  <p><strong>Resultado final del partido</strong><br />{selected.gameResult ?? 'Resultado no disponible en Kalshi'}</p>
+                  <p><strong>Resolución de esta apuesta</strong><br />{selected.marketResult ?? 'Sin confirmar'}</p>
+                  <small>El marcador y la resolución de un mercado son datos diferentes. No indican quién obtuvo ganancias.</small>
+                </div>}
                 <div className="links">
                   <span className="mono">{selected.ticker}</span>
                   {selected.marketUrl && <a href={selected.marketUrl} target="_blank" rel="noreferrer" className="trade-link" data-testid="link-selected-market">Abrir en Kalshi <ExternalLink /></a>}

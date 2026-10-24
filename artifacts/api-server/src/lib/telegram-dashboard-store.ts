@@ -1,6 +1,6 @@
 import { and, asc, count, desc, eq, gt, gte, inArray, isNull, lt, lte, sql } from "drizzle-orm";
 import {
-  db, kalshiAlertsTable, kalshiTelegramChartsTable, telegramDashboardTable, kalshiGameStatusTable,
+  db, kalshiAlertsTable, kalshiTelegramChartsTable, telegramDashboardTable, kalshiGameStatusTable, kalshiResultsTable,
 } from "@workspace/db";
 import type { DashboardState, DashboardStore } from "./telegram-dashboard";
 import { decodeScopeScreen, encodeScopeScreen } from "./telegram-game-scope";
@@ -37,10 +37,20 @@ export const telegramDashboardStore: DashboardStore = {
       .groupBy(kalshiAlertsTable.ticker, kalshiAlertsTable.sport, kalshiAlertsTable.eventTitle,
         kalshiAlertsTable.marketTitle, kalshiAlertsTable.marketUrl);
     const statuses = await db.select().from(kalshiGameStatusTable);
+    const results = await db.select().from(kalshiResultsTable);
+    const resultByTicker = new Map(results.map(row => [row.ticker, row]));
+    const resultByMilestone = new Map<string, string>();
+    for (const status of statuses) {
+      const result = resultByTicker.get(status.ticker)?.gameResult;
+      if (status.milestoneId && result) resultByMilestone.set(status.milestoneId, result);
+    }
     const byTicker = new Map(statuses.map(row => [row.ticker, row]));
     return rows.map(row => {
       const status = byTicker.get(row.ticker);
       return { ...row, lastTradeAt: new Date(row.lastTradeAt).toISOString(),
+        gameResult: resultByTicker.get(row.ticker)?.gameResult ??
+          (status?.milestoneId ? resultByMilestone.get(status.milestoneId) : null) ?? null,
+        marketResult: resultByTicker.get(row.ticker)?.marketResult ?? null,
         gameState: status?.state, gameSource: status?.source, gameDelayed: status?.delayed,
         gameStartsAt: status?.startsAt?.toISOString(),
         gameCheckedAt: status?.checkedAt.toISOString(), marketTerminal: status?.marketTerminal };

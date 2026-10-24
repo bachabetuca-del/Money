@@ -32,6 +32,8 @@ export async function getKalshiExplorer(filters: ExplorerFilters, now = new Date
     gameDateLabel: m.gameDateLabel, betLabel: m.betLabel, marketUrl: m.marketUrl,
     trades: m.trades, lastTradeAt: m.lastTradeAt,
     state: explorerState(games.get(m.gameKey)!, now),
+    gameResult: m.gameResult ?? games.get(m.gameKey)?.find(game => game.gameResult)?.gameResult ?? null,
+    marketResult: m.marketResult ?? null,
   })).sort((a, b) => b.lastTradeAt.localeCompare(a.lastTradeAt));
   const empty = {
     generatedAt: now.toISOString(), workersPaused: process.env.BOT_WORKERS_ENABLED === "false",

@@ -37,7 +37,9 @@ export const GetKalshiExplorerResponse = zod.object({
   "marketUrl": zod.string(),
   "trades": zod.number().int(),
   "lastTradeAt": zod.string(),
-  "state": zod.enum(['upcoming', 'live', 'finished', 'unknown'])
+  "state": zod.enum(['upcoming', 'live', 'finished', 'unknown']),
+  "gameResult": zod.string().nullable().describe('Confirmed final scoreboard from Kalshi; null if unavailable, not inferred from settlement'),
+  "marketResult": zod.string().nullable().describe('Kalshi settlement of this specific bet, separate from the game\'s score')
 })),
   "trades": zod.array(zod.object({
   "tradeId": zod.string(),

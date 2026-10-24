@@ -18,4 +18,14 @@ export interface ExplorerMarket {
   trades: number;
   lastTradeAt: string;
   state: ExplorerMarketState;
+  /**
+     * Confirmed final scoreboard from Kalshi; null if unavailable, not inferred from settlement
+     * @nullable
+     */
+  gameResult: string | null;
+  /**
+     * Kalshi settlement of this specific bet, separate from the game's score
+     * @nullable
+     */
+  marketResult: string | null;
 }

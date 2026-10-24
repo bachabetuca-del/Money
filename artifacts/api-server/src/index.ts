@@ -1,8 +1,10 @@
 import app from "./app";
 import { logger } from "./lib/logger";
 import { checkRuntimeConfiguration, startBotRuntime, fatalStartup } from "./lib/bot-runtime";
+import { ensureResultsSchema } from "./lib/kalshi-results-store";
 
 checkRuntimeConfiguration();
+await ensureResultsSchema();
 
 const rawPort = process.env["PORT"];
 

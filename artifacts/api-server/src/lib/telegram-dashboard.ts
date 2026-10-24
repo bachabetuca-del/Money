@@ -143,6 +143,7 @@ export class TelegramDashboard {
         confirmedClosed: badge.rank === 3 || Boolean(market.marketTerminal),
         enabled: settings.enabled, gameDate: market.gameDateLabel, statusLabel: badge.label,
         checkedAt: market.gameCheckedAt, range, history,
+        gameResult: market.gameResult, marketResult: market.marketResult,
       });
       keyboard = chartKeyboard(selection, market.marketUrl, settings.minimumNotional);
     } else {

@@ -30,6 +30,8 @@ export type MarketSummary = {
   gameCheckedAt?: string;
   gameStartsAt?: string | null;
   marketTerminal?: boolean;
+  gameResult?: string | null;
+  marketResult?: string | null;
 };
 export type CatalogMarket = MarketSummary & {
   id: string;
@@ -220,16 +222,19 @@ export function menuView(selection: Selection, catalog: CatalogMarket[], enabled
     items = [...grouped].map(([key, markets]) => ({
       label: markets[0].gameLabel,
       buttonLabel: markets[0].gameLabel,
-      detail: `${markets.length} ${markets.length === 1 ? "mercado" : "mercados"} · ${markets.reduce((sum, m) => sum + m.trades, 0)} operaciones`,
+      detail: historical ? markets.find(m => m.gameResult)?.gameResult ?? "Resultado no disponible" :
+        `${markets.length} ${markets.length === 1 ? "mercado" : "mercados"} · ${markets.reduce((sum, m) => sum + m.trades, 0)} operaciones`,
       action: `d:game:${key}`,
       badge: catalogGameBadge(markets, now),
     })).sort((a, b) => a.badge.rank - b.badge.rank);
   } else if (selection.screen === "markets") {
     title = sportMarkets.find(m => m.gameKey === selection.gameKey)?.gameLabel ?? "Mercados";
-    subtitle = `${activeRange} · elige una apuesta`;
+    const gameResult = sportMarkets.find(m => m.gameKey === selection.gameKey && m.gameResult)?.gameResult;
+    subtitle = historical ? gameResult ?? "Resultado no disponible" : `${activeRange} · elige una apuesta`;
     const badge = catalogGameBadge(sportMarkets.filter(m => m.gameKey === selection.gameKey), now);
     items = sportMarkets.filter(m => m.gameKey === selection.gameKey).map(m => ({
-      label: m.betLabel, detail: `${m.trades} ${m.trades === 1 ? "operación" : "operaciones"}${m.marketTerminal ? " · mercado cerrado" : ""}`,
+      label: m.betLabel, detail: historical ? `Resolución: ${m.marketResult ?? "sin confirmar"}` :
+        `${m.trades} ${m.trades === 1 ? "operación" : "operaciones"}${m.marketTerminal ? " · mercado cerrado" : ""}`,
       action: `d:market:${m.id}`,
       badge,
     }));
@@ -290,7 +295,8 @@ export function menuSvg(view: ReturnType<typeof menuView>) {
   const heading = lines(view.title, 28);
   let y = 138 + heading.length * 53;
   const subtitleY = y;
-  y += 50;
+  const subtitles = lines(view.subtitle, 43);
+  y += subtitles.length * 36 + 14;
   const stepperY = y;
   const stepper = view.steps.map((s, i) => {
     const on = i + 1 === view.step;
@@ -299,7 +305,8 @@ export function menuSvg(view: ReturnType<typeof menuView>) {
   y += 45;
   const cards = view.items.map((item, index) => {
     const labels = lines(item.label);
-    const cardHeight = (item.badge ? 110 : 65) + labels.length * 39;
+    const details = lines(item.detail, 42);
+    const cardHeight = (item.badge ? 110 : 65) + labels.length * 39 + (details.length - 1) * 33;
     const top = y;
     y += cardHeight + 18;
     return `<rect x="40" y="${top}" width="820" height="${cardHeight}" rx="18" fill="#172337"/>
@@ -307,7 +314,7 @@ export function menuSvg(view: ReturnType<typeof menuView>) {
         `<text x="65" y="${top + 46}" font-size="28" fill="#61A9BD">${index + 1}</text>`}
       ${labels.map((line, i) => `<text x="108" y="${top + 44 + i * 39}" font-size="32" font-weight="600" fill="#F8FAFC">${escapeHtml(line)}</text>`).join("")}
       ${item.badge ? `<text x="108" y="${top + 45 + labels.length * 39}" font-size="27" font-weight="600" fill="${item.badge.color}">${escapeHtml(item.badge.label)}</text>` : ""}
-      <text x="108" y="${top + (item.badge ? 87 : 51) + labels.length * 39}" font-size="25" fill="#94A3B8">${escapeHtml(item.detail)}</text>`;
+      ${details.map((line, i) => `<text x="108" y="${top + (item.badge ? 87 : 51) + labels.length * 39 + i * 33}" font-size="25" fill="#94A3B8">${escapeHtml(line)}</text>`).join("")}`;
   }).join("");
   if (!view.items.length) y += 150;
   const height = Math.max(560, y + 145);
@@ -316,7 +323,7 @@ export function menuSvg(view: ReturnType<typeof menuView>) {
     <g font-family="DejaVu Sans, Arial, sans-serif">
     <text x="52" y="57" font-size="25" letter-spacing="3" fill="#94A3B8">KALSHI · ACTIVIDAD DEPORTIVA</text>
     ${heading.map((line, i) => `<text x="52" y="${126 + i * 53}" font-size="44" font-weight="700" fill="#F8FAFC">${escapeHtml(line)}</text>`).join("")}
-    <text x="52" y="${subtitleY}" font-size="28" fill="#CBD5E1">${escapeHtml(view.subtitle)}</text>
+    ${subtitles.map((line, i) => `<text x="52" y="${subtitleY + i * 36}" font-size="28" fill="#CBD5E1">${escapeHtml(line)}</text>`).join("")}
     ${stepper}
     ${cards}
     ${view.items.length ? "" : lines(view.historical ? "Sin partidos en Historial para este rango." :

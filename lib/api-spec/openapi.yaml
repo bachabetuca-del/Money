@@ -202,7 +202,7 @@ components:
   schemas:
     ExplorerMarket:
       type: object
-      required: [ticker, sport, gameKey, gameName, gameDateLabel, betLabel, marketUrl, trades, lastTradeAt, state]
+      required: [ticker, sport, gameKey, gameName, gameDateLabel, betLabel, marketUrl, trades, lastTradeAt, state, gameResult, marketResult]
       properties:
         ticker: { type: string }
         sport: { type: string }
@@ -214,6 +214,12 @@ components:
         trades: { type: integer }
         lastTradeAt: { type: string }
         state: { type: string, enum: [upcoming, live, finished, unknown] }
+        gameResult:
+          type: [string, "null"]
+          description: Confirmed final scoreboard from Kalshi; null if unavailable, not inferred from settlement
+        marketResult:
+          type: [string, "null"]
+          description: Kalshi settlement of this specific bet, separate from the game's score
     ExplorerTrade:
       type: object
       required: [tradeId, ticker, direction, price, count, notional, createdTime]

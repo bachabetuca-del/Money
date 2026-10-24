@@ -14,6 +14,8 @@ import { liveNotificationTrades, TelegramTradeNotifications } from "./telegram-t
 import { enqueueLiveNotifications, tradeNotificationStore } from "./telegram-trade-notification-store";
 import { GameStatusMonitor } from "./kalshi-game-status";
 import { KalshiGameStatusSource } from "./kalshi-game-status-source";
+import { KalshiResultsSource } from "./kalshi-results-source";
+import { FinalResultsWorker } from "./kalshi-results-store";
 import { canMonitorMarket, gameStatusRepository, readGameStatus } from "./kalshi-game-status-store";
 import { isOwnerChat, ownerChatId } from "./owner-policy";
 import { publicTradeExecution } from "./kalshi-trade-execution";
@@ -128,6 +130,9 @@ const eventTitleCache = new Map<string, Promise<string>>();
 const marketHistory = new MarketHistory(marketHistoryStore, readHistoryPage, () => new Date(),
   (ticker, error) => logger.warn({ ticker, error }, "Market history incomplete; retry scheduled"));
 const gameStatusSource = new KalshiGameStatusSource(<T>(path: string) => fetchJson<T>(`${KALSHI_API}${path}`));
+const resultsSource = new KalshiResultsSource(<T>(path: string) => fetchJson<T>(`${KALSHI_API}${path}`));
+const finalResultsWorker = new FinalResultsWorker((ticker, milestone) => resultsSource.resolve(ticker, milestone),
+  message => logger.warn({ message }, "Final result enrichment failed"));
 const gameStatusMonitor = new GameStatusMonitor(gameStatusRepository,
   (ticker, previous, now) => gameStatusSource.resolve(ticker, previous, now),
   () => new Date(), error => logger.warn({ error }, "Game status lookup will retry"));
@@ -617,6 +622,11 @@ export function startKalshiMonitor() {
   setInterval(refreshDashboard, POLL_INTERVAL_MS);
   void pollOnce();
   setInterval(() => void pollOnce(), POLL_INTERVAL_MS);
+  setInterval(() => {
+    void readSettings().then(async settings => {
+      if (settings.enabled) await finalResultsWorker.tick();
+    }).catch(error => logger.warn({ error: String(error) }, "Final result worker failed"));
+  }, 60_000);
   setInterval(() => {
     void readSettings().then(async settings => {
       if (settings.enabled) await gameStatusMonitor.tick();
