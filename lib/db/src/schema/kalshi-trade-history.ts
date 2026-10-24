@@ -7,6 +7,8 @@ export const kalshiTradeHistoryTable = pgTable("kalshi_trade_history", {
   snapshotAt: timestamp("snapshot_at", { withTimezone: true }).notNull(),
   sinceAt: timestamp("since_at", { withTimezone: true }),
   scanned: integer("scanned").notNull().default(0),
+  // Existing imports used >$5k; keep their coverage distinct from new $1k imports.
+  captureMinimum: integer("capture_minimum").notNull().default(5000),
   error: text("error"),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
 });

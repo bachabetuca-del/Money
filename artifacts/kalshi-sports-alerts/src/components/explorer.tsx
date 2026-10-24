@@ -72,7 +72,7 @@ type Params = {
 
 function readParams(): Params {
   const p = new URLSearchParams(window.location.search);
-  const band = p.get('band') === 'medium' ? 'medium' : 'large';
+  const band = p.get('band') === 'small' ? 'small' : p.get('band') === 'medium' ? 'medium' : 'large';
   const scope = p.get('scope') === 'history' ? 'history' : 'active';
   const w = p.get('window');
   const win = w === '1h' || w === '24h' ? w : 'all';
@@ -356,7 +356,8 @@ export function Explorer() {
     return s;
   }, [trades]);
   const grand = totals.yes + totals.no + totals.unknown;
-  const bandText = band === 'medium' ? 'Operaciones mayores a $5,000 y menores a $10,000' : 'Operaciones grandes: umbral configurado, mínimo $10,000';
+  const bandText = band === 'small' ? 'Operaciones de $1,000 a $5,000, ambos incluidos' :
+    band === 'medium' ? 'Operaciones mayores a $5,000 y menores a $10,000' : 'Operaciones grandes: umbral configurado, mínimo $10,000';
   const scopeText = scope === 'active' ? 'Vigentes: en juego y próximas 48 h' : 'Historial: partidos antiguos o finalizados';
 
   return (
@@ -370,7 +371,7 @@ export function Explorer() {
 
       <div className="ws-filters">
         <Seg label="scope" value={scope} onChange={(v) => change({ scope: v, ticker: '' })} options={[['active', 'Vigentes · 48 h'], ['history', 'Historial']]} />
-        <Seg label="band" value={band} onChange={(v) => change({ band: v, ticker: '' })} options={[['large', '$10k+'], ['medium', '$5k–$10k']]} />
+        <Seg label="band" value={band} onChange={(v) => change({ band: v, ticker: '' })} options={[['large', '$10k+'], ['medium', '$5k–$10k'], ['small', '$1k–$5k']]} />
         <Seg label="window" value={win} onChange={(v) => change({ win: v })} options={[['1h', '1 hora'], ['24h', '24 horas'], ['all', 'Todo']]} />
         <span className="ws-filter-note">{scopeText} · {bandText}</span>
       </div>
@@ -394,7 +395,7 @@ export function Explorer() {
             )}
             {markets && grouped.length === 0 && (
               <div className="ws-empty small" data-testid="empty-catalog">
-                {q ? 'Ningún mercado coincide con la búsqueda.' : `No hay mercados guardados para este filtro (${band === 'medium' ? 'medianas' : 'grandes'}, ${scope === 'active' ? 'activos' : 'historial'}).`}
+                {q ? 'Ningún mercado coincide con la búsqueda.' : `No hay mercados guardados para este filtro (${band === 'small' ? '$1k–$5k' : band === 'medium' ? 'medianas' : 'grandes'}, ${scope === 'active' ? 'activos' : 'historial'}).`}
               </div>
             )}
             {grouped.map((s) => {

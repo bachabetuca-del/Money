@@ -222,8 +222,9 @@ test("missing/invalid schedule dates fall back safely; season titles are never a
 });
 
 test("compact range labels preserve exact thresholds, selection and callback routing", () => {
-  assert.deepEqual(bandButtons("large").map(button => button.text), ["• $10k+", "$5k–$10k"]);
-  assert.deepEqual(bandButtons("medium").map(button => button.text), ["$10k+", "• $5k–$10k"]);
+  assert.deepEqual(bandButtons("large").map(button => button.text), ["• $10k+", "$5k–$10k", "$1k–$5k"]);
+  assert.deepEqual(bandButtons("medium").map(button => button.text), ["$10k+", "• $5k–$10k", "$1k–$5k"]);
+  assert.deepEqual(bandButtons("small").map(button => button.text), ["$10k+", "$5k–$10k", "• $1k–$5k"]);
   assert.equal(bandButtons("large", 15050)[0].text, "• $15,050+");
   assert.equal(bandButtons("large", 15050)[0].callback_data, "d:band:large");
 });

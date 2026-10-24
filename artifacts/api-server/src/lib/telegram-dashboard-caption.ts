@@ -4,7 +4,7 @@ import { escapeHtml, marketCardCaption, type MarketCardTrade } from "./telegram-
 export function spanishRange(range: TradeRange) {
   const amount = (value: number) => `$${value.toLocaleString("en-US")}`;
   return range.maximum === null ? `≥ ${amount(range.minimum)}` :
-    `> ${amount(range.minimum)} y < ${amount(range.maximum)}`;
+    `${range.minimumInclusive ? "≥" : ">"} ${amount(range.minimum)} y ${range.maximumInclusive ? "≤" : "<"} ${amount(range.maximum)}`;
 }
 
 function shortName(value: string | null, limit: number) {

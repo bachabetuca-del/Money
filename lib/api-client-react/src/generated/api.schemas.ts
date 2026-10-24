@@ -186,6 +186,7 @@ export type GetKalshiExplorerBand = typeof GetKalshiExplorerBand[keyof typeof Ge
 export const GetKalshiExplorerBand = {
   large: 'large',
   medium: 'medium',
+  small: 'small',
 } as const;
 
 export type GetKalshiExplorerScope = typeof GetKalshiExplorerScope[keyof typeof GetKalshiExplorerScope];

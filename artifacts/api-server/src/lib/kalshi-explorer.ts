@@ -3,7 +3,7 @@ import { db, kalshiAlertsTable, kalshiMonitorSettingsTable } from "@workspace/db
 import { telegramDashboardStore } from "./telegram-dashboard-store";
 import { buildCatalog, type CatalogMarket } from "./telegram-dashboard-view";
 import { scopedCatalog } from "./telegram-game-scope";
-import { tradeRange, type TradeBand } from "./kalshi-trade-bands";
+import { CAPTURE_MINIMUM, tradeRange, type TradeBand } from "./kalshi-trade-bands";
 import { publicDirection } from "./telegram-trade-direction";
 import { marketHistoryStore } from "./kalshi-market-history-store";
 import { explorerState, explorerSince, type ExplorerWindow } from "./kalshi-explorer-view";
@@ -57,7 +57,8 @@ export async function getKalshiExplorer(filters: ExplorerFilters, now = new Date
   const condition = and(
     eq(kalshiAlertsTable.ticker, filters.ticker),
     range.minimumInclusive ? gte(kalshiAlertsTable.notional, range.minimum) : gt(kalshiAlertsTable.notional, range.minimum),
-    range.maximum === null ? undefined : lt(kalshiAlertsTable.notional, range.maximum),
+    range.maximum === null ? undefined : range.maximumInclusive
+      ? lte(kalshiAlertsTable.notional, range.maximum) : lt(kalshiAlertsTable.notional, range.maximum),
     since ? gte(kalshiAlertsTable.createdTime, since) : undefined,
     lte(kalshiAlertsTable.createdTime, now),
   );
@@ -70,7 +71,9 @@ export async function getKalshiExplorer(filters: ExplorerFilters, now = new Date
   const totalTrades = totals[0]?.total ?? 0;
   let historyStatus = "Histórico pendiente; solo operaciones guardadas";
   if (job?.error) historyStatus = "Histórico incompleto; reintento pendiente";
-  else if (job?.phase === "complete") {
+  else if (job && (job.captureMinimum ?? 5_000) > CAPTURE_MINIMUM && filters.band === "small") {
+    historyStatus = "Histórico de $1k–$5k pendiente de ampliar; solo operaciones guardadas";
+  } else if (job?.phase === "complete") {
     historyStatus = `Histórico importado hasta ${job.snapshotAt.toISOString()}; actividad posterior según monitor`;
   } else if (job) historyStatus = "Histórico en proceso; datos parciales";
   return {

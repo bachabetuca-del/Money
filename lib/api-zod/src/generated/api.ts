@@ -18,7 +18,7 @@ export const getKalshiExplorerQueryTickerMax = 200;
 export const getKalshiExplorerQueryWindowDefault = `all`;
 
 export const GetKalshiExplorerQueryParams = zod.object({
-  "band": zod.enum(['large', 'medium']).default(getKalshiExplorerQueryBandDefault),
+  "band": zod.enum(['large', 'medium', 'small']).default(getKalshiExplorerQueryBandDefault),
   "scope": zod.enum(['active', 'history']).default(getKalshiExplorerQueryScopeDefault),
   "ticker": zod.coerce.string().max(getKalshiExplorerQueryTickerMax).optional(),
   "window": zod.enum(['1h', '24h', 'all']).default(getKalshiExplorerQueryWindowDefault)

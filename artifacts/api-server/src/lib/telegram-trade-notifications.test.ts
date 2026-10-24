@@ -83,7 +83,7 @@ function setup() {
 
 test("only fresh sports trades strictly over $10k qualify; snapshots, exact $10k and older history are silent", () => {
   const boundary = clock.getTime();
-  const rows = [5000, 9999.99, 10000, 10000.01, 20000].map(notional => ({
+  const rows = [999.99, 1000, 2500, 5000, 9999.99, 10000, 10000.01, 20000].map(notional => ({
     notional, createdTime: new Date(boundary + 1).toISOString(),
   }));
   rows.push({ notional: 80000, createdTime: new Date(boundary - 1).toISOString() });

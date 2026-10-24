@@ -1,3 +1,5 @@
+import { CAPTURE_MINIMUM } from "./kalshi-trade-bands";
+
 export type HistoryJob = {
   ticker: string;
   phase: "live" | "archive" | "complete";
@@ -5,6 +7,7 @@ export type HistoryJob = {
   snapshotAt: Date;
   sinceAt: Date | null;
   scanned: number;
+  captureMinimum?: number;
   error: string | null;
   updatedAt: Date;
 };
@@ -36,7 +39,8 @@ export class MarketHistory<T> {
   ) { this.startedAt = this.now(); }
 
   private stale(job: HistoryJob, now: Date) {
-    return job.snapshotAt < this.startedAt || now.getTime() - job.snapshotAt.getTime() >= 15 * 60_000;
+    return (job.captureMinimum ?? 5_000) > CAPTURE_MINIMUM ||
+      job.snapshotAt < this.startedAt || now.getTime() - job.snapshotAt.getTime() >= 15 * 60_000;
   }
 
   async status(ticker: string): Promise<HistoryStatus> {
@@ -59,10 +63,14 @@ export class MarketHistory<T> {
         (a.job?.updatedAt.getTime() ?? 0) - (b.job?.updatedAt.getTime() ?? 0));
       const candidate = candidates[0];
       if (!candidate) return;
-      let job: HistoryJob = candidate.job ?? {
+      // A lower capture floor needs a complete fresh pass, not just trades since
+      // the last snapshot. Rows are deduplicated and finished games stay excluded.
+      const needsExpandedCoverage = candidate.job && (candidate.job.captureMinimum ?? 5_000) > CAPTURE_MINIMUM;
+      let job: HistoryJob = !candidate.job || needsExpandedCoverage ? {
         ticker: candidate.ticker, phase: "live", cursor: null,
-        snapshotAt: now, sinceAt: null, scanned: 0, error: null, updatedAt: now,
-      };
+        snapshotAt: now, sinceAt: null, scanned: 0, captureMinimum: CAPTURE_MINIMUM,
+        error: null, updatedAt: now,
+      } : candidate.job;
       if (job.phase === "complete") {
         job = { ...job, phase: "live", sinceAt: job.snapshotAt, snapshotAt: now, cursor: null };
       }

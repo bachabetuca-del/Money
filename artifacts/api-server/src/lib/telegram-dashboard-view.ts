@@ -133,7 +133,7 @@ export function navigate(selection: Selection, action: string, catalog: CatalogM
     return { ...HOME, scope: value, band: selection.band, sportKey, screen: sportKey ? "games" : "sports" };
   }
   catalog = scopedCatalog(catalog, scope, now);
-  if (type === "band" && (value === "large" || value === "medium")) {
+  if (type === "band" && (value === "large" || value === "medium" || value === "small")) {
     return { ...HOME, scope, band: value };
   }
   if (type === "refresh") return selection;
@@ -166,6 +166,7 @@ export function bandButtons(band: TradeBand, threshold = 10_000): Button[] {
   return [
     { text: `${band === "large" ? "• " : ""}$${amount}+`, callback_data: "d:band:large" },
     { text: `${band === "medium" ? "• " : ""}$5k–$10k`, callback_data: "d:band:medium" },
+    { text: `${band === "small" ? "• " : ""}$1k–$5k`, callback_data: "d:band:small" },
   ];
 }
 

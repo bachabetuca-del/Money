@@ -276,11 +276,14 @@ test("an empty catalog still has one dashboard with clear waiting status", async
 test("the new section has strict $5k/$10k boundaries and never overlaps the existing section", () => {
   const medium = tradeRange("medium");
   const large = tradeRange("large");
-  for (const amount of [0, 4999.99, 5000, 5000.01, 7500, 9999.99, 10000, 10000.01, 50000]) {
+  const small = tradeRange("small");
+  for (const amount of [0, 999.99, 1000, 1000.01, 4999.99, 5000, 5000.01, 7500, 9999.99, 10000, 10000.01, 50000]) {
+    assert.equal(inTradeRange(amount, small), amount >= 1000 && amount <= 5000);
     assert.equal(inTradeRange(amount, medium), amount > 5000 && amount < 10000);
     assert.equal(inTradeRange(amount, large), amount >= 10000);
-    assert.equal(shouldCaptureTrade(amount), amount > 5000);
+    assert.equal(shouldCaptureTrade(amount), amount >= 1000);
     assert.ok(!(inTradeRange(amount, medium) && inTradeRange(amount, large)));
+    assert.ok([small, medium, large].filter(range => inTradeRange(amount, range)).length <= 1);
   }
   assert.equal(inTradeRange(Number.NaN, medium), false);
   assert.equal(inTradeRange(Number.POSITIVE_INFINITY, large), false);
@@ -295,7 +298,7 @@ test("the new section has strict $5k/$10k boundaries and never overlaps the exis
 test("switching sections filters a shared market's graph, preserves the message, and persists after restart", async () => {
   const { store, api, dashboard } = setup();
   const original = store.tradesByTicker.get(moneyline)![0];
-  store.tradesByTicker.set(moneyline, [original, ...[5000, 5000.01, 7500, 9999.99, 10000].map((notional, index) => ({
+  store.tradesByTicker.set(moneyline, [original, ...[999.99, 1000, 2500, 5000, 5000.01, 7500, 9999.99, 10000].map((notional, index) => ({
     ...original, notional, createdTime: new Date(original.createdTime.getTime() + index + 1),
   }))]);
   await dashboard.sync(settings);
@@ -314,6 +317,16 @@ test("switching sections filters a shared market's graph, preserves the message,
   assert.equal((await store.state(settings.chatId))?.screen, "chart");
   await press(restarted, "d:home");
   assert.equal((await store.state(settings.chatId))?.band, "medium");
+  await press(restarted, "d:band:small");
+  await openChart(restarted, store);
+  assert.deepEqual(store.graphRows.at(-1)?.map(row => row.notional), [1000, 2500, 5000]);
+  assert.match(String(api.photos().at(-1)?.body.media), /Rango: ≥ \$1,000 y ≤ \$5,000/);
+  const again = new TelegramDashboard(store, api);
+  await again.sync(settings);
+  assert.equal((await store.state(settings.chatId))?.band, "small");
+  assert.equal((await store.state(settings.chatId))?.screen, "chart");
+  await press(again, "d:back");
+  assert.equal((await store.state(settings.chatId))?.band, "small");
   await press(restarted, "d:band:large");
   assert.equal((await store.state(settings.chatId))?.band, "large");
   assert.equal(api.calls.filter(call => call.method === "sendPhoto").length, 0);
@@ -428,6 +441,37 @@ test("failed historical pages retain the cursor and retry only after backoff, wi
   assert.equal((await importer.status(moneyline)).error, false);
 });
 
+test("lower capture floor reimports old history once and resumes its new cursor without duplicates", async () => {
+  const repo = new HistoryMemory();
+  repo.tickers = [moneyline];
+  const now = new Date("2026-10-22T18:00:00Z");
+  repo.rows.add("saved-large-trade");
+  repo.jobs.set(moneyline, {
+    ticker: moneyline, phase: "complete", cursor: null, snapshotAt: now,
+    sinceAt: now, scanned: 100, captureMinimum: 5000, error: null, updatedAt: now,
+  });
+  const calls: HistoryJob[] = [];
+  const source = async (job: HistoryJob) => {
+    calls.push({ ...job });
+    return { rows: ["saved-large-trade", "small-trade"],
+      scanned: 2, cursor: calls.length === 1 ? "expanded-page-2" : null };
+  };
+  const importer = new MarketHistory(repo, source, () => now);
+  assert.equal((await importer.status(moneyline)).phase, "pending");
+  await importer.tick();
+  assert.equal(calls[0].sinceAt, null, "old incremental boundary cannot hide smaller historical trades");
+  assert.equal(calls[0].cursor, null);
+  assert.equal(calls[0].captureMinimum, 1000);
+  const restarted = new MarketHistory(repo, source, () => now);
+  await restarted.tick();
+  assert.equal(calls[1].cursor, "expanded-page-2", "restart must not reset the expanded import");
+  await restarted.tick();
+  assert.equal(repo.jobs.get(moneyline)?.phase, "complete");
+  assert.equal(repo.rows.size, 2);
+  await restarted.tick();
+  assert.equal(calls.length, 3, "complete coverage must not reimport repeatedly");
+});
+
 test("the selected market gets backfill priority, without concurrent workers", async () => {
   const repo = new HistoryMemory();
   const calls: string[] = [];
@@ -446,7 +490,7 @@ test("completed history reconciles downtime using an overlapping incremental tim
   repo.tickers = [moneyline];
   const old = new Date("2026-10-22T17:00:00Z");
   repo.jobs.set(moneyline, { ticker: moneyline, phase: "complete", cursor: null,
-    snapshotAt: old, sinceAt: null, scanned: 1000, error: null, updatedAt: old });
+    snapshotAt: old, sinceAt: null, scanned: 1000, captureMinimum: 1000, error: null, updatedAt: old });
   const now = new Date("2026-10-22T18:00:00Z");
   let requested: HistoryJob | undefined;
   const importer = new MarketHistory(repo, async job => {

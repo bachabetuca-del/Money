@@ -104,7 +104,8 @@ export class TelegramDashboard {
         contentHash: null, cleanupComplete: false, cleanupWarning: null,
       };
     }
-    const band = action === "d:band:medium" ? "medium" : action === "d:band:large" ? "large" : state.band;
+    const band = action === "d:band:small" ? "small" :
+      action === "d:band:medium" ? "medium" : action === "d:band:large" ? "large" : state.band;
     const range = tradeRange(band, settings.minimumNotional);
     let summaries = await this.store.markets(range);
     const missingNames = summaries.filter(row => !row.eventTitle || !row.marketTitle ||

@@ -117,7 +117,8 @@ export function marketCardSvg(trades: MarketCardTrade[], threshold: number, filt
   parts.push(`<text x="52" y="${y}" font-size="34" font-weight="700" fill="${INK}">Total en el rango elegido</text>`);
   y += 40;
   parts.push(`<text x="52" y="${y}" font-size="26" fill="${MUTED}">${escapeHtml(filterLabel ??
-    (band === "medium" ? "Operaciones > $5,000 y < $10,000" : `Operaciones ≥ ${exactMoney(threshold)}`))}</text>`);
+    (band === "small" ? "Operaciones ≥ $1,000 y ≤ $5,000" :
+      band === "medium" ? "Operaciones > $5,000 y < $10,000" : `Operaciones ≥ ${exactMoney(threshold)}`))}</text>`);
   y += 30;
   const grand = sums[0] + sums[1] + sums[2];
   const totalLabel = `${ordered.length.toLocaleString("en-US")} ${ordered.length === 1 ? "operación" : "operaciones"} · total`;

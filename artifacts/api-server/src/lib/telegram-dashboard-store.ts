@@ -10,7 +10,8 @@ import { scoreDisplay } from "./kalshi-score-queue";
 function rangeCondition(range: TradeRange) {
   return and(
     range.minimumInclusive ? gte(kalshiAlertsTable.notional, range.minimum) : gt(kalshiAlertsTable.notional, range.minimum),
-    range.maximum === null ? undefined : lt(kalshiAlertsTable.notional, range.maximum),
+    range.maximum === null ? undefined : range.maximumInclusive
+      ? lte(kalshiAlertsTable.notional, range.maximum) : lt(kalshiAlertsTable.notional, range.maximum),
   );
 }
 
@@ -19,7 +20,8 @@ export const telegramDashboardStore: DashboardStore = {
     const [state] = await db.select().from(telegramDashboardTable)
       .where(eq(telegramDashboardTable.chatId, chatId)).limit(1);
     if (!state) return undefined;
-    return { ...state, ...decodeScopeScreen(state.screen), band: state.band === "medium" ? "medium" : "large" };
+    return { ...state, ...decodeScopeScreen(state.screen),
+      band: state.band === "small" ? "small" : state.band === "medium" ? "medium" : "large" };
   },
   async save(state: DashboardState) {
     // Use the existing text screen field, preserving old rows without a schema migration.

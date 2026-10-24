@@ -25,7 +25,7 @@ paths:
           name: band
           schema:
             type: string
-            enum: [large, medium]
+            enum: [large, medium, small]
             default: large
         - in: query
           name: scope
