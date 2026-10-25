@@ -19,6 +19,7 @@ import { FinalResultsWorker } from "./kalshi-results-store";
 import { canMonitorMarket, gameStatusRepository, readGameStatus } from "./kalshi-game-status-store";
 import { isOwnerChat, ownerChatId } from "./owner-policy";
 import { publicTradeExecution } from "./kalshi-trade-execution";
+import { KalshiCooldownError, KalshiHttpClient } from "./kalshi-http";
 
 const KALSHI_API = "https://external-api.kalshi.com/trade-api/v2";
 const TELEGRAM_API = "https://api.telegram.org";
@@ -149,12 +150,14 @@ const tradeNotifications = new TelegramTradeNotifications(tradeNotificationStore
   else logger.warn({ error: detail }, event === "failed" ? "Telegram notification will retry" : "Previous notification cleanup will retry");
 });
 
-async function fetchJson<T>(url: string): Promise<T> {
-  const response = await fetch(url, { signal: AbortSignal.timeout(15_000) });
-  if (!response.ok) {
-    throw new Error(`Kalshi returned HTTP ${response.status}`);
-  }
-  return (await response.json()) as T;
+const kalshiHttp = new KalshiHttpClient(fetch, Date.now, (retryAt, delayMs) => {
+  lastError = new KalshiCooldownError(retryAt).message;
+  logger.warn({ retryAt: new Date(retryAt).toISOString(), delayMs },
+    "Kalshi rate limit: shared pause activated");
+});
+
+function fetchJson<T>(url: string): Promise<T> {
+  return kalshiHttp.json<T>(url);
 }
 
 async function getSportsSeries(): Promise<Map<string, KalshiSeries>> {
@@ -416,7 +419,7 @@ async function telegramPhotoRequest<T>(
 }
 
 async function pollOnce() {
-  if (pollInProgress) return;
+  if (pollInProgress || kalshiHttp.isPaused) return;
   pollInProgress = true;
   const pollStartedAt = Date.now();
 
@@ -495,7 +498,8 @@ async function pollOnce() {
     }
     lastPollBoundary = pollStartedAt;
     lastChecked = new Date().toISOString();
-    lastError = null;
+    // A concurrent metadata/status request may have activated a shared pause.
+    if (!kalshiHttp.isPaused) lastError = null;
   } catch (error) {
     const message =
       error instanceof Error ? error.message : "Unknown Kalshi monitor error.";
@@ -623,11 +627,13 @@ export function startKalshiMonitor() {
   void pollOnce();
   setInterval(() => void pollOnce(), POLL_INTERVAL_MS);
   setInterval(() => {
+    if (kalshiHttp.isPaused) return;
     void readSettings().then(async settings => {
       if (settings.enabled) await finalResultsWorker.tick();
     }).catch(error => logger.warn({ error: String(error) }, "Final result worker failed"));
   }, 5_000);
   setInterval(() => {
+    if (kalshiHttp.isPaused) return;
     void readSettings().then(async settings => {
       if (settings.enabled) await gameStatusMonitor.tick();
     }).catch(error => logger.warn({ error: error instanceof Error ? error.message : "Game status worker failed" },
@@ -635,12 +641,14 @@ export function startKalshiMonitor() {
   }, 2000);
   // Independent of live polling: a large backfill must not block live trades or navigation.
   setInterval(() => {
+    if (kalshiHttp.isPaused) return;
     void readSettings().then(async settings => {
       if (settings.enabled && settings.chatId && botToken()) await marketHistory.tick();
     }).catch(error => logger.warn({ error: error instanceof Error ? error.message : "History worker failed" },
       "Market history worker failed"));
   }, 2000);
   setInterval(() => {
+    if (kalshiHttp.isPaused) return;
     void readSettings().then(async settings => {
       if (botToken()) await tradeNotifications.tick(settings);
     }).catch(error => logger.warn({ error: error instanceof Error ? error.message : "Notification worker failed" },
