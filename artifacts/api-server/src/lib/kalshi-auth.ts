@@ -6,7 +6,16 @@ export class KalshiAuth {
   constructor(private readonly keyId: string, pem: string) {
     if (!keyId || !pem) throw new Error("Faltan las credenciales de Kalshi WebSocket.");
     try {
-      this.key = createPrivateKey(pem.replace(/\\n/g, "\n"));
+      // Secret forms can flatten PEM lines or preserve literal \r\n escapes.
+      // Rewrap only a complete, matching private-key block with a base64 body.
+      const text = pem.trim().replace(/^(['"])([\s\S]*)\1$/, "$2")
+        .replace(/\\r/g, "\r").replace(/\\n/g, "\n").trim();
+      const block = text.match(/^-----BEGIN ((?:RSA )?PRIVATE KEY)-----([\s\S]*?)-----END \1-----$/);
+      if (!block) throw new Error("Invalid PEM block");
+      const body = block[2].replace(/\s/g, "");
+      if (!/^[A-Za-z0-9+/=]+$/.test(body)) throw new Error("Invalid PEM body");
+      const normalized = `-----BEGIN ${block[1]}-----\n${body.match(/.{1,64}/g)!.join("\n")}\n-----END ${block[1]}-----\n`;
+      this.key = createPrivateKey(normalized);
     } catch {
       throw new Error("La clave privada de Kalshi no es un PEM válido.");
     }

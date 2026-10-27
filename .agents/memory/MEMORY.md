@@ -6,3 +6,4 @@
 - [Game lifecycle](game-lifecycle.md) — white upcoming, yellow in play, red finished; archive ended games without recurring individual checks or deleting history.
 - [Always-on ownership](always-on-ownership.md) — user-approved Reserved VM preparation, owner-only controls, and explicit development-to-production polling handoff.
 - [Kalshi rate limits](kalshi-rate-limits.md) — share 429 pauses across workers; respect Retry-After and keep saved data accessible.
+- [Kalshi credential formatting](kalshi-credential-formatting.md) — rule out altered PEM line breaks before asking the user to replace an API key pair.

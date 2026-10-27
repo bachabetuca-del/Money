@@ -49,6 +49,20 @@ test("missing and invalid credentials fail without exposing their input", () => 
   assert.throws(() => new KalshiAuth("id", ec.privateKey.export({ type: "pkcs8", format: "pem" }).toString()), /RSA o Ed25519/);
 });
 
+test("PEM formatting from secret forms preserves valid signatures without accepting damaged keys", () => {
+  const flattened = pem.trim().replace(/\n/g, " ");
+  const quotedWindowsEscapes = `"${pem.replace(/\n/g, "\\r\\n")}"`;
+  for (const input of [flattened, quotedWindowsEscapes, `  ${pem}  `]) {
+    const headers = new KalshiAuth("test-id", input).headers("/trade-api/ws/v2", 123);
+    assert.ok(verify(null, Buffer.from("123GET/trade-api/ws/v2"), keys.publicKey,
+      Buffer.from(headers["KALSHI-ACCESS-SIGNATURE"], "base64")));
+  }
+  for (const input of [pem.replace("-----END PRIVATE KEY-----", "-----END RSA PRIVATE KEY-----"),
+    pem.replace("-----END PRIVATE KEY-----", ""), `${pem}unexpected trailing text`]) {
+    assert.throws(() => new KalshiAuth("test-id", input), /PEM válido/);
+  }
+});
+
 test("stream mapping uses milliseconds, preserves public direction and notional", () => {
   const trade = decodeStreamTrade(rawTrade)!;
   assert.equal(trade.created_time, new Date(rawTrade.ts_ms).toISOString());
