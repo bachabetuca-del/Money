@@ -1,0 +1,50 @@
+import { constants, createPrivateKey, sign, type KeyObject } from "node:crypto";
+
+/** Keys stay server-side. Never include a key, signature or request headers in logs. */
+export class KalshiAuth {
+  private readonly key: KeyObject;
+  constructor(private readonly keyId: string, pem: string) {
+    if (!keyId || !pem) throw new Error("Faltan las credenciales de Kalshi WebSocket.");
+    try {
+      this.key = createPrivateKey(pem.replace(/\\n/g, "\n"));
+    } catch {
+      throw new Error("La clave privada de Kalshi no es un PEM válido.");
+    }
+    if (!["rsa", "ed25519"].includes(this.key.asymmetricKeyType ?? "")) {
+      throw new Error("Kalshi requiere una clave RSA o Ed25519.");
+    }
+  }
+
+  headers(path: string, timestamp = Date.now()): Record<string, string> {
+    const time = String(timestamp);
+    const message = Buffer.from(`${time}GET${path.split("?")[0]}`);
+    const signature = this.key.asymmetricKeyType === "ed25519"
+      ? sign(null, message, this.key)
+      : sign("sha256", message, {
+        key: this.key, padding: constants.RSA_PKCS1_PSS_PADDING,
+        saltLength: constants.RSA_PSS_SALTLEN_DIGEST,
+      });
+    return {
+      "KALSHI-ACCESS-KEY": this.keyId,
+      "KALSHI-ACCESS-TIMESTAMP": time,
+      "KALSHI-ACCESS-SIGNATURE": signature.toString("base64"),
+    };
+  }
+}
+
+/** Globally space REST reads; don't release a burst after idle time. */
+export class KalshiReadPacer {
+  private next = 0;
+  private pending = 0;
+  async wait(): Promise<void> {
+    if (this.pending >= 500) throw new Error("Kalshi REST ocupado; se reintentará.");
+    const delay = Math.max(0, this.next - Date.now());
+    this.next = Math.max(this.next, Date.now()) + 250; // Four reads/sec across ALL workers.
+    this.pending++;
+    try {
+      if (delay) await new Promise(resolve => setTimeout(resolve, delay));
+    } finally {
+      this.pending--;
+    }
+  }
+}

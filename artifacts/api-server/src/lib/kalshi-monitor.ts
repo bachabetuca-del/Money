@@ -20,6 +20,9 @@ import { canMonitorMarket, gameStatusRepository, readGameStatus } from "./kalshi
 import { isOwnerChat, ownerChatId } from "./owner-policy";
 import { publicTradeExecution } from "./kalshi-trade-execution";
 import { KalshiCooldownError, KalshiHttpClient } from "./kalshi-http";
+import { KalshiAuth, KalshiReadPacer } from "./kalshi-auth";
+import { KalshiTradeStream, type StreamTrade } from "./kalshi-trade-stream";
+import { KalshiLiveCoverage } from "./kalshi-live-coverage";
 
 const KALSHI_API = "https://external-api.kalshi.com/trade-api/v2";
 const TELEGRAM_API = "https://api.telegram.org";
@@ -119,10 +122,20 @@ let seriesFetchedAt = 0;
 let latestQualifyingTrades: PublicTrade[] = [];
 let lastChecked: string | null = null;
 let lastError: string | null = null;
-let lastPollBoundary: number | null = null;
 let pollInProgress = false;
 let monitorStarted = false;
 let telegramPollInProgress = false;
+let kalshiAuth: KalshiAuth | null = null;
+let tradeStream: KalshiTradeStream | null = null;
+let streamError: string | null = null;
+let ingestionChain: Promise<void> = Promise.resolve();
+const liveStartedAt = Date.now();
+const liveCoverage = new KalshiLiveCoverage(liveStartedAt);
+const restPacer = new KalshiReadPacer();
+// Keep REST off the healthy live path. Reconnects/gaps request a catch-up.
+function needsRestRecovery() {
+  return liveCoverage.needsRecovery(tradeStream?.live ?? false);
+}
 const tradeContextCache = new Map<
   string,
   Promise<{ eventTitle: string; marketTitle: string }>
@@ -154,6 +167,9 @@ const kalshiHttp = new KalshiHttpClient(fetch, Date.now, (retryAt, delayMs) => {
   lastError = new KalshiCooldownError(retryAt).message;
   logger.warn({ retryAt: new Date(retryAt).toISOString(), delayMs },
     "Kalshi rate limit: shared pause activated");
+}, async url => {
+  await restPacer.wait();
+  return kalshiAuth?.headers(new URL(url).pathname);
 });
 
 function fetchJson<T>(url: string): Promise<T> {
@@ -419,17 +435,35 @@ async function telegramPhotoRequest<T>(
 }
 
 async function pollOnce() {
-  if (pollInProgress || kalshiHttp.isPaused) return;
+  if (pollInProgress || kalshiHttp.isPaused || !needsRestRecovery()) return;
   pollInProgress = true;
   const pollStartedAt = Date.now();
+  const snapshot = liveCoverage.snapshot();
+  const { boundary } = snapshot;
 
   try {
-    const [seriesIndex, tradeFeed, settings] = await Promise.all([
-      getSportsSeries(),
-      getTradesSince(lastPollBoundary),
-      readSettings(),
-    ]);
+    const tradeFeed = await getTradesSince(boundary);
+    await ingestTrades(tradeFeed, boundary);
+    // Leave an overlap for delayed executions and second-resolution REST filters.
+    liveCoverage.recoveredThrough(snapshot, pollStartedAt);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Unknown Kalshi monitor error.";
+    lastError = message;
+    logger.warn({ error: message }, "Kalshi REST recovery failed");
+  } finally {
+    pollInProgress = false;
+  }
+}
 
+/** Serialize REST recovery and stream batches; storage/outbox each deduplicate by trade ID. */
+function ingestTrades(feed: KalshiTradeApi[], boundary: number | null): Promise<void> {
+  const next = ingestionChain.then(() => processTrades(feed, boundary));
+  ingestionChain = next.catch(() => {});
+  return next;
+}
+
+async function processTrades(tradeFeed: KalshiTradeApi[], boundary: number | null) {
+    const [seriesIndex, settings] = await Promise.all([getSportsSeries(), readSettings()]);
     const allSportsTrades = tradeFeed
       .map((trade) => toPublicTrade(trade, seriesIndex))
       .filter((trade): trade is PublicTrade => trade !== undefined)
@@ -444,10 +478,10 @@ async function pollOnce() {
     );
     const capturedTrades = allSportsTrades.filter(trade => shouldCaptureTrade(trade.notional));
     const newTrades =
-      lastPollBoundary === null
+      boundary === null
         ? []
         : capturedTrades.filter(
-            (trade) => new Date(trade.createdTime).getTime() > lastPollBoundary!,
+            (trade) => new Date(trade.createdTime).getTime() > boundary,
           );
 
     const contextCandidates = [
@@ -464,9 +498,11 @@ async function pollOnce() {
       ] as const),
     );
     const enrichedByTradeId = new Map(enrichedCandidates);
-    latestQualifyingTrades = qualifyingTrades
+    latestQualifyingTrades = [...new Map([...qualifyingTrades
       .slice(0, 50)
-      .map((trade) => enrichedByTradeId.get(trade.tradeId) ?? trade);
+      .map((trade) => enrichedByTradeId.get(trade.tradeId) ?? trade),
+      ...latestQualifyingTrades].map(trade => [trade.tradeId, trade])).values()]
+      .sort((a, b) => Date.parse(b.createdTime) - Date.parse(a.createdTime)).slice(0, 50);
 
     if (settings.enabled && settings.chatId && botToken()) {
       for (const trade of newTrades) {
@@ -494,19 +530,56 @@ async function pollOnce() {
       // Historical imports can already have inserted the same trade. The separate
       // outbox deduplicates notifications independently of graph/history storage.
       await enqueueLiveNotifications(settings.chatId,
-        liveNotificationTrades(newTrades, lastPollBoundary).map(trade => trade.tradeId));
+        liveNotificationTrades(newTrades, liveCoverage.notificationBoundary(boundary))
+          .map(trade => trade.tradeId));
     }
-    lastPollBoundary = pollStartedAt;
     lastChecked = new Date().toISOString();
     // A concurrent metadata/status request may have activated a shared pause.
     if (!kalshiHttp.isPaused) lastError = null;
+}
+
+async function startTradeStream() {
+  try {
+    kalshiAuth = new KalshiAuth(process.env.KALSHI_API_KEY_ID ?? "", process.env.KALSHI_PRIVATE_KEY ?? "");
+    // Seed metadata and establish the startup boundary without sending historical alerts.
+    await getSportsSeries().catch(() => {
+      logger.warn("Sports metadata temporarily unavailable; stream batches will retry enrichment");
+    });
+    await pollOnce();
+    // Even if REST is temporarily unavailable, start WebSocket and retry catch-up later.
+    liveCoverage.establishStartupBoundary();
+    tradeStream = new KalshiTradeStream({
+      auth: kalshiAuth,
+      accept: trade => {
+        // If REST metadata is temporarily unavailable, retain candidates rather
+        // than lose them. Ingestion will validate sports before saving anything.
+        if (!sportsSeries.size) {
+          const execution = publicTradeExecution(trade);
+          return !!execution && shouldCaptureTrade(execution.notional);
+        }
+        const parsed = toPublicTrade(trade, sportsSeries);
+        return !!parsed && shouldCaptureTrade(parsed.notional);
+      },
+      batch: async (trades: StreamTrade[]) => {
+        await ingestTrades(trades, liveStartedAt - 1);
+        const oldest = Math.min(...trades.map(trade => Date.parse(trade.created_time)));
+        // Never advance past a disconnected/sequence-gap window before REST
+        // has covered it successfully.
+        liveCoverage.streamPersisted(oldest, tradeStream?.live ?? false);
+      },
+      recovery: () => { liveCoverage.requestRecovery(); },
+      checkpoint: timestamp => liveCoverage.streamPersisted(timestamp, tradeStream?.live ?? false),
+      state: (live, message) => {
+        streamError = live && message === "WebSocket conectado" ? null : message;
+        if (live && !streamError && !kalshiHttp.isPaused) lastError = null;
+        logger.info({ live, message }, "Kalshi live transport");
+      },
+    });
+    tradeStream.start();
   } catch (error) {
-    const message =
-      error instanceof Error ? error.message : "Unknown Kalshi monitor error.";
-    lastError = message;
-    logger.warn({ error: message }, "Kalshi monitor poll failed");
-  } finally {
-    pollInProgress = false;
+    // Auth errors are deliberately sanitized in KalshiAuth; never log private keys.
+    streamError = error instanceof Error ? error.message : "No se pudo iniciar Kalshi WebSocket.";
+    logger.warn({ message: streamError }, "Kalshi WebSocket setup failed; REST recovery remains available");
   }
 }
 
@@ -624,8 +697,12 @@ export function startKalshiMonitor() {
   };
   refreshDashboard();
   setInterval(refreshDashboard, POLL_INTERVAL_MS);
-  void pollOnce();
+  void startTradeStream();
   setInterval(() => void pollOnce(), POLL_INTERVAL_MS);
+  // Refresh sports metadata independently; the trade stream never needs REST per execution.
+  setInterval(() => {
+    if (!kalshiHttp.isPaused) void getSportsSeries().catch(() => {});
+  }, SERIES_CACHE_MS);
   setInterval(() => {
     if (kalshiHttp.isPaused) return;
     void readSettings().then(async settings => {
@@ -683,7 +760,7 @@ export async function getKalshiDashboard() {
     ? "paused"
     : !botToken() || !settings.chatId
       ? "setup_required"
-      : lastError
+      : lastError || streamError
         ? "error"
         : "running";
 
@@ -704,7 +781,7 @@ export async function getKalshiDashboard() {
     telegramConfigured: Boolean(botToken() && settings.chatId),
     status,
     lastChecked,
-    lastError,
+    lastError: lastError ?? streamError,
     qualifyingTrades: alertTotal?.value ?? 0,
     alertsSent: actuallySent?.value ?? 0,
     recentTrades,

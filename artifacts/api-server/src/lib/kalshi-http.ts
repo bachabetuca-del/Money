@@ -32,6 +32,7 @@ export class KalshiHttpClient {
     private readonly request: typeof fetch = fetch,
     private readonly now: () => number = Date.now,
     private readonly onPause: (retryAt: number, delayMs: number) => void = () => {},
+    private readonly prepare?: (url: string) => Promise<Record<string, string> | undefined>,
   ) {}
 
   get isPaused() {
@@ -48,7 +49,10 @@ export class KalshiHttpClient {
     if (probe) this.probing = true;
     const generation = this.generation;
     try {
-      const response = await this.request(url, { signal: AbortSignal.timeout(15_000) });
+      const headers = this.prepare ? await this.prepare(url) : undefined;
+      // A queued, paced request must not slip through a newly activated pause.
+      if (this.now() < this.retryAt) throw new KalshiCooldownError(this.retryAt);
+      const response = await this.request(url, { headers, signal: AbortSignal.timeout(15_000) });
       if (response.status === 429) {
         const now = this.now();
         this.failures = Math.min(this.failures + 1, 5);
