@@ -1,9 +1,10 @@
 import type { TradeBand } from "./kalshi-trade-bands";
+import { summarizeFlow, flowConcentrations } from "./market-flow";
 import { chartDefs, DIRECTION_COLORS, historyPlotSvg, intervalLabelEs, RECENT_WINDOW_MS } from "./telegram-history-plot";
 import { elapsed, exactMoney, fitSize, nyDateTime, textBlock } from "./telegram-card-format";
 import { publicDirection, directionLabel, directionMeaning, DIRECTION_NOTE } from "./telegram-trade-direction";
 
-export const MARKET_CARD_VERSION = 5;
+export const MARKET_CARD_VERSION = 6;
 
 export type MarketCardTrade = {
   eventTitle: string | null;
@@ -152,6 +153,39 @@ export function marketCardSvg(trades: MarketCardTrade[], threshold: number, filt
     52, y, 24, 796, MUTED, 400, Infinity);
   parts.push(coverage.svg);
   y += coverage.height + 48;
+
+  if (live) {
+    const windows = [5, 15, 60].map(minutes => summarizeFlow(ordered, now, minutes));
+    parts.push(`<text x="52" y="${y}" font-size="33" font-weight="700" fill="${INK}">Flujo reciente · rango elegido</text>`);
+    y += 42;
+    parts.push(`<text x="205" y="${y}" font-size="24" fill="${DIRECTION_COLORS[0]}">A favor · USD / op.</text>
+      <text x="530" y="${y}" font-size="24" fill="${DIRECTION_COLORS[1]}">En contra · USD / op.</text>`);
+    y += 38;
+    for (const window of windows) {
+      parts.push(`<text x="52" y="${y}" font-size="26" font-weight="700" fill="${SOFT}">${window.minutes} min</text>
+        <text x="205" y="${y}" font-size="25" fill="${INK}">${escapeHtml(exactMoney(window.yesUsd))} / ${window.yesCount}</text>
+        <text x="530" y="${y}" font-size="25" fill="${INK}">${escapeHtml(exactMoney(window.noUsd))} / ${window.noCount}</text>`);
+      y += 32;
+      const balance = window.balanceUsd === 0 ? "equilibrado" : window.balanceUsd > 0 ? "hacia SÍ" : "hacia NO";
+      const summary = `Balance ${exactMoney(Math.abs(window.balanceUsd))} ${balance}` +
+        (window.unknownCount ? ` · sin dirección: ${exactMoney(window.unknownUsd)} / ${window.unknownCount} op.` : "");
+      const block = textBlock(summary, 205, y, 23, 640, MUTED, 400, Infinity);
+      parts.push(block.svg);
+      y += block.height + 28;
+    }
+    for (const signal of flowConcentrations(windows)) {
+      const block = textBlock(
+        `Concentración: ${signal.count} operaciones individuales > $10k ${signal.direction === "yes" ? "a favor" : "en contra"} en ${signal.minutes} min · ${exactMoney(signal.usd)}`,
+        52, y, 27, 796, INK, 700, Infinity);
+      parts.push(block.svg); y += block.height + 18;
+    }
+    if (flowConcentrations(windows).length) {
+      const block = textBlock("Señal visual; no implica el mismo operador ni ventas confirmadas.",
+        52, y, 23, 796, MUTED, 400, Infinity);
+      parts.push(block.svg); y += block.height + 18;
+    }
+    y += 26;
+  }
 
   // Chart.
   const chartTitleY = y;

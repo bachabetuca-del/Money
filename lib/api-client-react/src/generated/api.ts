@@ -66,6 +66,107 @@ const withQueryKey = <T extends object, K>(query: T, queryKey: K): T & { queryKe
   return result;
 };
 
+export const getStreamKalshiActivityUrl = () => {
+
+
+
+
+  return `/api/kalshi/live`
+}
+
+/**
+ * @summary Owner-only grouped activity invalidations
+ */
+export const streamKalshiActivity = async ( options?: Parameters<typeof customFetch>[1]): Promise<string> => {
+
+  return customFetch<string>(getStreamKalshiActivityUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getStreamKalshiActivityQueryKey = () => {
+    return [
+    `/api/kalshi/live`
+    ] as const;
+    }
+
+
+export const getStreamKalshiActivityQueryOptions = <TData = Awaited<ReturnType<typeof streamKalshiActivity>>, TError = ErrorType<unknown>>( options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof streamKalshiActivity>>, TError, TData>>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getStreamKalshiActivityQueryKey();
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof streamKalshiActivity>>> = ({ signal }) => streamKalshiActivity({ signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof streamKalshiActivity>>, TError, TData> & { queryKey: DataTag<QueryKey, TData, TError> }
+}
+
+export type StreamKalshiActivityQueryResult = NonNullable<Awaited<ReturnType<typeof streamKalshiActivity>>>
+export type StreamKalshiActivityQueryError = ErrorType<unknown>
+
+
+export function useStreamKalshiActivity<TData = Awaited<ReturnType<typeof streamKalshiActivity>>, TError = ErrorType<unknown>>(
+  options: { query:Partial<UseQueryOptions<Awaited<ReturnType<typeof streamKalshiActivity>>, TError, TData>> & Pick<
+        DefinedInitialDataOptions<
+          Awaited<ReturnType<typeof streamKalshiActivity>>,
+          TError,
+          Awaited<ReturnType<typeof streamKalshiActivity>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient
+  ):  DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useStreamKalshiActivity<TData = Awaited<ReturnType<typeof streamKalshiActivity>>, TError = ErrorType<unknown>>(
+  options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof streamKalshiActivity>>, TError, TData>> & Pick<
+        UndefinedInitialDataOptions<
+          Awaited<ReturnType<typeof streamKalshiActivity>>,
+          TError,
+          Awaited<ReturnType<typeof streamKalshiActivity>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useStreamKalshiActivity<TData = Awaited<ReturnType<typeof streamKalshiActivity>>, TError = ErrorType<unknown>>(
+  options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof streamKalshiActivity>>, TError, TData>>, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+/**
+ * @summary Owner-only grouped activity invalidations
+ */
+
+export function useStreamKalshiActivity<TData = Awaited<ReturnType<typeof streamKalshiActivity>>, TError = ErrorType<unknown>>(
+  options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof streamKalshiActivity>>, TError, TData>>, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient
+ ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
+
+  const queryOptions = getStreamKalshiActivityQueryOptions(options)
+
+  const query = useQuery(queryOptions, queryClient) as  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
 export const getGetKalshiExplorerUrl = (params?: GetKalshiExplorerParams,) => {
   const normalizedParams = new URLSearchParams();
 

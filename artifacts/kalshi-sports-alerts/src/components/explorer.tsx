@@ -1,5 +1,6 @@
-import { useEffect, useMemo, useState } from 'react';
-import { AlertCircle, ChevronRight, Download, ExternalLink, RefreshCw, Search } from 'lucide-react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
+import { AlertCircle, ChevronRight, Download, ExternalLink, Pause, Play, RefreshCw, Search } from 'lucide-react';
 import {
   Bar,
   CartesianGrid,
@@ -12,10 +13,13 @@ import {
   YAxis,
   ZAxis,
 } from 'recharts';
-import { useGetKalshiExplorer } from '@workspace/api-client-react';
+import { getGetKalshiExplorerQueryKey, useGetKalshiExplorer } from '@workspace/api-client-react';
+import { useLiveExplorer } from '@/hooks/use-live-explorer';
+import { MarketFlow } from '@/components/market-flow';
+import { diffFresh, FALLBACK_MS, FRESH_MS, lastExecution, viewSnapshot, type SeenState } from '@/lib/live-model';
 import { MINUTE, RECENT_MS, yesQuote, bubbleRadius, buildBuckets, groupMarkets, type Bucket, type Dir } from '@/lib/explorer-model';
 import type {
-  ExplorerMarket,
+  KalshiExplorer,
   ExplorerTrade,
   GetKalshiExplorerBand,
   GetKalshiExplorerScope,
@@ -155,7 +159,7 @@ function BarTip({ active, payload }: TipProps) {
   );
 }
 
-function Charts({ trades, scope, now, truncated, total }: { trades: ExplorerTrade[]; scope: string; now: number; truncated: boolean; total: number }) {
+function Charts({ trades, scope, now, truncated, total, fresh }: { trades: ExplorerTrade[]; scope: string; now: number; truncated: boolean; total: number; fresh: Set<string> }) {
   const highlight = scope === 'active';
   const model = useMemo(() => {
     const b = buildBuckets(trades, now, highlight);
@@ -174,13 +178,13 @@ function Charts({ trades, scope, now, truncated, total }: { trades: ExplorerTrad
   const yesPts = model.points.filter((p) => p.dir === 'yes');
   const noPts = model.points.filter((p) => p.dir === 'no');
   const dot = (color: string) => (props: { cx?: number; cy?: number; size?: number; payload?: Point }) => (
-    <circle cx={props.cx} cy={props.cy} r={bubbleRadius(props.size)} fill={color} fillOpacity={0.8} stroke={props.payload?.recent ? '#1c2b26' : '#fff'} strokeWidth={props.payload?.recent ? 2.5 : 1} />
+    <circle cx={props.cx} cy={props.cy} r={bubbleRadius(props.size)} fill={color} fillOpacity={0.8} stroke={props.payload && fresh.has(props.payload.id) ? '#d9a21b' : props.payload?.recent ? '#1c2b26' : '#fff'} strokeWidth={props.payload && fresh.has(props.payload.id) ? 4 : props.payload?.recent ? 2.5 : 1} />
   );
   return (
     <div className="ws-charts">
       {truncated && (
         <Notice tone="warn" title="Gráficos con las últimas 5,000 operaciones">
-          Se cargaron {trades.length.toLocaleString('en-US')} de {total.toLocaleString('en-US')} operaciones guardadas en esta ventana. Los gráficos y la tabla no incluyen las más antiguas.
+          Se cargaron {trades.length.toLocaleString('en-US')} de {total.toLocaleString('en-US')} operaciones guardadas en esta ventana. Los gráficos y la tabla no incluyen las más antiguas; el resumen de flujo sí cubre todas.
         </Notice>
       )}
       <section className="ws-card">
@@ -237,15 +241,15 @@ function Charts({ trades, scope, now, truncated, total }: { trades: ExplorerTrad
         <div className="ws-legend">
           <span><i className="ws-dot" style={{ background: COLORS.yes }} />Dirección SÍ</span>
           <span><i className="ws-dot" style={{ background: COLORS.no }} />Dirección NO (convertida a cotización SÍ)</span>
-          {highlight && <span>Borde oscuro = últimos 15 min</span>}
+          {highlight && <span>Borde oscuro = últimos 15 min · borde dorado = recién guardada</span>}
         </div>
       </section>
     </div>
   );
 }
 
-function TradeTable({ trades, now, highlight, report }: {
-  trades: ExplorerTrade[]; now: number; highlight: boolean;
+function TradeTable({ trades, now, highlight, report, fresh }: {
+  trades: ExplorerTrade[]; now: number; highlight: boolean; fresh: Set<string>;
   report: Omit<import('@/lib/trade-pdf').TradePdfInput, 'trades' | 'directionLabel' | 'search'>;
 }) {
   const [dir, setDir] = useState<'all' | Dir>('all');
@@ -297,11 +301,12 @@ function TradeTable({ trades, now, highlight, report }: {
               {rows.slice(0, limit).map((t) => {
                 const ms = new Date(t.createdTime).getTime();
                 const recent = highlight && ms >= now - RECENT_MS && ms <= now;
+                const isFresh = fresh.has(t.tradeId);
                 const quote = yesQuote(t);
                 const d = t.direction as Dir;
                 return (
-                  <tr key={t.tradeId} data-testid={`row-explorer-trade-${t.tradeId}`} className={recent ? 'recent' : ''}>
-                    <td className="mono">{fmtTime(ms)}{recent && <em> reciente</em>}</td>
+                  <tr key={t.tradeId} data-testid={`row-explorer-trade-${t.tradeId}`} className={isFresh ? 'recent fresh' : recent ? 'recent' : ''}>
+                    <td className="mono">{fmtTime(ms)}{isFresh ? <em className="new"> nueva</em> : recent && <em> reciente</em>}</td>
                     <td title={DIR_MEANING[d]}><i className="ws-dot" style={{ background: COLORS[d] }} /> {DIR_LABEL[d]}</td>
                     <td className="r mono">{(t.price * 100).toFixed(2)}¢</td>
                     <td className="r mono">{quote === null ? 'sin dato' : `${(quote * 100).toFixed(2)}¢`}</td>
@@ -329,10 +334,48 @@ export function Explorer() {
     setUrlParams({ band: band === 'large' ? null : band, scope: scope === 'active' ? null : scope, window: win === 'all' ? null : win, ticker: ticker || null });
   }, [band, scope, win, ticker]);
 
-  const catalog = useGetKalshiExplorer({ band, scope, window: 'all' }, { query: { refetchInterval: 15000, retry: false } });
+  const [paused, setPaused] = useState(false);
+  const catalogParams = { band, scope, window: 'all' as const };
+  const catalog = useGetKalshiExplorer(catalogParams, { query: { refetchInterval: FALLBACK_MS, retry: false } });
   const detailParams = { band, scope, window: win, ticker };
+  const detailKey = ['/api/kalshi/explorer', detailParams] as const;
   const detail = useGetKalshiExplorer(detailParams, {
-    query: { enabled: ticker.length > 0, refetchInterval: 15000, retry: false, queryKey: ['/api/kalshi/explorer', detailParams] },
+    query: { enabled: ticker.length > 0 && !paused, refetchInterval: FALLBACK_MS, retry: false, queryKey: detailKey },
+  });
+
+  // Live stream: refetch only the matching active detail (throttled) and the catalog.
+  const qc = useQueryClient();
+  const liveRef = useRef({ ticker, paused, detailKey, catalogKey: getGetKalshiExplorerQueryKey(catalogParams), scope });
+  liveRef.current = { ticker, paused, detailKey, catalogKey: getGetKalshiExplorerQueryKey(catalogParams), scope };
+  const liveEventPending = useRef(false);
+  const liveFreshIds = useRef(new Set<string>());
+  const timers = useRef<{ detail?: ReturnType<typeof setTimeout>; catalog?: ReturnType<typeof setTimeout> }>({});
+  const schedule = useCallback((which: 'detail' | 'catalog', fromEvent: boolean) => {
+    if (which === 'detail' && fromEvent) liveEventPending.current = true;
+    if (timers.current[which]) return;
+    timers.current[which] = setTimeout(() => {
+      timers.current[which] = undefined;
+      const cur = liveRef.current;
+      if (which === 'catalog') void qc.invalidateQueries({ queryKey: cur.catalogKey, exact: true }, { cancelRefetch: false });
+      else if (cur.ticker && !cur.paused) void qc.invalidateQueries({ queryKey: cur.detailKey, exact: true }, { cancelRefetch: false });
+    }, which === 'detail' ? 400 : 5000);
+  }, [qc]);
+  useEffect(() => () => { clearTimeout(timers.current.detail); clearTimeout(timers.current.catalog); }, []);
+  const liveStatus = useLiveExplorer(true, {
+    onTrades: (tickers, freshIds) => {
+      const cur = liveRef.current;
+      schedule('catalog', true);
+      if (cur.scope === 'active' && !cur.paused && tickers.includes(cur.ticker)) {
+        for (const id of freshIds) liveFreshIds.current.add(id);
+        schedule('detail', true);
+      }
+    },
+    onReady: () => {
+      liveEventPending.current = false;
+      liveFreshIds.current.clear();
+      schedule('catalog', false);
+      schedule('detail', false);
+    },
   });
 
   const markets = catalog.data?.markets;
@@ -348,9 +391,61 @@ export function Explorer() {
   }, [markets, ticker]);
 
   const change = (patch: Partial<Params>) => setParams((p) => ({ ...p, ...patch }));
-  const dData = detail.data;
+  const liveData = detail.data;
+  const liveNow = useMemo(() => Date.now(), [liveData]);
+  const selKey = `${ticker}:${band}:${win}:${scope}`;
+
+  // Genuinely new IDs: only from refetches triggered by a live event for the same selection.
+  const seen = useRef<SeenState>(null);
+  const [fresh, setFresh] = useState<Map<string, number>>(new Map());
+  useEffect(() => {
+    if (!liveData || paused) return;
+    const fromEvent = liveEventPending.current && scope === 'active';
+    liveEventPending.current = false;
+    const r = diffFresh(seen.current, selKey, liveData.trades.filter((t) => t.ticker === ticker).map((t) => t.tradeId), fromEvent);
+    r.fresh = r.fresh.filter(id => liveFreshIds.current.has(id));
+    liveFreshIds.current.clear();
+    const switched = seen.current?.key !== selKey;
+    seen.current = r.seen;
+    if (switched) setFresh(new Map());
+    if (r.fresh.length) {
+      const until = Date.now() + FRESH_MS;
+      setFresh((m) => { const n = new Map(m); for (const id of r.fresh) n.set(id, until); return n; });
+    }
+  }, [liveData]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => {
+    if (!fresh.size) return;
+    const next = Math.min(...fresh.values()) - Date.now();
+    const t = setTimeout(() => setFresh((m) => {
+      const n = new Map<string, number>();
+      for (const [id, until] of m) if (until > Date.now()) n.set(id, until);
+      return n;
+    }), Math.max(50, next));
+    return () => clearTimeout(t);
+  }, [fresh]);
+  const freshIds = useMemo(() => new Set(fresh.keys()), [fresh]);
+
+  // Pause: freeze the whole selected snapshot (data + clock); the catalog may keep updating.
+  const [frozen, setFrozen] = useState<{ data: KalshiExplorer | undefined; now: number; key: string } | null>(null);
+  const togglePause = () => {
+    if (paused) {
+      setPaused(false);
+      setFrozen(null);
+      liveEventPending.current = false;
+      liveFreshIds.current.clear();
+      void qc.invalidateQueries({ queryKey: detailKey, exact: true });
+    } else {
+      setFrozen({ data: liveData, now: liveNow, key: selKey });
+      setFresh(new Map());
+      setPaused(true);
+    }
+  };
+  useEffect(() => { if (paused && frozen && frozen.key !== selKey) { setPaused(false); setFrozen(null); } }, [selKey]); // eslint-disable-line react-hooks/exhaustive-deps
+  const view = viewSnapshot(paused, frozen, { data: liveData, now: liveNow, key: selKey });
+  const dData = view.data;
+  const now = view.now;
   const trades = useMemo(() => (dData && selected ? dData.trades.filter((t) => t.ticker === ticker) : []), [dData, selected, ticker]);
-  const now = useMemo(() => Date.now(), [dData]);
+  const lastExec = useMemo(() => lastExecution(trades.map((t) => t.createdTime)), [trades]);
   const stale = (catalog.isError && !!catalog.data) || (detail.isError && !!dData);
   const totals = useMemo(() => {
     const s = { yes: 0, no: 0, unknown: 0 };
@@ -369,7 +464,7 @@ export function Explorer() {
           Esta es la versión de desarrollo: el bot no está conectado ni ingiriendo datos en vivo. Se muestran únicamente los datos ya guardados.
         </Notice>
       )}
-      {stale && <Notice tone="warn" title="Datos desactualizados">No se pudo actualizar; se muestra la última carga correcta. Se reintenta automáticamente cada 15 s.</Notice>}
+      {stale && <Notice tone="warn" title="Datos desactualizados">No se pudo actualizar; se muestra la última carga correcta. Se reintenta automáticamente.</Notice>}
 
       <div className="ws-filters">
         <Seg label="scope" value={scope} onChange={(v) => change({ scope: v, ticker: '' })} options={[['active', 'Vigentes · 48 h'], ['history', 'Historial']]} />
@@ -476,7 +571,21 @@ export function Explorer() {
                 </div>
               </section>
 
-              {detail.isLoading && <div className="skeleton" style={{ height: 300 }} data-testid="loading-detail" />}
+              <div className="ws-live" data-testid="live-bar">
+                {scope === 'active' ? (
+                  <span className={`ws-live-state ${paused ? 'paused' : liveStatus}`} data-testid="status-live">
+                    <i />{paused ? 'En pausa: vista congelada' : catalog.data?.workersPaused ? 'Monitor de desarrollo en pausa' : liveStatus === 'open' ? 'Conectado al servidor' : liveStatus === 'connecting' ? 'Conectando' : 'Reconectando; respaldo cada 30 s'}
+                  </span>
+                ) : <span className="ws-live-state static" data-testid="status-live"><i />Historial estático</span>}
+                <span data-testid="text-last-execution">Última ejecución: {lastExec ? fmtTime(lastExec) : 'sin operaciones'}</span>
+                {dData && <span>Datos de {fmtTime(dData.generatedAt)}</span>}
+                {scope === 'active' && (
+                  <button type="button" className="button secondary" onClick={togglePause} disabled={!dData && !paused} data-testid="button-toggle-pause">
+                    {paused ? <><Play /> Reanudar</> : <><Pause /> Pausar</>}
+                  </button>
+                )}
+              </div>
+              {detail.isLoading && !paused && <div className="skeleton" style={{ height: 300 }} data-testid="loading-detail" />}
               {detail.isError && !dData && (
                 <Notice tone="error" title="No se pudieron cargar las operaciones" action={<button className="button secondary" onClick={() => void detail.refetch()} data-testid="button-retry-detail"><RefreshCw /> Reintentar</button>}>
                   {detail.error instanceof Error ? detail.error.message : 'Error desconocido.'}
@@ -492,6 +601,7 @@ export function Explorer() {
                     ))}
                     {totals.unknown > 0 && <div><span><i className="ws-dot" style={{ background: COLORS.unknown }} /> Sin dato</span><b>{usd(totals.unknown)}</b><small>{DIR_MEANING.unknown}</small></div>}
                   </div>
+                  <MarketFlow key={selKey} flow={dData.flow} band={band} scope={scope} />
                   <p className="ws-sub">Dirección pública, no ventas ni cierres confirmados: comprar SÍ o vender NO equivale a apostar a favor; comprar NO o vender SÍ, en contra. No identifica al operador.</p>
                   {trades.length === 0 ? (
                     <div className="ws-empty" data-testid="empty-market-trades">
@@ -500,8 +610,8 @@ export function Explorer() {
                     </div>
                   ) : (
                     <>
-                      <Charts trades={trades} scope={scope} now={now} truncated={dData.truncated} total={dData.totalTrades} />
-                      <TradeTable key={`${selected.ticker}:${band}:${win}:${scope}`} trades={trades} now={now} highlight={scope === 'active'} report={{
+                      <Charts trades={trades} scope={scope} now={now} truncated={dData.truncated} total={dData.totalTrades} fresh={freshIds} />
+                      <TradeTable key={`${selected.ticker}:${band}:${win}:${scope}`} trades={trades} now={now} highlight={scope === 'active'} fresh={freshIds} report={{
                         market: selected,
                         bandLabel: band === 'small' ? '$1,000 a $5,000 (incluidos)' : band === 'medium' ? 'Más de $5,000 y menos de $10,000' : '$10,000+ (umbral configurado)',
                         windowLabel: win === 'all' ? 'Todo lo guardado' : win === '1h' ? 'Última hora' : 'Últimas 24 horas',
@@ -516,7 +626,7 @@ export function Explorer() {
                   )}
                 </>
               )}
-              {detail.isFetching && !detail.isLoading && <div className="ws-refresh"><AlertCircle size={12} /> Actualizando</div>}
+              {detail.isFetching && !detail.isLoading && !paused && <div className="ws-refresh"><AlertCircle size={12} /> Actualizando</div>}
             </>
           )}
         </div>

@@ -8,7 +8,7 @@
     "build": "vite build --config vite.config.ts",
     "serve": "vite preview --config vite.config.ts --host 0.0.0.0",
     "typecheck": "tsc -p tsconfig.json --noEmit",
-    "test:explorer": "node --experimental-strip-types --test src/lib/explorer-model.test.ts src/lib/trade-pdf.test.ts"
+    "test:explorer": "node --experimental-strip-types --test src/lib/explorer-model.test.ts src/lib/trade-pdf.test.ts src/lib/live-model.test.ts"
   },
   "devDependencies": {
     "@hookform/resolvers": "^3.10.0",

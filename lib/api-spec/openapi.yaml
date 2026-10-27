@@ -15,6 +15,17 @@ tags:
   - name: kalshi
     description: Kalshi sports trade monitoring and Telegram alerts
 paths:
+  /kalshi/live:
+    get:
+      operationId: streamKalshiActivity
+      tags: [kalshi]
+      summary: Owner-only grouped activity invalidations
+      responses:
+        "200":
+          description: SSE ready and trades events include affected tickers and freshTradeIds for new live executions only, never imports or REST recovery. Refresh snapshots on connection and reconnect.
+          content:
+            text/event-stream:
+              schema: { type: string }
   /kalshi/explorer:
     get:
       operationId: getKalshiExplorer
@@ -248,6 +259,9 @@ components:
       type: object
       required: [generatedAt, workersPaused, markets, trades, totalTrades, truncated, historyStatus]
       properties:
+        flow:
+          type: array
+          items: { $ref: "#/components/schemas/MarketFlowWindow" }
         generatedAt: { type: string }
         workersPaused: { type: boolean }
         markets:
@@ -261,6 +275,22 @@ components:
         historyStatus:
           type: string
           description: Stored import status; never claims all Kalshi history is complete
+    MarketFlowWindow:
+      type: object
+      required: [minutes, yesUsd, noUsd, unknownUsd, yesCount, noCount, unknownCount, balanceUsd, largeYesCount, largeNoCount, largeYesUsd, largeNoUsd]
+      properties:
+        minutes: { type: integer }
+        yesUsd: { type: number }
+        noUsd: { type: number }
+        unknownUsd: { type: number }
+        yesCount: { type: integer }
+        noCount: { type: integer }
+        unknownCount: { type: integer }
+        balanceUsd: { type: number }
+        largeYesCount: { type: integer }
+        largeNoCount: { type: integer }
+        largeYesUsd: { type: number }
+        largeNoUsd: { type: number }
     HealthStatus:
       type: object
       properties:

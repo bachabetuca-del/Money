@@ -9,6 +9,12 @@ import * as zod from 'zod';
 
 
 /**
+ * @summary Owner-only grouped activity invalidations
+ */
+export const StreamKalshiActivityResponse = zod.unknown()
+
+
+/**
  * @summary Browse saved sports markets and selected market executions
  */
 export const getKalshiExplorerQueryBandDefault = `large`;
@@ -25,6 +31,20 @@ export const GetKalshiExplorerQueryParams = zod.object({
 })
 
 export const GetKalshiExplorerResponse = zod.object({
+  "flow": zod.array(zod.object({
+  "minutes": zod.number().int(),
+  "yesUsd": zod.number(),
+  "noUsd": zod.number(),
+  "unknownUsd": zod.number(),
+  "yesCount": zod.number().int(),
+  "noCount": zod.number().int(),
+  "unknownCount": zod.number().int(),
+  "balanceUsd": zod.number(),
+  "largeYesCount": zod.number().int(),
+  "largeNoCount": zod.number().int(),
+  "largeYesUsd": zod.number(),
+  "largeNoUsd": zod.number()
+})).optional(),
   "generatedAt": zod.string(),
   "workersPaused": zod.boolean(),
   "markets": zod.array(zod.object({

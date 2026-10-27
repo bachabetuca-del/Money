@@ -83,7 +83,23 @@ export interface ExplorerTrade {
   createdTime: string;
 }
 
+export interface MarketFlowWindow {
+  minutes: number;
+  yesUsd: number;
+  noUsd: number;
+  unknownUsd: number;
+  yesCount: number;
+  noCount: number;
+  unknownCount: number;
+  balanceUsd: number;
+  largeYesCount: number;
+  largeNoCount: number;
+  largeYesUsd: number;
+  largeNoUsd: number;
+}
+
 export interface KalshiExplorer {
+  flow?: MarketFlowWindow[];
   generatedAt: string;
   workersPaused: boolean;
   markets: ExplorerMarket[];

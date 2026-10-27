@@ -7,8 +7,10 @@
  */
 import type { ExplorerMarket } from './explorerMarket';
 import type { ExplorerTrade } from './explorerTrade';
+import type { MarketFlowWindow } from './marketFlowWindow';
 
 export interface KalshiExplorer {
+  flow?: MarketFlowWindow[];
   generatedAt: string;
   workersPaused: boolean;
   markets: ExplorerMarket[];

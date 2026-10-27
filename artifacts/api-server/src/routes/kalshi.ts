@@ -17,8 +17,11 @@ import {
 } from "../lib/kalshi-monitor";
 import { isOwnerChat } from "../lib/owner-policy";
 import { getKalshiExplorer } from "../lib/kalshi-explorer";
+import { kalshiLiveEvents } from "../lib/kalshi-live-events";
 
 const router: IRouter = Router();
+// The parent router applies requireOwner to ALL /kalshi routes, including SSE.
+router.get("/kalshi/live", (req, res) => kalshiLiveEvents.serve(req, res));
 
 router.get("/kalshi/explorer", async (req, res): Promise<void> => {
   const parsed = GetKalshiExplorerQueryParams.safeParse(req.query);

@@ -23,6 +23,7 @@ import { KalshiCooldownError, KalshiHttpClient } from "./kalshi-http";
 import { KalshiAuth, KalshiReadPacer } from "./kalshi-auth";
 import { KalshiTradeStream, type StreamTrade } from "./kalshi-trade-stream";
 import { KalshiLiveCoverage } from "./kalshi-live-coverage";
+import { kalshiLiveEvents } from "./kalshi-live-events";
 
 const KALSHI_API = "https://external-api.kalshi.com/trade-api/v2";
 const TELEGRAM_API = "https://api.telegram.org";
@@ -456,13 +457,13 @@ async function pollOnce() {
 }
 
 /** Serialize REST recovery and stream batches; storage/outbox each deduplicate by trade ID. */
-function ingestTrades(feed: KalshiTradeApi[], boundary: number | null): Promise<void> {
-  const next = ingestionChain.then(() => processTrades(feed, boundary));
+function ingestTrades(feed: KalshiTradeApi[], boundary: number | null, fromStream = false): Promise<void> {
+  const next = ingestionChain.then(() => processTrades(feed, boundary, fromStream));
   ingestionChain = next.catch(() => {});
   return next;
 }
 
-async function processTrades(tradeFeed: KalshiTradeApi[], boundary: number | null) {
+async function processTrades(tradeFeed: KalshiTradeApi[], boundary: number | null, fromStream: boolean) {
     const [seriesIndex, settings] = await Promise.all([getSportsSeries(), readSettings()]);
     const allSportsTrades = tradeFeed
       .map((trade) => toPublicTrade(trade, seriesIndex))
@@ -532,6 +533,9 @@ async function processTrades(tradeFeed: KalshiTradeApi[], boundary: number | nul
       await enqueueLiveNotifications(settings.chatId,
         liveNotificationTrades(newTrades, liveCoverage.notificationBoundary(boundary))
           .map(trade => trade.tradeId));
+      kalshiLiveEvents.publish([...new Set(newTrades.map(trade => trade.ticker))],
+        fromStream ? newTrades.filter(trade => Date.parse(trade.createdTime) >= Date.now() - 60_000)
+          .map(trade => trade.tradeId) : []);
     }
     lastChecked = new Date().toISOString();
     // A concurrent metadata/status request may have activated a shared pause.
@@ -561,7 +565,7 @@ async function startTradeStream() {
         return !!parsed && shouldCaptureTrade(parsed.notional);
       },
       batch: async (trades: StreamTrade[]) => {
-        await ingestTrades(trades, liveStartedAt - 1);
+        await ingestTrades(trades, liveStartedAt - 1, true);
         const oldest = Math.min(...trades.map(trade => Date.parse(trade.created_time)));
         // Never advance past a disconnected/sequence-gap window before REST
         // has covered it successfully.

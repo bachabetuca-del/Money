@@ -21,6 +21,7 @@ export * from './kalshiDashboard';
 export * from './kalshiExplorer';
 export * from './kalshiSettingsInput';
 export * from './kalshiTrade';
+export * from './marketFlowWindow';
 export * from './ownerRequiredResponse';
 export * from './ownerUnavailableResponse';
 export * from './signInRequiredResponse';

@@ -1,4 +1,4 @@
-import { and, asc, count, desc, eq, gt, gte, lt, lte } from "drizzle-orm";
+import { and, asc, count, desc, eq, gt, gte, lt, lte, sql } from "drizzle-orm";
 import { db, kalshiAlertsTable, kalshiMonitorSettingsTable } from "@workspace/db";
 import { telegramDashboardStore } from "./telegram-dashboard-store";
 import { buildCatalog, type CatalogMarket } from "./telegram-dashboard-view";
@@ -9,6 +9,7 @@ import { marketHistoryStore } from "./kalshi-market-history-store";
 import { explorerState, explorerSince, type ExplorerWindow } from "./kalshi-explorer-view";
 import { scoreQueue } from "./kalshi-score-queue";
 import { gameDateLabel, gameTimeLabel } from "./telegram-game-date";
+import { emptyFlow } from "./market-flow";
 
 export type ExplorerFilters = {
   band: TradeBand;
@@ -49,6 +50,7 @@ export async function getKalshiExplorer(filters: ExplorerFilters, now = new Date
   const empty = {
     generatedAt: now.toISOString(), workersPaused: process.env.BOT_WORKERS_ENABLED === "false",
     markets, trades: [], totalTrades: 0, truncated: false, historyStatus: "Sin mercado seleccionado",
+    flow: [5, 15, 60].map(emptyFlow),
   };
   // A hidden/old selection cannot leak trades from another band or scope.
   if (!filters.ticker || !catalog.some(m => m.ticker === filters.ticker)) return empty;
@@ -63,11 +65,39 @@ export async function getKalshiExplorer(filters: ExplorerFilters, now = new Date
     since ? gte(kalshiAlertsTable.createdTime, since) : undefined,
     lte(kalshiAlertsTable.createdTime, now),
   );
-  const [totals, rows, job] = await Promise.all([
+  const [totals, rows, job, flow] = await Promise.all([
     db.select({ total: count() }).from(kalshiAlertsTable).where(condition),
     db.select().from(kalshiAlertsTable).where(condition)
       .orderBy(desc(kalshiAlertsTable.createdTime), asc(kalshiAlertsTable.tradeId)).limit(5000),
     marketHistoryStore.job(filters.ticker),
+    // Aggregate all stored executions, not the 5,000-row chart/page limit.
+    Promise.all([5, 15, 60].map(async minutes => {
+      const result = emptyFlow(minutes);
+      const groups = await db.select({
+        outcome: kalshiAlertsTable.outcomeSide, book: kalshiAlertsTable.bookSide,
+        amount: sql<number>`coalesce(sum(${kalshiAlertsTable.notional}), 0)`,
+        n: count(),
+        largeAmount: sql<number>`coalesce(sum(case when ${kalshiAlertsTable.notional} > 10000 then ${kalshiAlertsTable.notional} else 0 end), 0)`,
+        largeN: sql<number>`count(*) filter (where ${kalshiAlertsTable.notional} > 10000)`,
+      }).from(kalshiAlertsTable).where(and(condition,
+        gte(kalshiAlertsTable.createdTime, new Date(now.getTime() - minutes * 60_000))))
+        .groupBy(kalshiAlertsTable.outcomeSide, kalshiAlertsTable.bookSide);
+      for (const group of groups) {
+        const direction = publicDirection(group.outcome, undefined, group.book);
+        result[`${direction}Usd`] += Number(group.amount);
+        result[`${direction}Count`] += Number(group.n);
+        if (direction !== "unknown") {
+          const prefix = direction === "yes" ? "largeYes" : "largeNo";
+          result[`${prefix}Usd`] += Number(group.largeAmount);
+          result[`${prefix}Count`] += Number(group.largeN);
+        }
+      }
+      for (const key of ["yesUsd", "noUsd", "unknownUsd", "largeYesUsd", "largeNoUsd"] as const) {
+        result[key] = Math.round(result[key] * 100) / 100;
+      }
+      result.balanceUsd = Math.round((result.yesUsd - result.noUsd) * 100) / 100;
+      return result;
+    })),
   ]);
   const totalTrades = totals[0]?.total ?? 0;
   let historyStatus = "Histórico pendiente; solo operaciones guardadas";
@@ -78,7 +108,7 @@ export async function getKalshiExplorer(filters: ExplorerFilters, now = new Date
     historyStatus = `Histórico importado hasta ${job.snapshotAt.toISOString()}; actividad posterior según monitor`;
   } else if (job) historyStatus = "Histórico en proceso; datos parciales";
   return {
-    ...empty, totalTrades, truncated: totalTrades > rows.length, historyStatus,
+    ...empty, totalTrades, truncated: totalTrades > rows.length, historyStatus, flow,
     trades: rows.reverse().map(t => ({
       tradeId: t.tradeId, ticker: t.ticker,
       direction: publicDirection(t.outcomeSide, undefined, t.bookSide),
