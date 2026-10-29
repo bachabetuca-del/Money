@@ -6,6 +6,7 @@
  * OpenAPI spec version: 0.1.0
  */
 import type { GetKalshiExplorerBand } from './getKalshiExplorerBand';
+import type { GetKalshiExplorerDirection } from './getKalshiExplorerDirection';
 import type { GetKalshiExplorerScope } from './getKalshiExplorerScope';
 import type { GetKalshiExplorerWindow } from './getKalshiExplorerWindow';
 
@@ -17,4 +18,8 @@ scope?: GetKalshiExplorerScope;
  */
 ticker?: string;
 window?: GetKalshiExplorerWindow;
+/**
+ * Filter catalog and executions by public YES or NO direction; not proof of opening or closing a position.
+ */
+direction?: GetKalshiExplorerDirection;
 };

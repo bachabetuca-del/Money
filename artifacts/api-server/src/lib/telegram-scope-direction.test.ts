@@ -1,4 +1,7 @@
 import assert from "node:assert/strict";
+import { eq, sql } from "drizzle-orm";
+import { PgDialect } from "drizzle-orm/pg-core";
+import { explorerDirection } from "./explorer-direction";
 import { test } from "node:test";
 import { writeFile } from "node:fs/promises";
 import sharp from "sharp";
@@ -6,6 +9,18 @@ import { gameCalendarDay, newYorkDay } from "./telegram-game-date";
 import { gameScope, isWithinNext48Hours, scopedCatalog } from "./telegram-game-scope";
 import { buildCatalog, HOME, menuSvg, menuView, navigate, type MarketSummary } from "./telegram-dashboard-view";
 import { publicDirection } from "./telegram-trade-direction";
+
+test("explorer SQL preserves canonical outcome precedence and parameterizes direction", () => {
+  const dialect = new PgDialect();
+  const expression = explorerDirection(sql.raw("outcome"), sql.raw("book"));
+  const query = dialect.sqlToQuery(eq(expression, "yes"));
+  assert.deepEqual(query.params, ["yes"]);
+  assert.ok(query.sql.indexOf("lower(trim(outcome))") < query.sql.indexOf("lower(trim(book))"));
+  assert.match(query.sql, /in \('yes', 'no'\)/);
+  assert.match(query.sql, /= 'bid' then 'yes'/);
+  assert.match(query.sql, /= 'ask' then 'no'/);
+  assert.match(query.sql, /else 'unknown' end = \$1/);
+});
 import { marketCardCaption, marketCardSvg } from "./telegram-market-card";
 import { bucketHistory, historyPlotSvg } from "./telegram-history-plot";
 import { notificationText } from "./telegram-trade-notifications";

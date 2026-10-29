@@ -10,12 +10,14 @@ import { explorerState, explorerSince, type ExplorerWindow } from "./kalshi-expl
 import { scoreQueue } from "./kalshi-score-queue";
 import { gameDateLabel, gameTimeLabel } from "./telegram-game-date";
 import { emptyFlow } from "./market-flow";
+import { explorerDirection } from "./explorer-direction";
 
 export type ExplorerFilters = {
   band: TradeBand;
   scope: "active" | "history";
   ticker?: string;
   window: ExplorerWindow;
+  direction?: "all" | "yes" | "no";
 };
 
 /** Read-only: visiting the preview never polls Kalshi or sends Telegram messages. */
@@ -30,7 +32,21 @@ export async function getKalshiExplorer(filters: ExplorerFilters, now = new Date
     group.push(market);
     games.set(market.gameKey, group);
   }
-  const markets = catalog.map(m => {
+  const directionCondition = filters.direction && filters.direction !== "all"
+    ? eq(explorerDirection(kalshiAlertsTable.outcomeSide, kalshiAlertsTable.bookSide), filters.direction)
+    : undefined;
+  // Filter before aggregation/pagination, not just the newest 5,000 chart rows.
+  const directionCounts = directionCondition ? await db.select({
+    ticker: kalshiAlertsTable.ticker, total: count(),
+    latest: sql<string>`max(${kalshiAlertsTable.createdTime})::text`,
+  }).from(kalshiAlertsTable).where(and(
+    directionCondition,
+    range.minimumInclusive ? gte(kalshiAlertsTable.notional, range.minimum) : gt(kalshiAlertsTable.notional, range.minimum),
+    range.maximum === null ? undefined : range.maximumInclusive
+      ? lte(kalshiAlertsTable.notional, range.maximum) : lt(kalshiAlertsTable.notional, range.maximum),
+  )).groupBy(kalshiAlertsTable.ticker) : null;
+  const countsByTicker = new Map(directionCounts?.map(row => [row.ticker, row]));
+  const markets = catalog.filter(m => !directionCounts || countsByTicker.has(m.ticker)).map(m => {
     const scheduled = games.get(m.gameKey)?.find(game =>
       game.gameStartsAt && Number.isFinite(new Date(game.gameStartsAt).getTime()));
     return {
@@ -39,7 +55,8 @@ export async function getKalshiExplorer(filters: ExplorerFilters, now = new Date
     gameTimeLabel: gameTimeLabel(scheduled?.gameStartsAt),
     gameStartsAt: scheduled?.gameStartsAt ? new Date(scheduled.gameStartsAt).toISOString() : null,
     betLabel: m.betLabel, marketUrl: m.marketUrl,
-    trades: m.trades, lastTradeAt: m.lastTradeAt,
+    trades: countsByTicker.get(m.ticker)?.total ?? m.trades,
+    lastTradeAt: countsByTicker.has(m.ticker) ? new Date(countsByTicker.get(m.ticker)!.latest).toISOString() : m.lastTradeAt,
     state: explorerState(games.get(m.gameKey)!, now),
     gameResult: m.gameResult ?? games.get(m.gameKey)?.find(game => game.gameResult)?.gameResult ?? null,
     marketResult: m.marketResult ?? null,
@@ -53,11 +70,12 @@ export async function getKalshiExplorer(filters: ExplorerFilters, now = new Date
     flow: [5, 15, 60].map(emptyFlow),
   };
   // A hidden/old selection cannot leak trades from another band or scope.
-  if (!filters.ticker || !catalog.some(m => m.ticker === filters.ticker)) return empty;
+  if (!filters.ticker || !markets.some(m => m.ticker === filters.ticker)) return empty;
   if (filters.scope === "history") scoreQueue.request(filters.ticker);
 
   const since = explorerSince(filters.window, now);
   const condition = and(
+    directionCondition,
     eq(kalshiAlertsTable.ticker, filters.ticker),
     range.minimumInclusive ? gte(kalshiAlertsTable.notional, range.minimum) : gt(kalshiAlertsTable.notional, range.minimum),
     range.maximum === null ? undefined : range.maximumInclusive

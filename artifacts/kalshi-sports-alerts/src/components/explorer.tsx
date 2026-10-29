@@ -74,6 +74,7 @@ type Params = {
   win: GetKalshiExplorerWindow;
   ticker: string;
   q: string;
+  direction: 'all' | 'yes' | 'no';
 };
 
 function readParams(): Params {
@@ -82,7 +83,8 @@ function readParams(): Params {
   const scope = p.get('scope') === 'history' ? 'history' : 'active';
   const w = p.get('window');
   const win = w === '1h' || w === '24h' ? w : 'all';
-  return { band, scope, win, ticker: (p.get('ticker') ?? '').slice(0, 200), q: '' };
+  const direction = p.get('direction') === 'yes' ? 'yes' : p.get('direction') === 'no' ? 'no' : 'all';
+  return { band, scope, win, direction, ticker: (p.get('ticker') ?? '').slice(0, 200), q: '' };
 }
 
 export function setUrlParams(values: Record<string, string | null>) {
@@ -250,11 +252,12 @@ function Charts({ trades, scope, now, truncated, total, fresh }: { trades: Explo
   );
 }
 
-function TradeTable({ trades, now, highlight, report, fresh }: {
+function TradeTable({ trades, now, highlight, report, fresh, direction }: {
   trades: ExplorerTrade[]; now: number; highlight: boolean; fresh: Set<string>;
+  direction: Params['direction'];
   report: Omit<import('@/lib/trade-pdf').TradePdfInput, 'trades' | 'directionLabel' | 'search'>;
 }) {
-  const [dir, setDir] = useState<'all' | Dir>('all');
+  const [dir, setDir] = useState<'all' | Dir>(direction);
   const [q, setQ] = useState('');
   const [limit, setLimit] = useState(100);
   const [exporting, setExporting] = useState(false);
@@ -290,7 +293,7 @@ function TradeTable({ trades, now, highlight, report, fresh }: {
           <button className="button secondary" onClick={() => void downloadPdf()} disabled={exporting || rows.length === 0} data-testid="button-download-trades-pdf">
             <Download size={15} /> {exporting ? 'Generando PDF…' : 'Descargar PDF'}
           </button>
-          <Seg label="dir" value={dir} onChange={(v) => { setDir(v); setLimit(100); }} options={[['all', 'Todas'], ['yes', 'SÍ'], ['no', 'NO'], ['unknown', 'Sin dato']]} />
+          {direction === 'all' && <Seg label="dir" value={dir} onChange={(v) => { setDir(v); setLimit(100); }} options={[['all', 'Todas'], ['yes', 'SÍ'], ['no', 'NO'], ['unknown', 'Sin dato']]} />}
           <label className="ws-search small"><Search size={13} /><input value={q} onChange={(e) => { setQ(e.target.value); setLimit(100); }} placeholder="ID de operación" aria-label="Buscar operación" data-testid="input-search-trade" /></label>
         </div>
       </header>
@@ -330,16 +333,16 @@ export function Explorer() {
   const [params, setParams] = useState<Params>(readParams);
   const [openSports, setOpenSports] = useState<Set<string>>(new Set());
   const [openGames, setOpenGames] = useState<Set<string>>(new Set());
-  const { band, scope, win, ticker, q } = params;
+  const { band, scope, win, ticker, q, direction } = params;
 
   useEffect(() => {
-    setUrlParams({ band: band === 'large' ? null : band, scope: scope === 'active' ? null : scope, window: win === 'all' ? null : win, ticker: ticker || null });
-  }, [band, scope, win, ticker]);
+    setUrlParams({ band: band === 'large' ? null : band, scope: scope === 'active' ? null : scope, window: win === 'all' ? null : win, ticker: ticker || null, direction: direction === 'all' ? null : direction });
+  }, [band, scope, win, ticker, direction]);
 
   const [paused, setPaused] = useState(false);
-  const catalogParams = { band, scope, window: 'all' as const };
+  const catalogParams = { band, scope, direction, window: 'all' as const };
   const catalog = useGetKalshiExplorer(catalogParams, { query: { refetchInterval: FALLBACK_MS, retry: false } });
-  const detailParams = { band, scope, window: win, ticker };
+  const detailParams = { band, scope, direction, window: win, ticker };
   const detailKey = ['/api/kalshi/explorer', detailParams] as const;
   const detail = useGetKalshiExplorer(detailParams, {
     query: { enabled: ticker.length > 0 && !paused, refetchInterval: FALLBACK_MS, retry: false, queryKey: detailKey },
@@ -395,7 +398,7 @@ export function Explorer() {
   const change = (patch: Partial<Params>) => setParams((p) => ({ ...p, ...patch }));
   const liveData = detail.data;
   const liveNow = useMemo(() => Date.now(), [liveData]);
-  const selKey = `${ticker}:${band}:${win}:${scope}`;
+  const selKey = `${ticker}:${band}:${win}:${scope}:${direction}`;
 
   // Genuinely new IDs: only from refetches triggered by a live event for the same selection.
   const seen = useRef<SeenState>(null);
@@ -472,7 +475,9 @@ export function Explorer() {
         <Seg label="scope" value={scope} onChange={(v) => change({ scope: v, ticker: '' })} options={[['active', 'Vigentes · 48 h'], ['history', 'Historial']]} />
         <Seg label="band" value={band} onChange={(v) => change({ band: v, ticker: '' })} options={[['large', '$10k+'], ['medium', '$5k–$10k'], ['small', '$1k–$5k']]} />
         <Seg label="window" value={win} onChange={(v) => change({ win: v })} options={[['1h', '1 hora'], ['24h', '24 horas'], ['all', 'Todo']]} />
+        <Seg label="Posición" value={direction} onChange={(v) => change({ direction: v })} options={[['all', 'Todas'], ['yes', 'Yes · SÍ'], ['no', 'No']]} />
         <span className="ws-filter-note">{scopeText} · {bandText}</span>
+        {direction !== 'all' && <span className="ws-filter-note">Solo dirección {direction === 'yes' ? 'YES (SÍ)' : 'NO'} · catálogo, gráficas, flujo, totales y PDF filtrados. Histórico completo e IA sin este filtro.</span>}
       </div>
       <HistoryExport />
       {scope === 'history' && catalog.data && (
@@ -615,7 +620,7 @@ export function Explorer() {
                   ) : (
                     <>
                       <Charts trades={trades} scope={scope} now={now} truncated={dData.truncated} total={dData.totalTrades} fresh={freshIds} />
-                      <TradeTable key={`${selected.ticker}:${band}:${win}:${scope}`} trades={trades} now={now} highlight={scope === 'active'} fresh={freshIds} report={{
+                      <TradeTable key={selKey} direction={direction} trades={trades} now={now} highlight={scope === 'active'} fresh={freshIds} report={{
                         market: selected,
                         bandLabel: band === 'small' ? '$1,000 a $5,000 (incluidos)' : band === 'medium' ? 'Más de $5,000 y menos de $10,000' : '$10,000+ (umbral configurado)',
                         windowLabel: win === 'all' ? 'Todo lo guardado' : win === '1h' ? 'Última hora' : 'Últimas 24 horas',

@@ -109,6 +109,13 @@ paths:
             type: string
             enum: [1h, 24h, all]
             default: all
+        - in: query
+          name: direction
+          description: Filter catalog and executions by public YES or NO direction; not proof of opening or closing a position.
+          schema:
+            type: string
+            enum: [all, yes, no]
+            default: all
       responses:
         "401":
           $ref: "#/components/responses/SignInRequired"

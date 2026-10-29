@@ -19,6 +19,7 @@ export * from './gameAnalysisInput';
 export * from './gameAnalysisState';
 export * from './getKalshiAnalysisParams';
 export * from './getKalshiExplorerBand';
+export * from './getKalshiExplorerDirection';
 export * from './getKalshiExplorerParams';
 export * from './getKalshiExplorerScope';
 export * from './getKalshiExplorerWindow';

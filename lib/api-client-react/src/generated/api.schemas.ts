@@ -247,6 +247,10 @@ scope?: GetKalshiExplorerScope;
  */
 ticker?: string;
 window?: GetKalshiExplorerWindow;
+/**
+ * Filter catalog and executions by public YES or NO direction; not proof of opening or closing a position.
+ */
+direction?: GetKalshiExplorerDirection;
 };
 
 export type GetKalshiExplorerBand = typeof GetKalshiExplorerBand[keyof typeof GetKalshiExplorerBand];
@@ -273,5 +277,14 @@ export const GetKalshiExplorerWindow = {
   '1h': '1h',
   '24h': '24h',
   all: 'all',
+} as const;
+
+export type GetKalshiExplorerDirection = typeof GetKalshiExplorerDirection[keyof typeof GetKalshiExplorerDirection];
+
+
+export const GetKalshiExplorerDirection = {
+  all: 'all',
+  yes: 'yes',
+  no: 'no',
 } as const;
 
