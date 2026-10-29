@@ -11,6 +11,7 @@ import { scoreQueue } from "./kalshi-score-queue";
 import { gameDateLabel, gameTimeLabel } from "./telegram-game-date";
 import { emptyFlow } from "./market-flow";
 import { explorerDirection } from "./explorer-direction";
+import { marketType, type MarketType } from "./market-type";
 
 export type ExplorerFilters = {
   band: TradeBand;
@@ -18,6 +19,7 @@ export type ExplorerFilters = {
   ticker?: string;
   window: ExplorerWindow;
   direction?: "all" | "yes" | "no";
+  marketType?: "all" | MarketType;
 };
 
 /** Read-only: visiting the preview never polls Kalshi or sends Telegram messages. */
@@ -46,7 +48,10 @@ export async function getKalshiExplorer(filters: ExplorerFilters, now = new Date
       ? lte(kalshiAlertsTable.notional, range.maximum) : lt(kalshiAlertsTable.notional, range.maximum),
   )).groupBy(kalshiAlertsTable.ticker) : null;
   const countsByTicker = new Map(directionCounts?.map(row => [row.ticker, row]));
-  const markets = catalog.filter(m => !directionCounts || countsByTicker.has(m.ticker)).map(m => {
+  const markets = catalog.filter(m =>
+    (!directionCounts || countsByTicker.has(m.ticker)) &&
+    (!filters.marketType || filters.marketType === "all" || marketType(m) === filters.marketType)
+  ).map(m => {
     const scheduled = games.get(m.gameKey)?.find(game =>
       game.gameStartsAt && Number.isFinite(new Date(game.gameStartsAt).getTime()));
     return {

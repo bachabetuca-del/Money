@@ -7,6 +7,7 @@
  */
 import type { GetKalshiExplorerBand } from './getKalshiExplorerBand';
 import type { GetKalshiExplorerDirection } from './getKalshiExplorerDirection';
+import type { GetKalshiExplorerMarketType } from './getKalshiExplorerMarketType';
 import type { GetKalshiExplorerScope } from './getKalshiExplorerScope';
 import type { GetKalshiExplorerWindow } from './getKalshiExplorerWindow';
 
@@ -22,4 +23,8 @@ window?: GetKalshiExplorerWindow;
  * Filter catalog and executions by public YES or NO direction; not proof of opening or closing a position.
  */
 direction?: GetKalshiExplorerDirection;
+/**
+ * Classify saved markets using their series identifier and original titles; ambiguous markets remain in other.
+ */
+marketType?: GetKalshiExplorerMarketType;
 };

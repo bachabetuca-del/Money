@@ -88,13 +88,15 @@ export const getKalshiExplorerQueryTickerMax = 200;
 
 export const getKalshiExplorerQueryWindowDefault = `all`;
 export const getKalshiExplorerQueryDirectionDefault = `all`;
+export const getKalshiExplorerQueryMarketTypeDefault = `all`;
 
 export const GetKalshiExplorerQueryParams = zod.object({
   "band": zod.enum(['large', 'medium', 'small']).default(getKalshiExplorerQueryBandDefault),
   "scope": zod.enum(['active', 'history']).default(getKalshiExplorerQueryScopeDefault),
   "ticker": zod.coerce.string().max(getKalshiExplorerQueryTickerMax).optional(),
   "window": zod.enum(['1h', '24h', 'all']).default(getKalshiExplorerQueryWindowDefault),
-  "direction": zod.enum(['all', 'yes', 'no']).default(getKalshiExplorerQueryDirectionDefault).describe('Filter catalog and executions by public YES or NO direction; not proof of opening or closing a position.')
+  "direction": zod.enum(['all', 'yes', 'no']).default(getKalshiExplorerQueryDirectionDefault).describe('Filter catalog and executions by public YES or NO direction; not proof of opening or closing a position.'),
+  "marketType": zod.enum(['all', 'winner', 'spread', 'total', 'props', 'futures', 'other']).default(getKalshiExplorerQueryMarketTypeDefault).describe('Classify saved markets using their series identifier and original titles; ambiguous markets remain in other.')
 })
 
 export const GetKalshiExplorerResponse = zod.object({

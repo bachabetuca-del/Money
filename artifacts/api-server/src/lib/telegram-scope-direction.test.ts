@@ -9,6 +9,26 @@ import { gameCalendarDay, newYorkDay } from "./telegram-game-date";
 import { gameScope, isWithinNext48Hours, scopedCatalog } from "./telegram-game-scope";
 import { buildCatalog, HOME, menuSvg, menuView, navigate, type MarketSummary } from "./telegram-dashboard-view";
 import { publicDirection } from "./telegram-trade-direction";
+import { marketType } from "./market-type";
+
+test("market types classify series and retain ambiguous markets as other", () => {
+  const classify = (ticker: string, marketTitle: string | null = null, eventTitle: string | null = null) =>
+    marketType({ ticker, marketTitle, eventTitle });
+  assert.equal(classify("KXNFLGAME-26OCT29AB-A"), "winner");
+  assert.equal(classify("KXATPMATCH-26OCT29AB-A"), "winner");
+  assert.equal(classify("KXNHLPUCKLINE-26OCT29AB"), "spread");
+  assert.equal(classify("KXNFLSPREAD-26OCT29AB", "Team to win"), "spread");
+  assert.equal(classify("KXNBATOTAL-26OCT29AB", "Over 210.5 points"), "total");
+  assert.equal(classify("KXNBAPTS-26OCT29AB", "Player over 30 points"), "props");
+  assert.equal(classify("KXNBAREBS-26OCT29AB"), "props");
+  assert.equal(classify("KXNBA-27", "Boston to win", "2027 Pro Basketball Champion"), "futures");
+  assert.equal(classify("UNKNOWN", "Boston wins by over 7.5 points"), "spread");
+  assert.equal(classify("UNKNOWN", "Over 2.5 goals"), "total");
+  assert.equal(classify("UNKNOWN", "Player to record 10 assists"), "props");
+  assert.equal(classify("UNKNOWN", "Real Madrid to win"), "winner");
+  assert.equal(classify("UNKNOWN", "Will both teams score?"), "other");
+  assert.equal(classify("UNKNOWN"), "other");
+});
 
 test("explorer SQL preserves canonical outcome precedence and parameterizes direction", () => {
   const dialect = new PgDialect();

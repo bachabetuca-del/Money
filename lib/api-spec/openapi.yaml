@@ -116,6 +116,13 @@ paths:
             type: string
             enum: [all, yes, no]
             default: all
+        - in: query
+          name: marketType
+          description: Classify saved markets using their series identifier and original titles; ambiguous markets remain in other.
+          schema:
+            type: string
+            enum: [all, winner, spread, total, props, futures, other]
+            default: all
       responses:
         "401":
           $ref: "#/components/responses/SignInRequired"

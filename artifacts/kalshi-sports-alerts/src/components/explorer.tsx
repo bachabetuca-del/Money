@@ -26,9 +26,16 @@ import type {
   GetKalshiExplorerBand,
   GetKalshiExplorerScope,
   GetKalshiExplorerWindow,
+  GetKalshiExplorerMarketType,
 } from '@workspace/api-client-react';
 
 const TZ = 'America/New_York';
+const MARKET_TYPES: [GetKalshiExplorerMarketType, string][] = [
+  ['all', 'Todos los tipos'], ['winner', 'Ganador / Moneyline'],
+  ['spread', 'Hándicap / Spread'], ['total', 'Totales · Más / Menos'],
+  ['props', 'Estadísticas de jugadores'], ['futures', 'Campeonatos / Futuros'],
+  ['other', 'Otros / Sin clasificar'],
+];
 const COLORS = { yes: '#1f7a8c', no: '#c9822b', unknown: '#8a948f' } as const;
 const DIR_LABEL: Record<Dir, string> = {
   yes: 'A favor (SÍ)',
@@ -75,6 +82,7 @@ type Params = {
   ticker: string;
   q: string;
   direction: 'all' | 'yes' | 'no';
+  marketType: GetKalshiExplorerMarketType;
 };
 
 function readParams(): Params {
@@ -84,7 +92,8 @@ function readParams(): Params {
   const w = p.get('window');
   const win = w === '1h' || w === '24h' ? w : 'all';
   const direction = p.get('direction') === 'yes' ? 'yes' : p.get('direction') === 'no' ? 'no' : 'all';
-  return { band, scope, win, direction, ticker: (p.get('ticker') ?? '').slice(0, 200), q: '' };
+  const marketType = MARKET_TYPES.find(([key]) => key === p.get('marketType'))?.[0] ?? 'all';
+  return { band, scope, win, direction, marketType, ticker: (p.get('ticker') ?? '').slice(0, 200), q: '' };
 }
 
 export function setUrlParams(values: Record<string, string | null>) {
@@ -333,16 +342,16 @@ export function Explorer() {
   const [params, setParams] = useState<Params>(readParams);
   const [openSports, setOpenSports] = useState<Set<string>>(new Set());
   const [openGames, setOpenGames] = useState<Set<string>>(new Set());
-  const { band, scope, win, ticker, q, direction } = params;
+  const { band, scope, win, ticker, q, direction, marketType } = params;
 
   useEffect(() => {
-    setUrlParams({ band: band === 'large' ? null : band, scope: scope === 'active' ? null : scope, window: win === 'all' ? null : win, ticker: ticker || null, direction: direction === 'all' ? null : direction });
-  }, [band, scope, win, ticker, direction]);
+    setUrlParams({ band: band === 'large' ? null : band, scope: scope === 'active' ? null : scope, window: win === 'all' ? null : win, ticker: ticker || null, direction: direction === 'all' ? null : direction, marketType: marketType === 'all' ? null : marketType });
+  }, [band, scope, win, ticker, direction, marketType]);
 
   const [paused, setPaused] = useState(false);
-  const catalogParams = { band, scope, direction, window: 'all' as const };
+  const catalogParams = { band, scope, direction, marketType, window: 'all' as const };
   const catalog = useGetKalshiExplorer(catalogParams, { query: { refetchInterval: FALLBACK_MS, retry: false } });
-  const detailParams = { band, scope, direction, window: win, ticker };
+  const detailParams = { band, scope, direction, marketType, window: win, ticker };
   const detailKey = ['/api/kalshi/explorer', detailParams] as const;
   const detail = useGetKalshiExplorer(detailParams, {
     query: { enabled: ticker.length > 0 && !paused, refetchInterval: FALLBACK_MS, retry: false, queryKey: detailKey },
@@ -398,7 +407,7 @@ export function Explorer() {
   const change = (patch: Partial<Params>) => setParams((p) => ({ ...p, ...patch }));
   const liveData = detail.data;
   const liveNow = useMemo(() => Date.now(), [liveData]);
-  const selKey = `${ticker}:${band}:${win}:${scope}:${direction}`;
+  const selKey = `${ticker}:${band}:${win}:${scope}:${direction}:${marketType}`;
 
   // Genuinely new IDs: only from refetches triggered by a live event for the same selection.
   const seen = useRef<SeenState>(null);
@@ -476,6 +485,12 @@ export function Explorer() {
         <Seg label="band" value={band} onChange={(v) => change({ band: v, ticker: '' })} options={[['large', '$10k+'], ['medium', '$5k–$10k'], ['small', '$1k–$5k']]} />
         <Seg label="window" value={win} onChange={(v) => change({ win: v })} options={[['1h', '1 hora'], ['24h', '24 horas'], ['all', 'Todo']]} />
         <Seg label="Posición" value={direction} onChange={(v) => change({ direction: v })} options={[['all', 'Todas'], ['yes', 'Yes · SÍ'], ['no', 'No']]} />
+        <label className="ws-type-filter">Tipo de apuesta
+          <select value={marketType} onChange={(e) => change({ marketType: e.target.value as GetKalshiExplorerMarketType })} data-testid="filter-market-type">
+            {MARKET_TYPES.map(([key, label]) => <option key={key} value={key}>{label}</option>)}
+          </select>
+        </label>
+        {marketType !== 'all' && <span className="ws-filter-note">Tipo: {MARKET_TYPES.find(([key]) => key === marketType)?.[1]}. Solo se muestran mercados de este tipo; la IA y el histórico completo conservan todos los tipos.</span>}
         <span className="ws-filter-note">{scopeText} · {bandText}</span>
         {direction !== 'all' && <span className="ws-filter-note">Solo dirección {direction === 'yes' ? 'YES (SÍ)' : 'NO'} · catálogo, gráficas, flujo, totales y PDF filtrados. Histórico completo e IA sin este filtro.</span>}
       </div>

@@ -251,6 +251,10 @@ window?: GetKalshiExplorerWindow;
  * Filter catalog and executions by public YES or NO direction; not proof of opening or closing a position.
  */
 direction?: GetKalshiExplorerDirection;
+/**
+ * Classify saved markets using their series identifier and original titles; ambiguous markets remain in other.
+ */
+marketType?: GetKalshiExplorerMarketType;
 };
 
 export type GetKalshiExplorerBand = typeof GetKalshiExplorerBand[keyof typeof GetKalshiExplorerBand];
@@ -286,5 +290,18 @@ export const GetKalshiExplorerDirection = {
   all: 'all',
   yes: 'yes',
   no: 'no',
+} as const;
+
+export type GetKalshiExplorerMarketType = typeof GetKalshiExplorerMarketType[keyof typeof GetKalshiExplorerMarketType];
+
+
+export const GetKalshiExplorerMarketType = {
+  all: 'all',
+  winner: 'winner',
+  spread: 'spread',
+  total: 'total',
+  props: 'props',
+  futures: 'futures',
+  other: 'other',
 } as const;
 
