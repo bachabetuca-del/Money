@@ -15,6 +15,60 @@ tags:
   - name: kalshi
     description: Kalshi sports trade monitoring and Telegram alerts
 paths:
+  /kalshi/history/export:
+    get:
+      operationId: downloadKalshiHistory
+      tags: [kalshi]
+      summary: Download every stored execution, without dashboard filters or row limits
+      parameters:
+        - in: query
+          name: format
+          required: true
+          schema: { type: string, enum: [json, csv] }
+      responses:
+        "200":
+          description: Complete database snapshot; not a guarantee of complete Kalshi exchange history
+          content:
+            application/json:
+              schema: { type: string, format: binary }
+            text/csv:
+              schema: { type: string, format: binary }
+  /kalshi/analysis:
+    get:
+      operationId: getKalshiAnalysis
+      tags: [kalshi]
+      summary: Retrieve the last saved game analysis without calling the AI
+      parameters:
+        - in: query
+          name: ticker
+          required: true
+          schema: { type: string, minLength: 1, maxLength: 200 }
+      responses:
+        "200":
+          description: Saved analysis and AI availability
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/GameAnalysisState" }
+    post:
+      operationId: analyzeKalshiGame
+      tags: [kalshi]
+      summary: Manually analyze a selected bet using saved activity across its game
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/GameAnalysisInput" }
+      responses:
+        "200":
+          description: Persisted Spanish analysis with timestamp and source coverage
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/GameAnalysis" }
+        "429":
+          description: A generation is in progress or the short cooldown has not elapsed
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ApiError" }
   /kalshi/live:
     get:
       operationId: streamKalshiActivity
@@ -211,6 +265,35 @@ components:
           schema:
             $ref: "#/components/schemas/ApiError"
   schemas:
+    GameAnalysisInput:
+      type: object
+      required: [ticker]
+      properties:
+        ticker: { type: string, minLength: 1, maxLength: 200 }
+    GameAnalysisState:
+      type: object
+      required: [available, analysis]
+      properties:
+        available: { type: boolean }
+        analysis:
+          anyOf:
+            - { $ref: "#/components/schemas/GameAnalysis" }
+            - { type: "null" }
+    GameAnalysis:
+      type: object
+      required: [ticker, gameName, betLabel, generatedAt, model, totalTrades, totalMarkets, includedMarkets, latestTradeAt, dataThrough, text]
+      properties:
+        ticker: { type: string }
+        gameName: { type: string }
+        betLabel: { type: string }
+        generatedAt: { type: string, format: date-time }
+        model: { type: string }
+        totalTrades: { type: integer }
+        totalMarkets: { type: integer }
+        includedMarkets: { type: integer }
+        latestTradeAt: { type: ["string", "null"], format: date-time }
+        dataThrough: { type: string, format: date-time }
+        text: { type: string }
     ExplorerMarket:
       type: object
       required: [ticker, sport, gameKey, gameName, gameDateLabel, betLabel, marketUrl, trades, lastTradeAt, state, gameResult, marketResult]

@@ -8,6 +8,11 @@ import {
   SendTelegramTestResponse,
   GetKalshiExplorerQueryParams,
   GetKalshiExplorerResponse,
+  DownloadKalshiHistoryQueryParams,
+  GetKalshiAnalysisQueryParams,
+  GetKalshiAnalysisResponse,
+  AnalyzeKalshiGameBody,
+  AnalyzeKalshiGameResponse,
 } from "@workspace/api-zod";
 import {
   findTelegramChat,
@@ -18,10 +23,53 @@ import {
 import { isOwnerChat } from "../lib/owner-policy";
 import { getKalshiExplorer } from "../lib/kalshi-explorer";
 import { kalshiLiveEvents } from "../lib/kalshi-live-events";
+import { streamHistoryExport } from "../lib/kalshi-history-export";
+import { analysisAvailable, gameAnalysisService, loadGameAnalysis } from "../lib/kalshi-game-analysis";
+import { AnalysisError } from "../lib/game-analysis";
 
 const router: IRouter = Router();
 // The parent router applies requireOwner to ALL /kalshi routes, including SSE.
 router.get("/kalshi/live", (req, res) => kalshiLiveEvents.serve(req, res));
+let exportInProgress = false;
+router.get("/kalshi/history/export", async (req, res): Promise<void> => {
+  const parsed = DownloadKalshiHistoryQueryParams.safeParse(req.query);
+  if (!parsed.success) { res.status(400).json({ error: "Elige JSON o CSV." }); return; }
+  if (exportInProgress) {
+    res.status(429).json({ error: "Hay otra descarga en curso. Espera a que termine." });
+    return;
+  }
+  exportInProgress = true;
+  try { await streamHistoryExport(req, res, parsed.data.format); }
+  catch {
+    if (res.headersSent) res.destroy();
+    else res.status(500).json({ error: "No se pudo completar la descarga del histórico. Inténtalo de nuevo." });
+  } finally { exportInProgress = false; }
+});
+router.get("/kalshi/analysis", async (req, res): Promise<void> => {
+  const parsed = GetKalshiAnalysisQueryParams.safeParse(req.query);
+  if (!parsed.success) { res.status(400).json({ error: "Selecciona un mercado válido." }); return; }
+  res.set("Cache-Control", "private, no-store");
+  res.json(GetKalshiAnalysisResponse.parse({
+    available: analysisAvailable(), analysis: await loadGameAnalysis(parsed.data.ticker),
+  }));
+});
+router.post("/kalshi/analysis", async (req, res): Promise<void> => {
+  const parsed = AnalyzeKalshiGameBody.safeParse(req.body);
+  if (!parsed.success) { res.status(400).json({ error: "Selecciona un mercado válido." }); return; }
+  if (!analysisAvailable()) { res.status(503).json({ error: "La integración de IA no está disponible en este entorno." }); return; }
+  try {
+    const report = await gameAnalysisService.generate(parsed.data.ticker);
+    res.set("Cache-Control", "private, no-store");
+    res.json(AnalyzeKalshiGameResponse.parse(report));
+  } catch (error) {
+    if (error instanceof AnalysisError) {
+      if (error.status === 429) res.set("Retry-After", "60");
+      res.status(error.status).json({ error: error.message });
+    } else {
+      res.status(500).json({ error: "No se pudo guardar el informe. El informe anterior se conserva." });
+    }
+  }
+});
 
 router.get("/kalshi/explorer", async (req, res): Promise<void> => {
   const parsed = GetKalshiExplorerQueryParams.safeParse(req.query);

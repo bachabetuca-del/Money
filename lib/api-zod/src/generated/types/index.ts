@@ -7,11 +7,17 @@
  */
 
 export * from './apiError';
+export * from './downloadKalshiHistoryFormat';
+export * from './downloadKalshiHistoryParams';
 export * from './explorerMarket';
 export * from './explorerMarketScoreStatus';
 export * from './explorerMarketState';
 export * from './explorerTrade';
 export * from './explorerTradeDirection';
+export * from './gameAnalysis';
+export * from './gameAnalysisInput';
+export * from './gameAnalysisState';
+export * from './getKalshiAnalysisParams';
 export * from './getKalshiExplorerBand';
 export * from './getKalshiExplorerParams';
 export * from './getKalshiExplorerScope';

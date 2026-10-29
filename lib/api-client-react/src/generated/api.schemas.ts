@@ -5,6 +5,34 @@
  * API specification
  * OpenAPI spec version: 0.1.0
  */
+export interface GameAnalysisInput {
+  /**
+     * @minLength 1
+     * @maxLength 200
+     */
+  ticker: string;
+}
+
+export interface GameAnalysis {
+  ticker: string;
+  gameName: string;
+  betLabel: string;
+  generatedAt: string;
+  model: string;
+  totalTrades: number;
+  totalMarkets: number;
+  includedMarkets: number;
+  /** @nullable */
+  latestTradeAt: string | null;
+  dataThrough: string;
+  text: string;
+}
+
+export interface GameAnalysisState {
+  available: boolean;
+  analysis: GameAnalysis | null;
+}
+
 export type ExplorerMarketState = typeof ExplorerMarketState[keyof typeof ExplorerMarketState];
 
 
@@ -190,6 +218,26 @@ export type OwnerRequiredResponse = ApiError;
  * Owner authorization is unavailable or not configured
  */
 export type OwnerUnavailableResponse = ApiError;
+
+export type DownloadKalshiHistoryParams = {
+format: DownloadKalshiHistoryFormat;
+};
+
+export type DownloadKalshiHistoryFormat = typeof DownloadKalshiHistoryFormat[keyof typeof DownloadKalshiHistoryFormat];
+
+
+export const DownloadKalshiHistoryFormat = {
+  json: 'json',
+  csv: 'csv',
+} as const;
+
+export type GetKalshiAnalysisParams = {
+/**
+ * @minLength 1
+ * @maxLength 200
+ */
+ticker: string;
+};
 
 export type GetKalshiExplorerParams = {
 band?: GetKalshiExplorerBand;

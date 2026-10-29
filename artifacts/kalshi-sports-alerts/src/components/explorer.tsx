@@ -16,6 +16,8 @@ import {
 import { getGetKalshiExplorerQueryKey, useGetKalshiExplorer } from '@workspace/api-client-react';
 import { useLiveExplorer } from '@/hooks/use-live-explorer';
 import { MarketFlow } from '@/components/market-flow';
+import { HistoryExport } from '@/components/history-export';
+import { GameAnalysisPanel } from '@/components/game-analysis-panel';
 import { diffFresh, FALLBACK_MS, FRESH_MS, lastExecution, viewSnapshot, type SeenState } from '@/lib/live-model';
 import { MINUTE, RECENT_MS, yesQuote, bubbleRadius, buildBuckets, groupMarkets, type Bucket, type Dir } from '@/lib/explorer-model';
 import type {
@@ -472,6 +474,7 @@ export function Explorer() {
         <Seg label="window" value={win} onChange={(v) => change({ win: v })} options={[['1h', '1 hora'], ['24h', '24 horas'], ['all', 'Todo']]} />
         <span className="ws-filter-note">{scopeText} · {bandText}</span>
       </div>
+      <HistoryExport />
       {scope === 'history' && catalog.data && (
         <Notice tone="warn" title="Historial posiblemente incompleto">
           Solo incluye lo que este monitor importó; no garantiza todo el historial de Kalshi. El estado de importación del mercado aparece junto a su gráfica.
@@ -571,6 +574,7 @@ export function Explorer() {
                 </div>
               </section>
 
+              <GameAnalysisPanel key={selected.ticker} ticker={selected.ticker} />
               <div className="ws-live" data-testid="live-bar">
                 {scope === 'active' ? (
                   <span className={`ws-live-state ${paused ? 'paused' : liveStatus}`} data-testid="status-live">

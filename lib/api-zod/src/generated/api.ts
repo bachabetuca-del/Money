@@ -9,6 +9,71 @@ import * as zod from 'zod';
 
 
 /**
+ * @summary Download every stored execution, without dashboard filters or row limits
+ */
+export const DownloadKalshiHistoryQueryParams = zod.object({
+  "format": zod.enum(['json', 'csv'])
+})
+
+export const DownloadKalshiHistoryResponse = zod.instanceof(Blob)
+
+
+/**
+ * @summary Retrieve the last saved game analysis without calling the AI
+ */
+export const getKalshiAnalysisQueryTickerMax = 200;
+
+
+
+export const GetKalshiAnalysisQueryParams = zod.object({
+  "ticker": zod.coerce.string().min(1).max(getKalshiAnalysisQueryTickerMax)
+})
+
+export const GetKalshiAnalysisResponse = zod.object({
+  "available": zod.boolean(),
+  "analysis": zod.union([zod.object({
+  "ticker": zod.string(),
+  "gameName": zod.string(),
+  "betLabel": zod.string(),
+  "generatedAt": zod.coerce.date(),
+  "model": zod.string(),
+  "totalTrades": zod.number().int(),
+  "totalMarkets": zod.number().int(),
+  "includedMarkets": zod.number().int(),
+  "latestTradeAt": zod.coerce.date().nullable(),
+  "dataThrough": zod.coerce.date(),
+  "text": zod.string()
+}),zod.null()])
+})
+
+
+/**
+ * @summary Manually analyze a selected bet using saved activity across its game
+ */
+export const analyzeKalshiGameBodyTickerMax = 200;
+
+
+
+export const AnalyzeKalshiGameBody = zod.object({
+  "ticker": zod.string().min(1).max(analyzeKalshiGameBodyTickerMax)
+})
+
+export const AnalyzeKalshiGameResponse = zod.object({
+  "ticker": zod.string(),
+  "gameName": zod.string(),
+  "betLabel": zod.string(),
+  "generatedAt": zod.coerce.date(),
+  "model": zod.string(),
+  "totalTrades": zod.number().int(),
+  "totalMarkets": zod.number().int(),
+  "includedMarkets": zod.number().int(),
+  "latestTradeAt": zod.coerce.date().nullable(),
+  "dataThrough": zod.coerce.date(),
+  "text": zod.string()
+})
+
+
+/**
  * @summary Owner-only grouped activity invalidations
  */
 export const StreamKalshiActivityResponse = zod.unknown()

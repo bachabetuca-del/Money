@@ -23,3 +23,4 @@ export * from "./kalshi-trade-history";
 export * from "./kalshi-notifications";
 export * from "./kalshi-game-status";
 export * from "./kalshi-results";
+export * from "./kalshi-analysis";

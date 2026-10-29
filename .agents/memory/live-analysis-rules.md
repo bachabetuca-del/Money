@@ -8,3 +8,9 @@ The user approved live website graphs with pause/resume, directional flow summar
 **Why:** They liked the existing bot/website and selected the first three proposed enhancements, not a replacement interface.
 
 **How to apply:** Pausing is a frozen analysis view, not a command to stop ingestion or Telegram. Imported/recovered history must not flash as a new live execution. Concentration signals are visual context only; they must never create additional push notifications or imply a common trader or a confirmed exit.
+
+The user wants to download the entire history **saved by this monitor** to analyze with an AI, and to request an AI interpretation for each game on the website. Do not silently equate saved history with every Kalshi transaction, or present public trade direction as proof of position sales or a validated outcome prediction. Keep AI generation manual and reusable when revisiting a report.
+
+**Why:** They want to judge whether a bet makes sense, but public transactions alone do not provide verified sports fundamentals, current tradable odds, or calibrated winning probabilities.
+
+**How to apply:** Keep full-history exports separate from a filtered chart/PDF. Label dataset coverage and freshness. Show the AI report's date and limitations, and never generate a new paid analysis just because the user navigates to a game.

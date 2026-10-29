@@ -26,6 +26,11 @@ import type {
 
 import type {
   ApiError,
+  DownloadKalshiHistoryParams,
+  GameAnalysis,
+  GameAnalysisInput,
+  GameAnalysisState,
+  GetKalshiAnalysisParams,
   GetKalshiExplorerParams,
   HealthStatus,
   KalshiDashboard,
@@ -65,6 +70,310 @@ const withQueryKey = <T extends object, K>(query: T, queryKey: K): T & { queryKe
   }
   return result;
 };
+
+export const getDownloadKalshiHistoryUrl = (params: DownloadKalshiHistoryParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/api/kalshi/history/export?${stringifiedParams}` : `/api/kalshi/history/export`
+}
+
+/**
+ * @summary Download every stored execution, without dashboard filters or row limits
+ */
+export const downloadKalshiHistory = async (params: DownloadKalshiHistoryParams, options?: Parameters<typeof customFetch>[1]): Promise<Blob> => {
+
+  return customFetch<Blob>(getDownloadKalshiHistoryUrl(params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getDownloadKalshiHistoryQueryKey = (params?: DownloadKalshiHistoryParams,) => {
+    return [
+    `/api/kalshi/history/export`, ...(params ? [params] : [])
+    ] as const;
+    }
+
+
+export const getDownloadKalshiHistoryQueryOptions = <TData = Awaited<ReturnType<typeof downloadKalshiHistory>>, TError = ErrorType<unknown>>(params: DownloadKalshiHistoryParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof downloadKalshiHistory>>, TError, TData>>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getDownloadKalshiHistoryQueryKey(params);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof downloadKalshiHistory>>> = ({ signal }) => downloadKalshiHistory(params, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof downloadKalshiHistory>>, TError, TData> & { queryKey: DataTag<QueryKey, TData, TError> }
+}
+
+export type DownloadKalshiHistoryQueryResult = NonNullable<Awaited<ReturnType<typeof downloadKalshiHistory>>>
+export type DownloadKalshiHistoryQueryError = ErrorType<unknown>
+
+
+export function useDownloadKalshiHistory<TData = Awaited<ReturnType<typeof downloadKalshiHistory>>, TError = ErrorType<unknown>>(
+ params: DownloadKalshiHistoryParams, options: { query:Partial<UseQueryOptions<Awaited<ReturnType<typeof downloadKalshiHistory>>, TError, TData>> & Pick<
+        DefinedInitialDataOptions<
+          Awaited<ReturnType<typeof downloadKalshiHistory>>,
+          TError,
+          Awaited<ReturnType<typeof downloadKalshiHistory>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient
+  ):  DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useDownloadKalshiHistory<TData = Awaited<ReturnType<typeof downloadKalshiHistory>>, TError = ErrorType<unknown>>(
+ params: DownloadKalshiHistoryParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof downloadKalshiHistory>>, TError, TData>> & Pick<
+        UndefinedInitialDataOptions<
+          Awaited<ReturnType<typeof downloadKalshiHistory>>,
+          TError,
+          Awaited<ReturnType<typeof downloadKalshiHistory>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useDownloadKalshiHistory<TData = Awaited<ReturnType<typeof downloadKalshiHistory>>, TError = ErrorType<unknown>>(
+ params: DownloadKalshiHistoryParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof downloadKalshiHistory>>, TError, TData>>, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+/**
+ * @summary Download every stored execution, without dashboard filters or row limits
+ */
+
+export function useDownloadKalshiHistory<TData = Awaited<ReturnType<typeof downloadKalshiHistory>>, TError = ErrorType<unknown>>(
+ params: DownloadKalshiHistoryParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof downloadKalshiHistory>>, TError, TData>>, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient
+ ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
+
+  const queryOptions = getDownloadKalshiHistoryQueryOptions(params,options)
+
+  const query = useQuery(queryOptions, queryClient) as  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getGetKalshiAnalysisUrl = (params: GetKalshiAnalysisParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/api/kalshi/analysis?${stringifiedParams}` : `/api/kalshi/analysis`
+}
+
+/**
+ * @summary Retrieve the last saved game analysis without calling the AI
+ */
+export const getKalshiAnalysis = async (params: GetKalshiAnalysisParams, options?: Parameters<typeof customFetch>[1]): Promise<GameAnalysisState> => {
+
+  return customFetch<GameAnalysisState>(getGetKalshiAnalysisUrl(params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetKalshiAnalysisQueryKey = (params?: GetKalshiAnalysisParams,) => {
+    return [
+    `/api/kalshi/analysis`, ...(params ? [params] : [])
+    ] as const;
+    }
+
+
+export const getGetKalshiAnalysisQueryOptions = <TData = Awaited<ReturnType<typeof getKalshiAnalysis>>, TError = ErrorType<unknown>>(params: GetKalshiAnalysisParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getKalshiAnalysis>>, TError, TData>>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetKalshiAnalysisQueryKey(params);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getKalshiAnalysis>>> = ({ signal }) => getKalshiAnalysis(params, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getKalshiAnalysis>>, TError, TData> & { queryKey: DataTag<QueryKey, TData, TError> }
+}
+
+export type GetKalshiAnalysisQueryResult = NonNullable<Awaited<ReturnType<typeof getKalshiAnalysis>>>
+export type GetKalshiAnalysisQueryError = ErrorType<unknown>
+
+
+export function useGetKalshiAnalysis<TData = Awaited<ReturnType<typeof getKalshiAnalysis>>, TError = ErrorType<unknown>>(
+ params: GetKalshiAnalysisParams, options: { query:Partial<UseQueryOptions<Awaited<ReturnType<typeof getKalshiAnalysis>>, TError, TData>> & Pick<
+        DefinedInitialDataOptions<
+          Awaited<ReturnType<typeof getKalshiAnalysis>>,
+          TError,
+          Awaited<ReturnType<typeof getKalshiAnalysis>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient
+  ):  DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useGetKalshiAnalysis<TData = Awaited<ReturnType<typeof getKalshiAnalysis>>, TError = ErrorType<unknown>>(
+ params: GetKalshiAnalysisParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getKalshiAnalysis>>, TError, TData>> & Pick<
+        UndefinedInitialDataOptions<
+          Awaited<ReturnType<typeof getKalshiAnalysis>>,
+          TError,
+          Awaited<ReturnType<typeof getKalshiAnalysis>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useGetKalshiAnalysis<TData = Awaited<ReturnType<typeof getKalshiAnalysis>>, TError = ErrorType<unknown>>(
+ params: GetKalshiAnalysisParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getKalshiAnalysis>>, TError, TData>>, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+/**
+ * @summary Retrieve the last saved game analysis without calling the AI
+ */
+
+export function useGetKalshiAnalysis<TData = Awaited<ReturnType<typeof getKalshiAnalysis>>, TError = ErrorType<unknown>>(
+ params: GetKalshiAnalysisParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getKalshiAnalysis>>, TError, TData>>, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient
+ ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
+
+  const queryOptions = getGetKalshiAnalysisQueryOptions(params,options)
+
+  const query = useQuery(queryOptions, queryClient) as  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getAnalyzeKalshiGameUrl = () => {
+
+
+
+
+  return `/api/kalshi/analysis`
+}
+
+/**
+ * @summary Manually analyze a selected bet using saved activity across its game
+ */
+export const analyzeKalshiGame = async (gameAnalysisInput: GameAnalysisInput, options?: Parameters<typeof customFetch>[1]): Promise<GameAnalysis> => {
+
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Symbol.iterator in h) {
+      return Object.fromEntries(
+        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
+      );
+    }
+    const headers: Record<string, string | readonly string[]> = {};
+    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
+      if (value !== undefined) headers[name] = value;
+    }
+    return headers;
+  };
+return customFetch<GameAnalysis>(getAnalyzeKalshiGameUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    body: JSON.stringify(gameAnalysisInput)
+  }
+);}
+
+
+
+
+
+export const getAnalyzeKalshiGameMutationKey = () => ['analyzeKalshiGame'] as const;
+
+export const getAnalyzeKalshiGameMutationOptions = <TError = ErrorType<ApiError>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof analyzeKalshiGame>>, TError,AnalyzeKalshiGameMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof analyzeKalshiGame>>, TError,AnalyzeKalshiGameMutationVariables, TContext> => {
+
+const mutationKey = getAnalyzeKalshiGameMutationKey();
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof analyzeKalshiGame>>, AnalyzeKalshiGameMutationVariables> = (props) => {
+          const {data} = props ?? {};
+
+          return  analyzeKalshiGame(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type AnalyzeKalshiGameMutationResult = NonNullable<Awaited<ReturnType<typeof analyzeKalshiGame>>>
+    export type AnalyzeKalshiGameMutationBody = BodyType<GameAnalysisInput>
+    export type AnalyzeKalshiGameMutationError = ErrorType<ApiError>
+    export type AnalyzeKalshiGameMutationVariables = {data: BodyType<GameAnalysisInput>}
+
+    /**
+ * @summary Manually analyze a selected bet using saved activity across its game
+ */
+export const useAnalyzeKalshiGame = <TError = ErrorType<ApiError>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof analyzeKalshiGame>>, TError,AnalyzeKalshiGameMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient): UseMutationResult<
+        Awaited<ReturnType<typeof analyzeKalshiGame>>,
+        TError,
+        AnalyzeKalshiGameMutationVariables,
+        TContext
+      > => {
+      return useMutation(getAnalyzeKalshiGameMutationOptions(options), queryClient);
+    }
 
 export const getStreamKalshiActivityUrl = () => {
 
