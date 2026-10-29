@@ -23,6 +23,7 @@ export * from './getKalshiExplorerDirection';
 export * from './getKalshiExplorerMarketType';
 export * from './getKalshiExplorerParams';
 export * from './getKalshiExplorerScope';
+export * from './getKalshiExplorerView';
 export * from './getKalshiExplorerWindow';
 export * from './healthStatus';
 export * from './kalshiDashboard';

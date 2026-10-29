@@ -10,6 +10,41 @@ import { gameScope, isWithinNext48Hours, scopedCatalog } from "./telegram-game-s
 import { buildCatalog, HOME, menuSvg, menuView, navigate, type MarketSummary } from "./telegram-dashboard-view";
 import { publicDirection } from "./telegram-trade-direction";
 import { marketType } from "./market-type";
+import { AsyncTtlCache } from "./async-ttl-cache";
+
+test("catalog cache coalesces simultaneous loads, expires, and isolates filter keys", async () => {
+  let now = 0, reads = 0;
+  const cache = new AsyncTtlCache<number>(10, 2, () => now);
+  const load = async () => ++reads;
+  assert.deepEqual(await Promise.all([cache.get("yes", load), cache.get("yes", load)]), [1, 1]);
+  assert.equal(reads, 1);
+  assert.equal(await cache.get("no", load), 2);
+  assert.equal(await cache.get("yes", load), 1);
+  now = 10;
+  assert.equal(await cache.get("yes", load), 3);
+});
+
+test("catalog cache rejects failures instead of serving an old success", async () => {
+  let now = 0;
+  const cache = new AsyncTtlCache<number>(10, 2, () => now);
+  assert.equal(await cache.get("catalog", async () => 1), 1);
+  now = 11;
+  await assert.rejects(cache.get("catalog", async () => { throw new Error("DB unavailable"); }), /DB unavailable/);
+  assert.equal(await cache.get("catalog", async () => 2), 2);
+});
+
+test("catalog cache stays bounded and keeps an in-flight lookup shared", async () => {
+  const cache = new AsyncTtlCache<number>(100, 1);
+  let done!: (n: number) => void;
+  const pending = cache.get("pending", () => new Promise<number>(resolve => { done = resolve; }));
+  await Promise.resolve();
+  assert.equal(await cache.get("another", async () => 2), 2);
+  const shared = cache.get("pending", async () => 999);
+  done(1);
+  assert.deepEqual(await Promise.all([pending, shared]), [1, 1]);
+  assert.equal(await cache.get("replacement", async () => 3), 3);
+  assert.equal(await cache.get("pending", async () => 4), 4);
+});
 
 test("market types classify series and retain ambiguous markets as other", () => {
   const classify = (ticker: string, marketTitle: string | null = null, eventTitle: string | null = null) =>

@@ -8,3 +8,4 @@
 - [Kalshi rate limits](kalshi-rate-limits.md) — share 429 pauses across workers; respect Retry-After and keep saved data accessible.
 - [Kalshi credential formatting](kalshi-credential-formatting.md) — rule out altered PEM line breaks before asking the user to replace an API key pair.
 - [Live analysis scope](live-analysis-rules.md) — preserve the current interface; pause freezes the view, and concentration signals remain visual-only.
+- [Explorer performance boundary](explorer-performance-boundary.md) — reuse catalog work without freezing trades, weakening filter validation, or changing Telegram.

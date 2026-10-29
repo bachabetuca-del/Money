@@ -2,6 +2,7 @@ import {
   boolean,
   bigint,
   integer,
+  index,
   numeric,
   pgTable,
   text,
@@ -46,7 +47,10 @@ export const kalshiAlertsTable = pgTable("kalshi_alerts", {
   marketUrl: text("market_url").notNull(),
   alertedAt: timestamp("alerted_at", { withTimezone: true }),
   savedAt: timestamp("saved_at", { withTimezone: true }).notNull().defaultNow(),
-});
+}, table => [
+  index("kalshi_alerts_ticker_time_trade_idx").on(table.ticker, table.createdTime.desc(), table.tradeId),
+  index("kalshi_alerts_notional_idx").on(table.notional),
+]);
 
 export const kalshiTelegramChartsTable = pgTable("kalshi_telegram_charts", {
   ticker: text("ticker").primaryKey(),

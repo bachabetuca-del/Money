@@ -350,11 +350,17 @@ export function Explorer() {
 
   const [paused, setPaused] = useState(false);
   const catalogParams = { band, scope, direction, marketType, window: 'all' as const };
-  const catalog = useGetKalshiExplorer(catalogParams, { query: { refetchInterval: FALLBACK_MS, retry: false } });
-  const detailParams = { band, scope, direction, marketType, window: win, ticker };
+  const catalog = useGetKalshiExplorer(catalogParams, { query: {
+    refetchInterval: FALLBACK_MS, staleTime: 10_000, refetchOnWindowFocus: false, retry: false,
+  } });
+  const detailParams = { band, scope, direction, marketType, window: win, ticker, view: 'detail' as const };
   const detailKey = ['/api/kalshi/explorer', detailParams] as const;
   const detail = useGetKalshiExplorer(detailParams, {
-    query: { enabled: ticker.length > 0 && !paused, refetchInterval: FALLBACK_MS, retry: false, queryKey: detailKey },
+    query: {
+      enabled: ticker.length > 0 && !paused && !!catalog.data?.markets.some(m => m.ticker === ticker),
+      refetchInterval: FALLBACK_MS, staleTime: 1_500, refetchOnWindowFocus: false,
+      retry: false, queryKey: detailKey,
+    },
   });
 
   // Live stream: refetch only the matching active detail (throttled) and the catalog.
@@ -372,7 +378,7 @@ export function Explorer() {
       const cur = liveRef.current;
       if (which === 'catalog') void qc.invalidateQueries({ queryKey: cur.catalogKey, exact: true }, { cancelRefetch: false });
       else if (cur.ticker && !cur.paused) void qc.invalidateQueries({ queryKey: cur.detailKey, exact: true }, { cancelRefetch: false });
-    }, which === 'detail' ? 400 : 5000);
+    }, which === 'detail' ? 2000 : 15000);
   }, [qc]);
   useEffect(() => () => { clearTimeout(timers.current.detail); clearTimeout(timers.current.catalog); }, []);
   const liveStatus = useLiveExplorer(true, {

@@ -255,6 +255,10 @@ direction?: GetKalshiExplorerDirection;
  * Classify saved markets using their series identifier and original titles; ambiguous markets remain in other.
  */
 marketType?: GetKalshiExplorerMarketType;
+/**
+ * Detail omits the repeated catalog payload but still validates the selected market against all filters. Full preserves the original response.
+ */
+view?: GetKalshiExplorerView;
 };
 
 export type GetKalshiExplorerBand = typeof GetKalshiExplorerBand[keyof typeof GetKalshiExplorerBand];
@@ -303,5 +307,13 @@ export const GetKalshiExplorerMarketType = {
   props: 'props',
   futures: 'futures',
   other: 'other',
+} as const;
+
+export type GetKalshiExplorerView = typeof GetKalshiExplorerView[keyof typeof GetKalshiExplorerView];
+
+
+export const GetKalshiExplorerView = {
+  full: 'full',
+  detail: 'detail',
 } as const;
 

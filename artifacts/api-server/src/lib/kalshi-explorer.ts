@@ -3,7 +3,7 @@ import { db, kalshiAlertsTable, kalshiMonitorSettingsTable } from "@workspace/db
 import { telegramDashboardStore } from "./telegram-dashboard-store";
 import { buildCatalog, type CatalogMarket } from "./telegram-dashboard-view";
 import { scopedCatalog } from "./telegram-game-scope";
-import { CAPTURE_MINIMUM, tradeRange, type TradeBand } from "./kalshi-trade-bands";
+import { CAPTURE_MINIMUM, tradeRange, type TradeBand, type TradeRange } from "./kalshi-trade-bands";
 import { publicDirection } from "./telegram-trade-direction";
 import { marketHistoryStore } from "./kalshi-market-history-store";
 import { explorerState, explorerSince, type ExplorerWindow } from "./kalshi-explorer-view";
@@ -12,6 +12,7 @@ import { gameDateLabel, gameTimeLabel } from "./telegram-game-date";
 import { emptyFlow } from "./market-flow";
 import { explorerDirection } from "./explorer-direction";
 import { marketType, type MarketType } from "./market-type";
+import { AsyncTtlCache } from "./async-ttl-cache";
 
 export type ExplorerFilters = {
   band: TradeBand;
@@ -20,13 +21,13 @@ export type ExplorerFilters = {
   window: ExplorerWindow;
   direction?: "all" | "yes" | "no";
   marketType?: "all" | MarketType;
+  view?: "full" | "detail";
 };
 
-/** Read-only: visiting the preview never polls Kalshi or sends Telegram messages. */
-export async function getKalshiExplorer(filters: ExplorerFilters, now = new Date()) {
-  const [settings] = await db.select({ minimumNotional: kalshiMonitorSettingsTable.minimumNotional })
-    .from(kalshiMonitorSettingsTable).where(eq(kalshiMonitorSettingsTable.id, 1)).limit(1);
-  const range = tradeRange(filters.band, settings?.minimumNotional ?? 10_000);
+const settingsCache = new AsyncTtlCache<number>(5_000, 1);
+const catalogCache = new AsyncTtlCache<Awaited<ReturnType<typeof loadExplorerCatalog>>>(10_000, 8);
+
+async function loadExplorerCatalog(range: TradeRange, filters: ExplorerFilters, now: Date) {
   const catalog = scopedCatalog(buildCatalog(await telegramDashboardStore.markets(range)), filters.scope, now);
   const games = new Map<string, CatalogMarket[]>();
   for (const market of catalog) {
@@ -48,10 +49,7 @@ export async function getKalshiExplorer(filters: ExplorerFilters, now = new Date
       ? lte(kalshiAlertsTable.notional, range.maximum) : lt(kalshiAlertsTable.notional, range.maximum),
   )).groupBy(kalshiAlertsTable.ticker) : null;
   const countsByTicker = new Map(directionCounts?.map(row => [row.ticker, row]));
-  const markets = catalog.filter(m =>
-    (!directionCounts || countsByTicker.has(m.ticker)) &&
-    (!filters.marketType || filters.marketType === "all" || marketType(m) === filters.marketType)
-  ).map(m => {
+  const markets = catalog.filter(m => !directionCounts || countsByTicker.has(m.ticker)).map(m => {
     const scheduled = games.get(m.gameKey)?.find(game =>
       game.gameStartsAt && Number.isFinite(new Date(game.gameStartsAt).getTime()));
     return {
@@ -67,11 +65,30 @@ export async function getKalshiExplorer(filters: ExplorerFilters, now = new Date
     marketResult: m.marketResult ?? null,
     scoreStatus: m.scoreStatus ?? "pending",
     scoreMessage: m.scoreMessage ?? null,
+    marketType: marketType(m),
   };
   }).sort((a, b) => b.lastTradeAt.localeCompare(a.lastTradeAt));
+  return { markets, generatedAt: now.toISOString() };
+}
+
+/** Read-only: cache catalog work, never cache selected executions or contact Kalshi here. */
+export async function getKalshiExplorer(filters: ExplorerFilters, now = new Date()) {
+  const minimum = await settingsCache.get("minimum", async () => {
+    const [settings] = await db.select({ minimumNotional: kalshiMonitorSettingsTable.minimumNotional })
+      .from(kalshiMonitorSettingsTable).where(eq(kalshiMonitorSettingsTable.id, 1)).limit(1);
+    return settings?.minimumNotional ?? 10_000;
+  });
+  const range = tradeRange(filters.band, minimum);
+  // Window/ticker/type share a snapshot. The time bucket keeps lifecycle boundaries bounded.
+  const key = JSON.stringify([range, filters.scope, filters.direction ?? "all", Math.floor(now.getTime() / 10_000)]);
+  const snapshot = await catalogCache.get(key, () => loadExplorerCatalog(range, filters, now));
+  const markets = snapshot.markets.filter(m =>
+    !filters.marketType || filters.marketType === "all" || m.marketType === filters.marketType);
   const empty = {
-    generatedAt: now.toISOString(), workersPaused: process.env.BOT_WORKERS_ENABLED === "false",
-    markets, trades: [], totalTrades: 0, truncated: false, historyStatus: "Sin mercado seleccionado",
+    generatedAt: filters.ticker ? now.toISOString() : snapshot.generatedAt,
+    workersPaused: process.env.BOT_WORKERS_ENABLED === "false",
+    markets: filters.view === "detail" ? [] : markets,
+    trades: [], totalTrades: 0, truncated: false, historyStatus: "Sin mercado seleccionado",
     flow: [5, 15, 60].map(emptyFlow),
   };
   // A hidden/old selection cannot leak trades from another band or scope.
@@ -79,6 +96,9 @@ export async function getKalshiExplorer(filters: ExplorerFilters, now = new Date
   if (filters.scope === "history") scoreQueue.request(filters.ticker);
 
   const since = explorerSince(filters.window, now);
+  const directionCondition = filters.direction && filters.direction !== "all"
+    ? eq(explorerDirection(kalshiAlertsTable.outcomeSide, kalshiAlertsTable.bookSide), filters.direction)
+    : undefined;
   const condition = and(
     directionCondition,
     eq(kalshiAlertsTable.ticker, filters.ticker),

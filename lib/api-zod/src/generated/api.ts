@@ -89,6 +89,7 @@ export const getKalshiExplorerQueryTickerMax = 200;
 export const getKalshiExplorerQueryWindowDefault = `all`;
 export const getKalshiExplorerQueryDirectionDefault = `all`;
 export const getKalshiExplorerQueryMarketTypeDefault = `all`;
+export const getKalshiExplorerQueryViewDefault = `full`;
 
 export const GetKalshiExplorerQueryParams = zod.object({
   "band": zod.enum(['large', 'medium', 'small']).default(getKalshiExplorerQueryBandDefault),
@@ -96,7 +97,8 @@ export const GetKalshiExplorerQueryParams = zod.object({
   "ticker": zod.coerce.string().max(getKalshiExplorerQueryTickerMax).optional(),
   "window": zod.enum(['1h', '24h', 'all']).default(getKalshiExplorerQueryWindowDefault),
   "direction": zod.enum(['all', 'yes', 'no']).default(getKalshiExplorerQueryDirectionDefault).describe('Filter catalog and executions by public YES or NO direction; not proof of opening or closing a position.'),
-  "marketType": zod.enum(['all', 'winner', 'spread', 'total', 'props', 'futures', 'other']).default(getKalshiExplorerQueryMarketTypeDefault).describe('Classify saved markets using their series identifier and original titles; ambiguous markets remain in other.')
+  "marketType": zod.enum(['all', 'winner', 'spread', 'total', 'props', 'futures', 'other']).default(getKalshiExplorerQueryMarketTypeDefault).describe('Classify saved markets using their series identifier and original titles; ambiguous markets remain in other.'),
+  "view": zod.enum(['full', 'detail']).default(getKalshiExplorerQueryViewDefault).describe('Detail omits the repeated catalog payload but still validates the selected market against all filters. Full preserves the original response.')
 })
 
 export const GetKalshiExplorerResponse = zod.object({

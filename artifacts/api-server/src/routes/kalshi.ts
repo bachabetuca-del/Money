@@ -82,6 +82,7 @@ router.get("/kalshi/explorer", async (req, res): Promise<void> => {
     ticker: parsed.data.ticker, window: parsed.data.window ?? "all",
     direction: parsed.data.direction ?? "all",
     marketType: parsed.data.marketType ?? "all",
+    view: parsed.data.view ?? "full",
   });
   res.json(GetKalshiExplorerResponse.parse(data));
 });

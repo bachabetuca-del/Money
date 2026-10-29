@@ -31,16 +31,27 @@ export const telegramDashboardStore: DashboardStore = {
       .onConflictDoUpdate({ target: telegramDashboardTable.chatId, set: saved });
   },
   async markets(range) {
-    const rows = await db.select({
+    const [rows, statuses, results] = await Promise.all([db.select({
       ticker: kalshiAlertsTable.ticker, sport: kalshiAlertsTable.sport,
       eventTitle: kalshiAlertsTable.eventTitle, marketTitle: kalshiAlertsTable.marketTitle,
       marketUrl: kalshiAlertsTable.marketUrl, trades: count(),
       lastTradeAt: sql<string>`max(${kalshiAlertsTable.createdTime})::text`,
     }).from(kalshiAlertsTable).where(rangeCondition(range))
       .groupBy(kalshiAlertsTable.ticker, kalshiAlertsTable.sport, kalshiAlertsTable.eventTitle,
-        kalshiAlertsTable.marketTitle, kalshiAlertsTable.marketUrl);
-    const statuses = await db.select().from(kalshiGameStatusTable);
-    const results = await db.select().from(kalshiResultsTable);
+        kalshiAlertsTable.marketTitle, kalshiAlertsTable.marketUrl),
+      // Do not transfer provider errors, retry scheduling or unused metadata on every read.
+      db.select({
+        ticker: kalshiGameStatusTable.ticker, milestoneId: kalshiGameStatusTable.milestoneId,
+        state: kalshiGameStatusTable.state, source: kalshiGameStatusTable.source,
+        delayed: kalshiGameStatusTable.delayed, startsAt: kalshiGameStatusTable.startsAt,
+        checkedAt: kalshiGameStatusTable.checkedAt, marketTerminal: kalshiGameStatusTable.marketTerminal,
+      }).from(kalshiGameStatusTable),
+      db.select({
+        ticker: kalshiResultsTable.ticker, gameResult: kalshiResultsTable.gameResult,
+        marketResult: kalshiResultsTable.marketResult, attempts: kalshiResultsTable.attempts,
+        error: kalshiResultsTable.error,
+      }).from(kalshiResultsTable),
+    ]);
     const resultByTicker = new Map(results.map(row => [row.ticker, row]));
     const resultByMilestone = new Map<string, string>();
     for (const status of statuses) {

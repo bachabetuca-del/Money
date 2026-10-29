@@ -9,6 +9,7 @@ import type { GetKalshiExplorerBand } from './getKalshiExplorerBand';
 import type { GetKalshiExplorerDirection } from './getKalshiExplorerDirection';
 import type { GetKalshiExplorerMarketType } from './getKalshiExplorerMarketType';
 import type { GetKalshiExplorerScope } from './getKalshiExplorerScope';
+import type { GetKalshiExplorerView } from './getKalshiExplorerView';
 import type { GetKalshiExplorerWindow } from './getKalshiExplorerWindow';
 
 export type GetKalshiExplorerParams = {
@@ -27,4 +28,8 @@ direction?: GetKalshiExplorerDirection;
  * Classify saved markets using their series identifier and original titles; ambiguous markets remain in other.
  */
 marketType?: GetKalshiExplorerMarketType;
+/**
+ * Detail omits the repeated catalog payload but still validates the selected market against all filters. Full preserves the original response.
+ */
+view?: GetKalshiExplorerView;
 };
