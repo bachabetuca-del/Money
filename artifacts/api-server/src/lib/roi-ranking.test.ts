@@ -13,7 +13,7 @@ function row(changes: Partial<RoiRollup> = {}): RoiRollup {
   return {
     ticker: "KXNFLGAME-26OCT29AB-A", sport: "Football", eventTitle: "A vs B",
     marketTitle: "A wins", gameId: "game1", marketUrl: "https://kalshi.com/markets/a",
-    bucket: 5, category: "settled", trades: 1, wins: 1, profit: 100, recentTrades: 1, recentProfit: 100,
+    bucket: 5, side: "yes", category: "settled", trades: 1, wins: 1, profit: 100, recentTrades: 1, recentProfit: 100,
     firstAt: "2026-10-29T12:00:00.000Z", lastAt: "2026-10-29T12:00:00.000Z",
     checkedAt: now.toISOString(), error: false, ...changes,
   };
@@ -90,6 +90,42 @@ test("no settled data has null ROI, including recent; errors and pending are vis
   assert.equal(summary.recentRoiPct, null);
   const settled = buildRoiRanking([row({ recentTrades: 0, recentProfit: 0 })], "sport", 1);
   assert.equal(settled.rows[0].recentRoiPct, null);
+});
+
+test("combined rankings separate YES and NO at identical own-side odds, preserving aggregate totals", () => {
+  const input = [
+    row({ side: "yes", trades: 3, wins: 2, profit: 100 }),
+    row({ side: "no", trades: 2, wins: 0, profit: -200 }),
+    row({ side: "yes", ticker: "KXNFLGAME-26OCT30CD-A", gameId: "game2", profit: 100 }),
+  ];
+  const combined = buildRoiRanking(input, "segment", 1);
+  assert.equal(combined.rows.length, 2);
+  const [yes, no] = combined.rows;
+  assert.equal(yes.side, "yes");
+  assert.equal(yes.roiPct, 50);
+  assert.equal(yes.trades, 4);
+  assert.equal(yes.wins, 3);
+  assert.equal(yes.games, 2);
+  assert.equal(no.side, "no");
+  assert.equal(no.roiPct, -100);
+  assert.equal(no.trades, 2);
+  assert.equal(no.wins, 0);
+  assert.deepEqual([no.oddsMin, no.oddsMax], [0.5, 0.6]);
+  assert.notEqual(yes.id, no.id);
+  assert.match(yes.label, /YES/);
+  assert.match(no.label, /NO/);
+  const sport = buildRoiRanking(input, "sport", 1);
+  assert.equal(sport.rows[0].side, null);
+  assert.equal(sport.rows[0].trades, 6);
+  assert.equal(sport.rows[0].roiPct, 0);
+  assert.deepEqual(combined.summary, sport.summary);
+});
+
+test("minimum games applies separately to each combined side, not their pooled sample", () => {
+  const input = [row(), row({ side: "no", gameId: "game2", ticker: "KXNFLGAME-26OCT30CD-A" })];
+  assert.equal(buildRoiRanking(input, "segment", 2).rows.length, 0);
+  assert.equal(buildRoiRanking(input, "sport", 2).rows.length, 1);
+  assert.equal(buildRoiRanking([row({ side: "no" })], "sport", 1).rows[0].side, "no");
 });
 
 test("history quality distinguishes excluded resolved trades from pending settlements without inventing ROI", () => {

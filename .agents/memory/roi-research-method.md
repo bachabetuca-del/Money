@@ -18,3 +18,9 @@ Default to markets whose available execution history has been fully reconciled a
 Finish resumable current-version final audits before starting more legacy imports, while preserving priority for a user-selected chart. Apply the same priorities before the database candidate limit and in the worker.
 
 **Why:** Legacy in-progress flags and old timestamps can otherwise fill a bounded candidate window indefinitely, starting thousands of imports without completing verified markets.
+
+Keep the primary comparison side-specific, following the user's compact table reference with American odds and wins/total. Aggregate sport or market views may combine directions, but must not be presented as one YES or NO strategy.
+
+**Why:** The user wants to compare distinct sport, market, direction and odds combinations. Pooling opposite directions can hide their different returns or inflate the apparent sample supporting a single strategy. “Muestras” means observed executions, not independent games or traders.
+
+**How to apply:** Keep the primary table compact without weakening verified-history eligibility or sample-size warnings. Treat changes in display format separately from changes in the underlying research method.

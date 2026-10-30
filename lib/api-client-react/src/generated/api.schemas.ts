@@ -79,6 +79,18 @@ export interface RoiCoverage {
   historyExcludedTrades: number;
 }
 
+/**
+ * Observed outcome side; null only for aggregate views combining both sides. Combined segments always separate YES from NO.
+ * @nullable
+ */
+export type RoiRankingRowSide = typeof RoiRankingRowSide[keyof typeof RoiRankingRowSide] | null;
+
+
+export const RoiRankingRowSide = {
+  yes: 'yes',
+  no: 'no',
+} as const;
+
 export interface RoiRankingRow {
   id: string;
   rank: number;
@@ -87,6 +99,11 @@ export interface RoiRankingRow {
   sport: string | null;
   /** @nullable */
   marketType: string | null;
+  /**
+     * Observed outcome side; null only for aggregate views combining both sides. Combined segments always separate YES from NO.
+     * @nullable
+     */
+  side: RoiRankingRowSide;
   /** @nullable */
   marketUrl: string | null;
   /** @nullable */

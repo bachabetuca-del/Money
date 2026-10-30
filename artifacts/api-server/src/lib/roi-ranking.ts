@@ -11,7 +11,7 @@ export const ROI_TYPE_LABELS: Record<MarketType, string> = {
 /** One DB aggregate, not one observation per independent bettor or game. */
 export type RoiRollup = {
   ticker: string; sport: string; eventTitle: string | null; marketTitle: string | null;
-  gameId: string; marketUrl: string; bucket: number;
+  gameId: string; marketUrl: string; bucket: number; side: "yes" | "no" | "unknown";
   category: "settled" | "pending" | "excluded" | "incomplete";
   historyVerified?: boolean; historyError?: boolean;
   trades: number; wins: number; profit: number; recentTrades: number; recentProfit: number;
@@ -34,6 +34,7 @@ function bucketLabel(bucket: number) {
 
 type Accumulator = {
   id: string; label: string; sport: string | null; marketType: string | null;
+  side: "yes" | "no" | null;
   marketUrl: string | null; oddsMin: number | null; oddsMax: number | null;
   trades: number; wins: number; profit: number; recentTrades: number; recentProfit: number;
   games: Set<string>; markets: Set<string>;
@@ -71,7 +72,7 @@ export function buildRoiRanking(rollups: RoiRollup[], groupBy: RoiGroup, minGame
     const type = marketType(r);
     const id = groupBy === "sport" ? r.sport : groupBy === "marketType" ? type :
       groupBy === "odds" ? String(r.bucket) : groupBy === "market" ? r.ticker :
-      JSON.stringify([r.sport, type, r.bucket]);
+      JSON.stringify([r.sport, type, r.side, r.bucket]);
     let group = groups.get(id);
     if (!group) {
       group = {
@@ -79,9 +80,10 @@ export function buildRoiRanking(rollups: RoiRollup[], groupBy: RoiGroup, minGame
           groupBy === "marketType" ? ROI_TYPE_LABELS[type] :
           groupBy === "odds" ? bucketLabel(r.bucket) :
           groupBy === "market" ? `${r.eventTitle ?? r.ticker} · ${r.marketTitle ?? r.ticker}` :
-          `${r.sport} · ${ROI_TYPE_LABELS[type]} · ${bucketLabel(r.bucket)}`,
+          `${r.sport} · ${ROI_TYPE_LABELS[type]} · ${r.side.toUpperCase()} · ${bucketLabel(r.bucket)}`,
         sport: ["sport", "segment", "market"].includes(groupBy) ? r.sport : null,
         marketType: ["marketType", "segment", "market"].includes(groupBy) ? type : null,
+        side: r.side === "yes" || r.side === "no" ? r.side : null,
         marketUrl: groupBy === "market" ? r.marketUrl : null,
         oddsMin: ["odds", "segment"].includes(groupBy) ? r.bucket / 10 : null,
         oddsMax: ["odds", "segment"].includes(groupBy) ? (r.bucket + 1) / 10 : null,
@@ -90,6 +92,7 @@ export function buildRoiRanking(rollups: RoiRollup[], groupBy: RoiGroup, minGame
       };
       groups.set(id, group);
     }
+    if (group.side !== r.side) group.side = null;
     group.trades += r.trades; group.wins += r.wins; group.profit += r.profit;
     group.recentTrades += r.recentTrades; group.recentProfit += r.recentProfit;
     group.games.add(r.gameId); group.markets.add(r.ticker);
@@ -98,7 +101,7 @@ export function buildRoiRanking(rollups: RoiRollup[], groupBy: RoiGroup, minGame
     .sort((a, b) => b.profit / b.trades - a.profit / a.trades ||
       b.games.size - a.games.size || b.trades - a.trades || a.id.localeCompare(b.id))
     .map((g, i) => ({
-      id: g.id, rank: i + 1, label: g.label, sport: g.sport, marketType: g.marketType,
+      id: g.id, rank: i + 1, label: g.label, sport: g.sport, marketType: g.marketType, side: g.side,
       marketUrl: g.marketUrl, oddsMin: g.oddsMin, oddsMax: g.oddsMax,
       trades: g.trades, games: g.games.size, markets: g.markets.size,
       wins: g.wins, losses: g.trades - g.wins, winRatePct: rounded(100 * g.wins / g.trades),

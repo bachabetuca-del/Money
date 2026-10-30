@@ -5,6 +5,7 @@
  * API specification
  * OpenAPI spec version: 0.1.0
  */
+import type { RoiRankingRowSide } from './roiRankingRowSide';
 
 export interface RoiRankingRow {
   id: string;
@@ -14,6 +15,11 @@ export interface RoiRankingRow {
   sport: string | null;
   /** @nullable */
   marketType: string | null;
+  /**
+     * Observed outcome side; null only for aggregate views combining both sides. Combined segments always separate YES from NO.
+     * @nullable
+     */
+  side: RoiRankingRowSide;
   /** @nullable */
   marketUrl: string | null;
   /** @nullable */

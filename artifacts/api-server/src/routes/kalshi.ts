@@ -39,7 +39,7 @@ router.get("/kalshi/leaderboard", async (req, res): Promise<void> => {
   res.set("Cache-Control", "private, no-store");
   try {
     const data = await getRoiLeaderboard({
-      groupBy: parsed.data.groupBy ?? "sport", window: parsed.data.window ?? "all",
+      groupBy: parsed.data.groupBy ?? "segment", window: parsed.data.window ?? "all",
       band: parsed.data.band ?? "all", direction: parsed.data.direction ?? "all",
       minGames: parsed.data.minGames ?? 10, page: parsed.data.page ?? 1,
       coverage: parsed.data.coverage ?? "verified",

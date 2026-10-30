@@ -55,7 +55,7 @@ export async function loadRoiRollups(options: Options, threshold: number, now: D
     )
     SELECT ticker, max(sport) AS sport, max(event_title) AS "eventTitle",
       max(market_title) AS "marketTitle", max(game_id) AS "gameId", max(market_url) AS "marketUrl",
-      CASE WHEN price > 0 AND price <= 1 THEN least(9, floor(price * 10))::int ELSE -1 END AS bucket, category,
+      CASE WHEN price > 0 AND price <= 1 THEN least(9, floor(price * 10))::int ELSE -1 END AS bucket, category, side,
       count(*)::int AS trades,
       count(*) FILTER (WHERE category = 'settled' AND side = result)::int AS wins,
       coalesce(sum(CASE WHEN category = 'settled'
@@ -69,7 +69,7 @@ export async function loadRoiRollups(options: Options, threshold: number, now: D
       bool_or(error IS NOT NULL) AS error
       , bool_and(history_verified) AS "historyVerified", bool_or(history_error) AS "historyError"
     FROM classified GROUP BY ticker,
-      CASE WHEN price > 0 AND price <= 1 THEN least(9, floor(price * 10))::int ELSE -1 END, category
+      CASE WHEN price > 0 AND price <= 1 THEN least(9, floor(price * 10))::int ELSE -1 END, category, side
   `);
   return {
     generatedAt: now.toISOString(),

@@ -13,14 +13,16 @@ import {
   type RoiRankingRow,
 } from '@workspace/api-client-react';
 import { errorText } from '@/components/history-export';
+import { RoiCombinedTable } from './roi-combined-table';
+import { americanOddsRange, ROI_MARKET_NAMES } from '../lib/roi-display';
 import './roi-leaderboard.css';
 
 const TZ = 'America/New_York';
 const GROUPS: { v: GetKalshiLeaderboardGroupBy; l: string }[] = [
+  { v: 'segment', l: 'Ranking combinado' },
   { v: 'sport', l: 'Deportes' },
   { v: 'marketType', l: 'Tipos de mercado' },
   { v: 'odds', l: 'Rangos de cuota' },
-  { v: 'segment', l: 'Segmentos' },
   { v: 'market', l: 'Mercados individuales' },
 ];
 const WINDOWS: { v: GetKalshiLeaderboardWindow; l: string }[] = [
@@ -30,12 +32,9 @@ const BANDS: { v: GetKalshiLeaderboardBand; l: string }[] = [
   { v: 'all', l: 'Todas · desde $1k' }, { v: 'large', l: 'Grandes · umbral principal ≥ $10k' },
   { v: 'medium', l: 'Más de $5k y menos de $10k' }, { v: 'small', l: '$1k–$5k inclusive' },
 ];
-const TYPE_NAMES: Record<string, string> = {
-  winner: 'Ganador', spread: 'Hándicap', total: 'Totales', props: 'Estadísticas de jugadores',
-  futures: 'Campeonatos / Futuros', other: 'Otros / Sin clasificar',
-};
+const TYPE_NAMES = ROI_MARKET_NAMES;
 const DIRS: { v: GetKalshiLeaderboardDirection; l: string }[] = [
-  { v: 'all', l: 'SÍ y NO' }, { v: 'yes', l: 'Solo SÍ' }, { v: 'no', l: 'Solo NO' },
+  { v: 'all', l: 'YES y NO' }, { v: 'yes', l: 'Solo YES' }, { v: 'no', l: 'Solo NO' },
 ];
 const MIN_OPTS = [1, 5, 10, 20, 50];
 const COVERAGE: { v: GetKalshiLeaderboardCoverage; l: string }[] = [
@@ -70,14 +69,12 @@ function oddsText(r: RoiRankingRow) {
   const lo = r.oddsMin ?? 0, hi = r.oddsMax ?? 1;
   const last = hi >= 1;
   const range = `${Math.round(lo * 100)}–${Math.round(hi * 100)}¢ ${last ? '(incl.)' : '(sin incluir el límite)'}`;
-  const dHi = lo > 0 ? (1 / lo).toFixed(2) : '∞';
-  const dLo = (1 / hi).toFixed(2);
-  return `${range} · cuota decimal ${dLo}–${dHi}`;
+  return `${americanOddsRange(lo, hi)} · ${range}`;
 }
 
 function readInitial() {
   const p = new URLSearchParams(window.location.search);
-  const groupBy = pick(p.get('lbGroup'), GROUPS, 'sport');
+  const groupBy = pick(p.get('lbGroup'), GROUPS, 'segment');
   const mg = Number(p.get('lbMin'));
   return {
     groupBy,
@@ -128,8 +125,8 @@ export function RoiLeaderboard() {
       <section className="lb-head">
         <div>
           <div className="eyebrow">Ranking ROI · evidencia histórica</div>
-          <h2><Trophy size={20} /> Qué habría pasado con $100 por operación</h2>
-          <p>Cada ejecución guardada recibe una inversión hipotética igual de $100, en su dirección observada (SÍ o NO) y a su propio precio de entrada, mantenida hasta la liquidación binaria oficial. Es un ejercicio retrospectivo, no ganancias reales ni una predicción.</p>
+          <h2><Trophy size={20} /> Ranking de ROI</h2>
+          <p>Compara deporte, mercado, lado y odds con $100 hipotéticos por operación y liquidaciones oficiales. De mayor a menor ROI.</p>
         </div>
         <div className="lb-snap" data-testid="text-leaderboard-snapshot">
           {q.isFetching ? <><RefreshCw className="spin" size={12} /> Actualizando…</> : data ? <>Instantánea {when(data.generatedAt)}</> : 'Sin instantánea'}
@@ -140,7 +137,7 @@ export function RoiLeaderboard() {
       <div className="lb-caution" role="note" data-testid="text-leaderboard-caution">
         <AlertTriangle size={16} />
         <div>
-          <strong>Sin rentabilidad garantizada.</strong> Un ranking ordenado por resultado ya conocido elige ganadores a posteriori. Las operaciones de un mismo partido están correlacionadas, el recuento de partidos es una estimación, y no se incluyen comisiones, deslizamiento ni la posibilidad real de ejecutar al mismo precio.
+          <strong>Histórico, no predicción.</strong> ROI hipotético sin comisiones ni deslizamiento. Las operaciones del mismo partido están correlacionadas; no garantiza rentabilidad futura.
         </div>
       </div>
 
@@ -188,12 +185,11 @@ export function RoiLeaderboard() {
 
       {data && (
         <>
-          <Coverage s={data.summary} />
-          <section className={`ws-card lb-card ${stale ? 'stale' : ''}`} aria-busy={stale} aria-labelledby="lb-table-title">
+          <section className={`ws-card lb-card ${data.groupBy === 'segment' ? 'lb-combined-card' : ''} ${stale ? 'stale' : ''}`} aria-busy={stale} aria-labelledby="lb-table-title">
             <header className="row">
               <div>
                 <h3 id="lb-table-title">{GROUPS.find((g) => g.v === data.groupBy)?.l ?? 'Ranking'} · ordenado por ROI</h3>
-                <p>{data.totalRows.toLocaleString('es-US')} grupos con al menos {data.minGames} {data.minGames === 1 ? 'partido' : 'partidos'} · ${data.stakePerTrade} por operación · reciente = ejecuciones de los últimos 7 días dentro del periodo.</p>
+                <p>{data.totalRows.toLocaleString('es-US')} combinaciones con al menos {data.minGames} {data.minGames === 1 ? 'partido' : 'partidos'} · ${data.stakePerTrade} por operación{data.groupBy === 'segment' ? ' · YES y NO separados' : ' · reciente = últimos 7 días'}</p>
               </div>
               {stale && <span className="lb-tag" data-testid="status-leaderboard-stale">Cargando filtros nuevos…</span>}
             </header>
@@ -201,7 +197,7 @@ export function RoiLeaderboard() {
               <EmptyRows s={data.summary} minGames={data.minGames} onLower={data.minGames > 1 ? () => update({ minGames: 1 }) : undefined} />
             ) : (
               <>
-                <div className="lb-table-wrap">
+                {data.groupBy === 'segment' ? <RoiCombinedTable rows={data.rows} /> : <div className="lb-table-wrap">
                   <table className="ws-table lb-table" data-testid="table-leaderboard">
                     <caption className="sr-only">Ranking de ROI hipotético</caption>
                     <thead>
@@ -220,7 +216,7 @@ export function RoiLeaderboard() {
                       {data.rows.map((r) => <Row key={r.id} r={r} />)}
                     </tbody>
                   </table>
-                </div>
+                </div>}
                 <nav className="lb-pager" aria-label="Paginación del ranking">
                   <button className="button secondary" disabled={data.page <= 1 || stale} onClick={() => setPage(Math.max(1, data.page - 1))} data-testid="button-page-prev"><ChevronLeft /> Anterior</button>
                   <span data-testid="text-page">Página {data.page} de {Math.max(1, data.totalPages)}</span>
@@ -229,7 +225,15 @@ export function RoiLeaderboard() {
               </>
             )}
           </section>
-          <p className="lb-foot">ROI = resultado hipotético total / invertido × 100. Operaciones pendientes, con liquidación no soportada o registros inválidos se excluyen; nunca cuentan como pérdidas. Por defecto también se excluyen los mercados cuyo historial final no está verificado. "Muestra pequeña" = menos de 10 partidos o menos de 30 operaciones; superar ese umbral no implica significancia estadística. Cuotas por precio del lado operado (NO usa su precio NO real), en tramos de 10¢.</p>
+          <details className="lb-methodology" data-testid="details-roi-methodology">
+            <summary>Cobertura y metodología <span>{data.summary.settledTrades.toLocaleString('es-US')} operaciones liquidadas · {data.summary.verifiedHistoryMarkets.toLocaleString('es-US')} mercados con historial verificado</span></summary>
+            <div className="lb-methodology-body">
+              <Coverage s={data.summary} />
+              <p className="lb-foot">Cada ejecución recibe $100 hipotéticos al precio de entrada de su lado (YES o NO), mantenidos hasta la liquidación binaria oficial. ROI = resultado hipotético total / invertido × 100. No son ganancias reales. Un ranking ordenado por resultado ya conocido elige ganadores a posteriori y no demuestra que se pudiera ejecutar al mismo precio.</p>
+              <p className="lb-foot">Operaciones pendientes, con liquidación no soportada o registros inválidos se excluyen; nunca cuentan como pérdidas. Por defecto también se excluyen los mercados cuyo historial final no está verificado. "Muestra pequeña" = menos de 10 partidos o menos de 30 operaciones; superar ese umbral no implica significancia estadística. Los partidos son estimados, no participantes únicos.</p>
+            </div>
+          </details>
+          <p className="lb-foot">Odds americanas aproximadas, convertidas del precio del lado operado (NO usa su precio NO real). Tramos de 10¢: límite inferior incluido salvo 0¢ y superior excluido salvo 100¢. +100 equivale a 50¢; los extremos 0¢ y 100¢ se expresan como límites infinitos, no como cuotas disponibles.</p>
         </>
       )}
     </div>
@@ -249,7 +253,7 @@ function Sel<T extends string>({ id, label, value, opts, onChange }: { id: strin
 
 function Row({ r }: { r: RoiRankingRow }) {
   const odds = oddsText(r);
-  const meta = [r.sport, r.marketType ? TYPE_NAMES[r.marketType] ?? r.marketType : null].filter(Boolean).join(' · ');
+  const meta = [r.sport, r.marketType ? TYPE_NAMES[r.marketType] ?? r.marketType : null, r.side?.toUpperCase() ?? 'YES + NO'].filter(Boolean).join(' · ');
   const delta = r.recentRoiPct != null ? r.recentRoiPct - r.roiPct : null;
   return (
     <tr data-testid={`row-leaderboard-${r.id}`}>

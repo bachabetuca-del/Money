@@ -12,7 +12,7 @@ import * as zod from 'zod';
  * @summary Equal-stake hypothetical ROI from saved trades and official binary settlements
  */
 export const getKalshiLeaderboardQueryCoverageDefault = `verified`;
-export const getKalshiLeaderboardQueryGroupByDefault = `sport`;
+export const getKalshiLeaderboardQueryGroupByDefault = `segment`;
 export const getKalshiLeaderboardQueryWindowDefault = `all`;
 export const getKalshiLeaderboardQueryBandDefault = `all`;
 export const getKalshiLeaderboardQueryDirectionDefault = `all`;
@@ -70,6 +70,7 @@ export const GetKalshiLeaderboardResponse = zod.object({
   "label": zod.string(),
   "sport": zod.string().nullable(),
   "marketType": zod.string().nullable(),
+  "side": zod.union([zod.literal('yes'),zod.literal('no'),zod.literal(null)]).nullable().describe('Observed outcome side; null only for aggregate views combining both sides. Combined segments always separate YES from NO.'),
   "marketUrl": zod.string().nullable(),
   "oddsMin": zod.number().nullable(),
   "oddsMax": zod.number().nullable(),

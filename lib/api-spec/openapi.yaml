@@ -26,7 +26,7 @@ paths:
           schema: { type: string, enum: [verified, all], default: verified }
         - in: query
           name: groupBy
-          schema: { type: string, enum: [sport, marketType, odds, segment, market], default: sport }
+          schema: { type: string, enum: [sport, marketType, odds, segment, market], default: segment }
         - in: query
           name: window
           schema: { type: string, enum: [all, 30d, 7d], default: all }
@@ -374,13 +374,17 @@ components:
         historyExcludedTrades: { type: integer }
     RoiRankingRow:
       type: object
-      required: [id, rank, label, sport, marketType, marketUrl, oddsMin, oddsMax, trades, games, markets, wins, losses, winRatePct, roiPct, profit, invested, recentRoiPct, recentTrades, sampleWarning]
+      required: [id, rank, label, sport, marketType, side, marketUrl, oddsMin, oddsMax, trades, games, markets, wins, losses, winRatePct, roiPct, profit, invested, recentRoiPct, recentTrades, sampleWarning]
       properties:
         id: { type: string }
         rank: { type: integer }
         label: { type: string }
         sport: { type: [string, "null"] }
         marketType: { type: [string, "null"] }
+        side:
+          type: [string, "null"]
+          enum: [yes, no, null]
+          description: Observed outcome side; null only for aggregate views combining both sides. Combined segments always separate YES from NO.
         marketUrl: { type: [string, "null"] }
         oddsMin: { type: [number, "null"] }
         oddsMax: { type: [number, "null"] }

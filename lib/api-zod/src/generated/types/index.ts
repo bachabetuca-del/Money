@@ -47,6 +47,7 @@ export * from './roiLeaderboardDirection';
 export * from './roiLeaderboardGroupBy';
 export * from './roiLeaderboardWindow';
 export * from './roiRankingRow';
+export * from './roiRankingRowSide';
 export * from './signInRequiredResponse';
 export * from './telegramChatLookup';
 export * from './telegramTestInput';
