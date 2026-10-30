@@ -22,6 +22,15 @@ export const RoiLeaderboardGroupBy = {
   odds: 'odds',
   segment: 'segment',
   market: 'market',
+  amount: 'amount',
+} as const;
+
+export type RoiLeaderboardSortBy = typeof RoiLeaderboardSortBy[keyof typeof RoiLeaderboardSortBy];
+
+
+export const RoiLeaderboardSortBy = {
+  roi: 'roi',
+  winRate: 'winRate',
 } as const;
 
 export type RoiLeaderboardWindow = typeof RoiLeaderboardWindow[keyof typeof RoiLeaderboardWindow];
@@ -91,6 +100,66 @@ export const RoiRankingRowSide = {
   no: 'no',
 } as const;
 
+/**
+ * Observed transaction size; null when the group includes multiple monetary bands. This is not the hypothetical stake.
+ * @nullable
+ */
+export type RoiRankingRowMoneyBand = typeof RoiRankingRowMoneyBand[keyof typeof RoiRankingRowMoneyBand] | null;
+
+
+export const RoiRankingRowMoneyBand = {
+  small: 'small',
+  medium: 'medium',
+  large: 'large',
+} as const;
+
+export interface RoiWeekPerformance {
+  /**
+     * Monday local calendar date in America/New_York, grouped by execution time rather than settlement time. Empty intervening weeks have null rates.
+     * @pattern ^\d{4}-\d{2}-\d{2}$
+     */
+  weekStart: string;
+  trades: number;
+  games: number;
+  wins: number;
+  profit: number;
+  /** @nullable */
+  roiPct: number | null;
+  /** @nullable */
+  winRatePct: number | null;
+  /** The calendar week is still open or is clipped by the selected time window. False does not certify complete exchange-wide coverage. */
+  partial: boolean;
+  sampleWarning: boolean;
+}
+
+/**
+ * small: $1,000–$5,000 inclusive; medium: strictly above $5,000 and below $10,000; large: $10,000 and above. Other selected filters still apply.
+ */
+export type RoiMoneyPerformanceBand = typeof RoiMoneyPerformanceBand[keyof typeof RoiMoneyPerformanceBand];
+
+
+export const RoiMoneyPerformanceBand = {
+  small: 'small',
+  medium: 'medium',
+  large: 'large',
+} as const;
+
+export interface RoiMoneyPerformance {
+  /** small: $1,000–$5,000 inclusive; medium: strictly above $5,000 and below $10,000; large: $10,000 and above. Other selected filters still apply. */
+  band: RoiMoneyPerformanceBand;
+  trades: number;
+  games: number;
+  wins: number;
+  profit: number;
+  /** @nullable */
+  roiPct: number | null;
+  /** @nullable */
+  winRatePct: number | null;
+  sampleWarning: boolean;
+  /** Whether this monetary subgroup meets the selected minimum distinct-game count. */
+  meetsMinimum: boolean;
+}
+
 export interface RoiRankingRow {
   id: string;
   rank: number;
@@ -104,6 +173,11 @@ export interface RoiRankingRow {
      * @nullable
      */
   side: RoiRankingRowSide;
+  /**
+     * Observed transaction size; null when the group includes multiple monetary bands. This is not the hypothetical stake.
+     * @nullable
+     */
+  moneyBand: RoiRankingRowMoneyBand;
   /** @nullable */
   marketUrl: string | null;
   /** @nullable */
@@ -123,13 +197,18 @@ export interface RoiRankingRow {
   recentRoiPct: number | null;
   recentTrades: number;
   sampleWarning: boolean;
+  weekly: RoiWeekPerformance[];
+  moneyBands: RoiMoneyPerformance[];
 }
 
 export interface RoiLeaderboard {
   generatedAt: string;
   stakePerTrade: number;
+  /** Actual minimum applied when the large-operation filter is selected; canonical money bands still use $10,000 as their boundary. */
+  largeTradeThreshold: number;
   coverage: RoiLeaderboardCoverage;
   groupBy: RoiLeaderboardGroupBy;
+  sortBy: RoiLeaderboardSortBy;
   window: RoiLeaderboardWindow;
   band: RoiLeaderboardBand;
   direction: RoiLeaderboardDirection;
@@ -363,6 +442,7 @@ export type OwnerUnavailableResponse = ApiError;
 export type GetKalshiLeaderboardParams = {
 coverage?: GetKalshiLeaderboardCoverage;
 groupBy?: GetKalshiLeaderboardGroupBy;
+sortBy?: GetKalshiLeaderboardSortBy;
 window?: GetKalshiLeaderboardWindow;
 band?: GetKalshiLeaderboardBand;
 direction?: GetKalshiLeaderboardDirection;
@@ -395,6 +475,15 @@ export const GetKalshiLeaderboardGroupBy = {
   odds: 'odds',
   segment: 'segment',
   market: 'market',
+  amount: 'amount',
+} as const;
+
+export type GetKalshiLeaderboardSortBy = typeof GetKalshiLeaderboardSortBy[keyof typeof GetKalshiLeaderboardSortBy];
+
+
+export const GetKalshiLeaderboardSortBy = {
+  roi: 'roi',
+  winRate: 'winRate',
 } as const;
 
 export type GetKalshiLeaderboardWindow = typeof GetKalshiLeaderboardWindow[keyof typeof GetKalshiLeaderboardWindow];

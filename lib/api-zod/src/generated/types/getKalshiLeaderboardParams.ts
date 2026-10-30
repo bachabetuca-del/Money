@@ -9,11 +9,13 @@ import type { GetKalshiLeaderboardBand } from './getKalshiLeaderboardBand';
 import type { GetKalshiLeaderboardCoverage } from './getKalshiLeaderboardCoverage';
 import type { GetKalshiLeaderboardDirection } from './getKalshiLeaderboardDirection';
 import type { GetKalshiLeaderboardGroupBy } from './getKalshiLeaderboardGroupBy';
+import type { GetKalshiLeaderboardSortBy } from './getKalshiLeaderboardSortBy';
 import type { GetKalshiLeaderboardWindow } from './getKalshiLeaderboardWindow';
 
 export type GetKalshiLeaderboardParams = {
 coverage?: GetKalshiLeaderboardCoverage;
 groupBy?: GetKalshiLeaderboardGroupBy;
+sortBy?: GetKalshiLeaderboardSortBy;
 window?: GetKalshiLeaderboardWindow;
 band?: GetKalshiLeaderboardBand;
 direction?: GetKalshiLeaderboardDirection;

@@ -40,6 +40,7 @@ router.get("/kalshi/leaderboard", async (req, res): Promise<void> => {
   try {
     const data = await getRoiLeaderboard({
       groupBy: parsed.data.groupBy ?? "segment", window: parsed.data.window ?? "all",
+      sortBy: parsed.data.sortBy ?? "roi",
       band: parsed.data.band ?? "all", direction: parsed.data.direction ?? "all",
       minGames: parsed.data.minGames ?? 10, page: parsed.data.page ?? 1,
       coverage: parsed.data.coverage ?? "verified",

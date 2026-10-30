@@ -5,7 +5,10 @@
  * API specification
  * OpenAPI spec version: 0.1.0
  */
+import type { RoiMoneyPerformance } from './roiMoneyPerformance';
+import type { RoiRankingRowMoneyBand } from './roiRankingRowMoneyBand';
 import type { RoiRankingRowSide } from './roiRankingRowSide';
+import type { RoiWeekPerformance } from './roiWeekPerformance';
 
 export interface RoiRankingRow {
   id: string;
@@ -20,6 +23,11 @@ export interface RoiRankingRow {
      * @nullable
      */
   side: RoiRankingRowSide;
+  /**
+     * Observed transaction size; null when the group includes multiple monetary bands. This is not the hypothetical stake.
+     * @nullable
+     */
+  moneyBand: RoiRankingRowMoneyBand;
   /** @nullable */
   marketUrl: string | null;
   /** @nullable */
@@ -39,4 +47,6 @@ export interface RoiRankingRow {
   recentRoiPct: number | null;
   recentTrades: number;
   sampleWarning: boolean;
+  weekly: RoiWeekPerformance[];
+  moneyBands: RoiMoneyPerformance[];
 }

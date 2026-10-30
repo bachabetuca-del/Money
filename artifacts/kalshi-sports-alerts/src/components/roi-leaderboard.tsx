@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { Fragment, useState } from 'react';
 import { AlertTriangle, ChevronLeft, ChevronRight, ExternalLink, RefreshCw, Scale, Trophy } from 'lucide-react';
 import {
   getGetKalshiLeaderboardQueryKey,
@@ -8,6 +8,8 @@ import {
   type GetKalshiLeaderboardDirection,
   type GetKalshiLeaderboardGroupBy,
   type GetKalshiLeaderboardParams,
+  type GetKalshiLeaderboardSortBy,
+  type RoiLeaderboard as RoiLeaderboardData,
   type GetKalshiLeaderboardWindow,
   type RoiCoverage,
   type RoiRankingRow,
@@ -15,6 +17,9 @@ import {
 import { errorText } from '@/components/history-export';
 import { RoiCombinedTable } from './roi-combined-table';
 import { americanOddsRange, ROI_MARKET_NAMES } from '../lib/roi-display';
+import { RoiRowBreakdown } from './roi-row-breakdown';
+import { RoiAmountCompare } from './roi-amount-compare';
+import { bandLabel, domId } from '../lib/roi-breakdown';
 import './roi-leaderboard.css';
 
 const TZ = 'America/New_York';
@@ -24,6 +29,10 @@ const GROUPS: { v: GetKalshiLeaderboardGroupBy; l: string }[] = [
   { v: 'marketType', l: 'Tipos de mercado' },
   { v: 'odds', l: 'Rangos de cuota' },
   { v: 'market', l: 'Mercados individuales' },
+  { v: 'amount', l: 'Rangos de importe' },
+];
+const SORTS: { v: GetKalshiLeaderboardSortBy; l: string }[] = [
+  { v: 'roi', l: 'ROI' }, { v: 'winRate', l: '% aciertos' },
 ];
 const WINDOWS: { v: GetKalshiLeaderboardWindow; l: string }[] = [
   { v: 'all', l: 'Todo' }, { v: '30d', l: '30 días' }, { v: '7d', l: '7 días' },
@@ -78,6 +87,7 @@ function readInitial() {
   const mg = Number(p.get('lbMin'));
   return {
     groupBy,
+    sortBy: pick(p.get('lbSort'), SORTS, 'roi'),
     window: pick(p.get('lbWin'), WINDOWS, 'all'),
     band: pick(p.get('lbBand'), BANDS, 'all'),
     direction: pick(p.get('lbDir'), DIRS, 'all'),
@@ -89,7 +99,7 @@ function readInitial() {
 function writeUrl(f: ReturnType<typeof readInitial>) {
   const p = new URLSearchParams(window.location.search);
   p.set('lbGroup', f.groupBy); p.set('lbWin', f.window); p.set('lbBand', f.band); p.set('lbDir', f.direction); p.set('lbMin', String(f.minGames));
-  p.set('lbCoverage', f.coverage);
+  p.set('lbCoverage', f.coverage); p.set('lbSort', f.sortBy);
   window.history.replaceState(null, '', `${window.location.pathname}?${p.toString()}`);
 }
 
@@ -150,6 +160,14 @@ export function RoiLeaderboard() {
             ))}
           </div>
         </div>
+        <div className="lb-filter">
+          <span id="lb-sort">Ordenar por</span>
+          <div className="ws-seg lb-seg" role="radiogroup" aria-labelledby="lb-sort">
+            {SORTS.map((o) => (
+              <button key={o.v} role="radio" aria-checked={f.sortBy === o.v} className={f.sortBy === o.v ? 'on' : ''} onClick={() => update({ sortBy: o.v })} data-testid={`button-sort-${o.v}`}>{o.l}</button>
+            ))}
+          </div>
+        </div>
         <Sel id="lb-window" label="Periodo (fecha de ejecución)" value={f.window} opts={WINDOWS} onChange={(v) => update({ window: v })} />
         <Sel id="lb-band" label="Banda de tamaño" value={f.band} opts={BANDS} onChange={(v) => update({ band: v })} />
         <Sel id="lb-dir" label="Dirección" value={f.direction} opts={DIRS} onChange={(v) => update({ direction: v })} />
@@ -174,6 +192,13 @@ export function RoiLeaderboard() {
         </div>
       )}
 
+      {f.groupBy === 'amount' && (
+        <div className="ws-notice" role="note" data-testid="text-amount-view-note">
+          <div><strong>Vista por rango de importe observado</strong><p>Compara $1k–$5k (inclusive), más de $5k y menos de $10k, y $10k o más. Son importes de operaciones vistas, no tamaños de apuesta sugeridos. Aplica los mismos filtros de periodo, dirección, calidad, mínimo de partidos y banda: {f.band === 'all' ? 'con "Todas" se comparan los tres rangos.' : 'selecciona "Todas" en Banda de tamaño para comparar los tres rangos.'}</p></div>
+          {f.band !== 'all' && <button className="button secondary" onClick={() => update({ band: 'all' })} data-testid="button-amount-all-bands">Comparar todos</button>}
+        </div>
+      )}
+
       {q.isError && (
         <div className="ws-notice error" role="alert" data-testid="status-leaderboard-error">
           <div><strong>{data ? 'No se pudo actualizar; se muestra la última instantánea' : 'No se pudo cargar el ranking'}</strong><p>{errorText(q.error, 'Error desconocido.')}</p></div>
@@ -188,8 +213,8 @@ export function RoiLeaderboard() {
           <section className={`ws-card lb-card ${data.groupBy === 'segment' ? 'lb-combined-card' : ''} ${stale ? 'stale' : ''}`} aria-busy={stale} aria-labelledby="lb-table-title">
             <header className="row">
               <div>
-                <h3 id="lb-table-title">{GROUPS.find((g) => g.v === data.groupBy)?.l ?? 'Ranking'} · ordenado por ROI</h3>
-                <p>{data.totalRows.toLocaleString('es-US')} combinaciones con al menos {data.minGames} {data.minGames === 1 ? 'partido' : 'partidos'} · ${data.stakePerTrade} por operación{data.groupBy === 'segment' ? ' · YES y NO separados' : ' · reciente = últimos 7 días'}</p>
+                <h3 id="lb-table-title">{GROUPS.find((g) => g.v === data.groupBy)?.l ?? 'Ranking'} · ordenado por {data.sortBy === 'winRate' ? '% aciertos' : 'ROI'}</h3>
+                <p>{data.totalRows.toLocaleString('es-US')} combinaciones con al menos {data.minGames} {data.minGames === 1 ? 'partido' : 'partidos'} · ${data.stakePerTrade} por operación{data.groupBy === 'segment' ? ' · YES y NO separados' : ' · reciente = últimos 7 días'}{data.band === 'large' ? ` · banda grande desde $${data.largeTradeThreshold.toLocaleString('en-US')}` : ''}</p>
               </div>
               {stale && <span className="lb-tag" data-testid="status-leaderboard-stale">Cargando filtros nuevos…</span>}
             </header>
@@ -197,23 +222,24 @@ export function RoiLeaderboard() {
               <EmptyRows s={data.summary} minGames={data.minGames} onLower={data.minGames > 1 ? () => update({ minGames: 1 }) : undefined} />
             ) : (
               <>
-                {data.groupBy === 'segment' ? <RoiCombinedTable rows={data.rows} /> : <div className="lb-table-wrap">
+                {data.groupBy === 'amount' && <RoiAmountCompare data={data} />}
+                {data.groupBy === 'segment' ? <RoiCombinedTable rows={data.rows} sortBy={data.sortBy} minGames={data.minGames} /> : <div className="lb-table-wrap">
                   <table className="ws-table lb-table" data-testid="table-leaderboard">
                     <caption className="sr-only">Ranking de ROI hipotético</caption>
                     <thead>
                       <tr>
                         <th scope="col">#</th>
                         <th scope="col">Grupo</th>
-                        <th scope="col" className="r">ROI periodo</th>
+                        <th scope="col" className="r" aria-sort={data.sortBy === 'roi' ? 'descending' : undefined}>ROI periodo</th>
                         <th scope="col" className="r">ROI reciente 7d</th>
                         <th scope="col" className="r">Resultado</th>
                         <th scope="col" className="r">Operaciones</th>
                         <th scope="col" className="r">Partidos · mercados</th>
-                        <th scope="col" className="r">Ganadas / perdidas</th>
+                        <th scope="col" className="r" aria-sort={data.sortBy === 'winRate' ? 'descending' : undefined}>% aciertos · G / P</th>
                       </tr>
                     </thead>
                     <tbody>
-                      {data.rows.map((r) => <Row key={r.id} r={r} />)}
+                      {data.rows.map((r) => <Row key={r.id} r={r} data={data} />)}
                     </tbody>
                   </table>
                 </div>}
@@ -251,12 +277,14 @@ function Sel<T extends string>({ id, label, value, opts, onChange }: { id: strin
   );
 }
 
-function Row({ r }: { r: RoiRankingRow }) {
+function Row({ r, data }: { r: RoiRankingRow; data: RoiLeaderboardData }) {
+  const [open, setOpen] = useState(false);
   const odds = oddsText(r);
-  const meta = [r.sport, r.marketType ? TYPE_NAMES[r.marketType] ?? r.marketType : null, r.side?.toUpperCase() ?? 'YES + NO'].filter(Boolean).join(' · ');
+  const meta = [r.sport, r.marketType ? TYPE_NAMES[r.marketType] ?? r.marketType : null, r.side?.toUpperCase() ?? 'YES + NO', r.moneyBand ? `importe ${bandLabel(r.moneyBand)}` : null].filter(Boolean).join(' · ');
   const delta = r.recentRoiPct != null ? r.recentRoiPct - r.roiPct : null;
   return (
-    <tr data-testid={`row-leaderboard-${r.id}`}>
+    <Fragment>
+    <tr data-testid={`row-leaderboard-${r.id}`} className={open ? 'lb-open' : ''}>
       <td className="lb-rank">{r.rank}</td>
       <td className="lb-label">
         <div className="lb-name">
@@ -265,6 +293,9 @@ function Row({ r }: { r: RoiRankingRow }) {
         </div>
         {(meta || odds) && <small>{[meta, odds].filter(Boolean).join(' · ')}</small>}
         {r.sampleWarning && <span className="lb-tag warn" data-testid={`status-sample-${r.id}`}>Muestra pequeña</span>}
+        <button type="button" className="lb-expand light" aria-expanded={open} aria-controls={domId('lb-detail', r.id)} onClick={() => setOpen(!open)} data-testid={`button-breakdown-${r.id}`}>
+          <ChevronRight size={13} aria-hidden="true" className={open ? 'open' : ''} /> {open ? 'Ocultar' : 'Ver'} semanas y rangos de importe
+        </button>
       </td>
       <td className={`r lb-roi ${tone(r.roiPct)}`} data-testid={`text-roi-${r.id}`}>{pct(r.roiPct)}</td>
       <td className="r">
@@ -274,8 +305,10 @@ function Row({ r }: { r: RoiRankingRow }) {
       <td className={`r ${tone(r.profit)}`}>{usd(r.profit)}<small className="lb-sub">de ${r.invested.toLocaleString('en-US')}</small></td>
       <td className="r">{r.trades.toLocaleString('es-US')}</td>
       <td className="r">{r.games} · {r.markets}</td>
-      <td className="r">{r.wins} / {r.losses}<small className="lb-sub">{pct(r.winRatePct, false)} aciertos</small></td>
+      <td className="r"><span className="lb-pct" data-testid={`text-winrate-${r.id}`}>{pct(r.winRatePct, false)}</span><small className="lb-sub">{r.wins} / {r.losses} ganadas / perdidas</small></td>
     </tr>
+    {open && <tr className="lb-detail-row" id={domId('lb-detail', r.id)}><td colSpan={8}><RoiRowBreakdown row={r} minGames={data.minGames} /></td></tr>}
+    </Fragment>
   );
 }
 

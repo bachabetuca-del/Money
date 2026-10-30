@@ -24,3 +24,9 @@ Keep the primary comparison side-specific, following the user's compact table re
 **Why:** The user wants to compare distinct sport, market, direction and odds combinations. Pooling opposite directions can hide their different returns or inflate the apparent sample supporting a single strategy. “Muestras” means observed executions, not independent games or traders.
 
 **How to apply:** Keep the primary table compact without weakening verified-history eligibility or sample-size warnings. Treat changes in display format separately from changes in the underlying research method.
+
+The user wants to compare historical accuracy by observed transaction size, alongside accuracy percentages, distinct-game counts and weekly ROI. Keep accuracy, return and consistency separate; trade amounts are not recommended personal stakes.
+
+**Why:** The user asked whether the combined ranking identified the odds that win most consistently, although it ranks historical return. A profitable aggregate can have a low hit rate or depend on a small number of games.
+
+**How to apply:** Use execution-week cohorts, Monday–Sunday in New York, rather than moving past observations into their later settlement weeks. Empty weeks have unknown returns, not zero returns. Show under-minimum monetary subgroups but do not label them as leaders. Calendar-week results remain historical observations, not forward validation or proof of future profitability.

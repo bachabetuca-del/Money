@@ -15,4 +15,5 @@ export const RoiLeaderboardGroupBy = {
   odds: 'odds',
   segment: 'segment',
   market: 'market',
+  amount: 'amount',
 } as const;

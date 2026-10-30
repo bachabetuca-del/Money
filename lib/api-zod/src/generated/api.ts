@@ -13,6 +13,7 @@ import * as zod from 'zod';
  */
 export const getKalshiLeaderboardQueryCoverageDefault = `verified`;
 export const getKalshiLeaderboardQueryGroupByDefault = `segment`;
+export const getKalshiLeaderboardQuerySortByDefault = `roi`;
 export const getKalshiLeaderboardQueryWindowDefault = `all`;
 export const getKalshiLeaderboardQueryBandDefault = `all`;
 export const getKalshiLeaderboardQueryDirectionDefault = `all`;
@@ -26,7 +27,8 @@ export const getKalshiLeaderboardQueryPageMax = 100000;
 
 export const GetKalshiLeaderboardQueryParams = zod.object({
   "coverage": zod.enum(['verified', 'all']).default(getKalshiLeaderboardQueryCoverageDefault),
-  "groupBy": zod.enum(['sport', 'marketType', 'odds', 'segment', 'market']).default(getKalshiLeaderboardQueryGroupByDefault),
+  "groupBy": zod.enum(['sport', 'marketType', 'odds', 'segment', 'market', 'amount']).default(getKalshiLeaderboardQueryGroupByDefault),
+  "sortBy": zod.enum(['roi', 'winRate']).default(getKalshiLeaderboardQuerySortByDefault),
   "window": zod.enum(['all', '30d', '7d']).default(getKalshiLeaderboardQueryWindowDefault),
   "band": zod.enum(['all', 'large', 'medium', 'small']).default(getKalshiLeaderboardQueryBandDefault),
   "direction": zod.enum(['all', 'yes', 'no']).default(getKalshiLeaderboardQueryDirectionDefault),
@@ -34,11 +36,16 @@ export const GetKalshiLeaderboardQueryParams = zod.object({
   "page": zod.coerce.number().int().min(1).max(getKalshiLeaderboardQueryPageMax).default(getKalshiLeaderboardQueryPageDefault)
 })
 
+export const getKalshiLeaderboardResponseRowsItemWeeklyItemWeekStartRegExp = new RegExp('^\\d{4}-\\d{2}-\\d{2}$');
+
+
 export const GetKalshiLeaderboardResponse = zod.object({
   "generatedAt": zod.coerce.date(),
   "stakePerTrade": zod.number(),
+  "largeTradeThreshold": zod.number().describe('Actual minimum applied when the large-operation filter is selected; canonical money bands still use $10,000 as their boundary.'),
   "coverage": zod.enum(['verified', 'all']),
-  "groupBy": zod.enum(['sport', 'marketType', 'odds', 'segment', 'market']),
+  "groupBy": zod.enum(['sport', 'marketType', 'odds', 'segment', 'market', 'amount']),
+  "sortBy": zod.enum(['roi', 'winRate']),
   "window": zod.enum(['all', '30d', '7d']),
   "band": zod.enum(['all', 'large', 'medium', 'small']),
   "direction": zod.enum(['all', 'yes', 'no']),
@@ -71,6 +78,7 @@ export const GetKalshiLeaderboardResponse = zod.object({
   "sport": zod.string().nullable(),
   "marketType": zod.string().nullable(),
   "side": zod.union([zod.literal('yes'),zod.literal('no'),zod.literal(null)]).nullable().describe('Observed outcome side; null only for aggregate views combining both sides. Combined segments always separate YES from NO.'),
+  "moneyBand": zod.union([zod.literal('small'),zod.literal('medium'),zod.literal('large'),zod.literal(null)]).nullable().describe('Observed transaction size; null when the group includes multiple monetary bands. This is not the hypothetical stake.'),
   "marketUrl": zod.string().nullable(),
   "oddsMin": zod.number().nullable(),
   "oddsMax": zod.number().nullable(),
@@ -85,7 +93,29 @@ export const GetKalshiLeaderboardResponse = zod.object({
   "invested": zod.number(),
   "recentRoiPct": zod.number().nullable(),
   "recentTrades": zod.number().int(),
+  "sampleWarning": zod.boolean(),
+  "weekly": zod.array(zod.object({
+  "weekStart": zod.string().regex(getKalshiLeaderboardResponseRowsItemWeeklyItemWeekStartRegExp).describe('Monday local calendar date in America/New_York, grouped by execution time rather than settlement time. Empty intervening weeks have null rates.'),
+  "trades": zod.number().int(),
+  "games": zod.number().int(),
+  "wins": zod.number().int(),
+  "profit": zod.number(),
+  "roiPct": zod.number().nullable(),
+  "winRatePct": zod.number().nullable(),
+  "partial": zod.boolean().describe('The calendar week is still open or is clipped by the selected time window. False does not certify complete exchange-wide coverage.'),
   "sampleWarning": zod.boolean()
+})),
+  "moneyBands": zod.array(zod.object({
+  "band": zod.enum(['small', 'medium', 'large']).describe('small: $1,000–$5,000 inclusive; medium: strictly above $5,000 and below $10,000; large: $10,000 and above. Other selected filters still apply.'),
+  "trades": zod.number().int(),
+  "games": zod.number().int(),
+  "wins": zod.number().int(),
+  "profit": zod.number(),
+  "roiPct": zod.number().nullable(),
+  "winRatePct": zod.number().nullable(),
+  "sampleWarning": zod.boolean(),
+  "meetsMinimum": zod.boolean().describe('Whether this monetary subgroup meets the selected minimum distinct-game count.')
+}))
 })),
   "totalRows": zod.number().int(),
   "page": zod.number().int(),

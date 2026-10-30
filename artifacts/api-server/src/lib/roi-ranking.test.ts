@@ -14,6 +14,7 @@ function row(changes: Partial<RoiRollup> = {}): RoiRollup {
     ticker: "KXNFLGAME-26OCT29AB-A", sport: "Football", eventTitle: "A vs B",
     marketTitle: "A wins", gameId: "game1", marketUrl: "https://kalshi.com/markets/a",
     bucket: 5, side: "yes", category: "settled", trades: 1, wins: 1, profit: 100, recentTrades: 1, recentProfit: 100,
+    moneyBand: "large", weekStart: "2026-10-26",
     firstAt: "2026-10-29T12:00:00.000Z", lastAt: "2026-10-29T12:00:00.000Z",
     checkedAt: now.toISOString(), error: false, ...changes,
   };
@@ -69,7 +70,7 @@ test("all grouping modes retain the same settled totals and independent group id
     row(), row({ ticker: "KXNFLTOTAL-26OCT29AB", marketTitle: "Total points", bucket: 3, profit: -100, wins: 0 }),
     row({ ticker: "KXATPMATCH-26OCT29CD", sport: "Tennis", gameId: "game2", bucket: 5 }),
   ];
-  for (const group of ["sport", "marketType", "odds", "segment", "market"] as const) {
+  for (const group of ["sport", "marketType", "odds", "segment", "market", "amount"] as const) {
     const { rows, summary } = buildRoiRanking(input, group, 1);
     assert.equal(rows.reduce((n, r) => n + r.trades, 0), 3);
     assert.equal(rows.reduce((n, r) => n + r.profit, 0), 100);
@@ -90,6 +91,47 @@ test("no settled data has null ROI, including recent; errors and pending are vis
   assert.equal(summary.recentRoiPct, null);
   const settled = buildRoiRanking([row({ recentTrades: 0, recentProfit: 0 })], "sport", 1);
   assert.equal(settled.rows[0].recentRoiPct, null);
+});
+
+test("accuracy and ROI rank different money bands without changing the underlying results", () => {
+  const input = [
+    row({ ticker: "SMALL-WIN", gameId: "S1", moneyBand: "small", trades: 8, wins: 8, profit: 200 }),
+    row({ ticker: "SMALL-LOSS", gameId: "S2", moneyBand: "small", trades: 2, wins: 0, profit: -200 }),
+    row({ ticker: "LARGE-WIN", gameId: "L1", moneyBand: "large", trades: 4, wins: 4, profit: 800 }),
+    row({ ticker: "LARGE-LOSS", gameId: "L2", moneyBand: "large", trades: 6, wins: 0, profit: -600 }),
+  ];
+  const roi = buildRoiRanking(input, "amount", 2, { now });
+  const accuracy = buildRoiRanking(input, "amount", 2, { sortBy: "winRate", now });
+  assert.equal(roi.rows[0].moneyBand, "large");
+  assert.equal(roi.rows[0].roiPct, 20);
+  assert.equal(roi.rows[0].winRatePct, 40);
+  assert.equal(accuracy.rows[0].moneyBand, "small");
+  assert.equal(accuracy.rows[0].winRatePct, 80);
+  assert.equal(accuracy.rows[0].roiPct, 0);
+  assert.deepEqual(roi.summary, accuracy.summary);
+  assert.equal(accuracy.rows[0].games, 2);
+  assert.equal(accuracy.rows[0].trades, 10);
+  assert.equal(buildRoiRanking(input, "amount", 3, { now }).rows.length, 0);
+});
+
+test("weekly and size breakdowns preserve weighted ROI, empty weeks and distinct game identities", () => {
+  const input = [
+    row({ weekStart: "2026-10-05", moneyBand: "small", trades: 20, wins: 20, profit: 2000 }),
+    row({ ticker: "SECOND", weekStart: "2026-10-19", moneyBand: "medium", trades: 1, wins: 0, profit: -100 }),
+    row({ ticker: "PENDING", category: "pending", weekStart: "2026-10-26", moneyBand: "large" }),
+  ];
+  const { rows: [result] } = buildRoiRanking(input, "sport", 1, { now });
+  assert.equal(result.games, 1, "Multiple markets, weeks and sizes from one game are not independent games");
+  assert.equal(result.trades, 21);
+  assert.equal(result.roiPct, 90.4762, "Total ROI is not the mean of the weekly percentages");
+  assert.deepEqual(result.weekly.map(w => w.weekStart), ["2026-10-05", "2026-10-12", "2026-10-19"]);
+  assert.deepEqual(result.weekly.map(w => w.roiPct), [100, null, -100]);
+  assert.deepEqual(result.weekly.map(w => w.games), [1, 0, 1]);
+  assert.equal(result.weekly.reduce((sum, w) => sum + w.trades, 0), result.trades);
+  assert.equal(result.moneyBand, null);
+  assert.deepEqual(result.moneyBands.map(b => b.trades), [20, 1, 0]);
+  assert.deepEqual(result.moneyBands.map(b => b.meetsMinimum), [true, true, false]);
+  assert.equal(result.moneyBands[2].roiPct, null, "Pending trades never become size-band returns");
 });
 
 test("combined rankings separate YES and NO at identical own-side odds, preserving aggregate totals", () => {

@@ -10,14 +10,18 @@ import type { RoiLeaderboardBand } from './roiLeaderboardBand';
 import type { RoiLeaderboardCoverage } from './roiLeaderboardCoverage';
 import type { RoiLeaderboardDirection } from './roiLeaderboardDirection';
 import type { RoiLeaderboardGroupBy } from './roiLeaderboardGroupBy';
+import type { RoiLeaderboardSortBy } from './roiLeaderboardSortBy';
 import type { RoiLeaderboardWindow } from './roiLeaderboardWindow';
 import type { RoiRankingRow } from './roiRankingRow';
 
 export interface RoiLeaderboard {
   generatedAt: Date;
   stakePerTrade: number;
+  /** Actual minimum applied when the large-operation filter is selected; canonical money bands still use $10,000 as their boundary. */
+  largeTradeThreshold: number;
   coverage: RoiLeaderboardCoverage;
   groupBy: RoiLeaderboardGroupBy;
+  sortBy: RoiLeaderboardSortBy;
   window: RoiLeaderboardWindow;
   band: RoiLeaderboardBand;
   direction: RoiLeaderboardDirection;
