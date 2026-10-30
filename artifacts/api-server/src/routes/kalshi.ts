@@ -167,6 +167,10 @@ router.post(
 );
 
 router.post("/kalshi/telegram/test", async (req, res): Promise<void> => {
+  if (process.env.BOT_WORKERS_ENABLED === "false") {
+    res.status(409).json({ error: "Telegram está desactivado en desarrollo para no interferir con el bot publicado. Actualiza el menú desde el website publicado." });
+    return;
+  }
   const parsed = SendTelegramTestBody.safeParse(req.body);
   if (!parsed.success) {
     res.status(400).json({ error: parsed.error.message });

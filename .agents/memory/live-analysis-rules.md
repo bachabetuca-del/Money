@@ -14,3 +14,9 @@ The user wants to download the entire history **saved by this monitor** to analy
 **Why:** They want to judge whether a bet makes sense, but public transactions alone do not provide verified sports fundamentals, current tradable odds, or calibrated winning probabilities.
 
 **How to apply:** Keep full-history exports separate from a filtered chart/PDF. Label dataset coverage and freshness. Show the AI report's date and limitations, and never generate a new paid analysis just because the user navigates to a game.
+
+Do not give AI a saved non-final game state as confirmation that the game is currently live. A new database read or a freshly generated report does not make the underlying sports status current.
+
+**Why:** Historical development data produced a report calling an old match "live"; the stored catalog state had no fresh sports-source verification.
+
+**How to apply:** Preserve confirmed final states for retrospective analysis. Treat other states as unverified unless a dated sports-source check establishes freshness; distinguish the report cutoff from the latest execution time.

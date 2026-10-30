@@ -282,6 +282,7 @@ export interface KalshiTrade {
 }
 
 export interface KalshiDashboard {
+  workersPaused: boolean;
   enabled: boolean;
   minimumNotional: number;
   /** @nullable */
@@ -299,7 +300,10 @@ export interface KalshiDashboard {
 
 export interface KalshiSettingsInput {
   enabled: boolean;
-  /** @minimum 1 */
+  /**
+     * @minimum 1
+     * @maximum 999999999999.99
+     */
   minimumNotional: number;
   /** @minLength 1 */
   chatId: string;

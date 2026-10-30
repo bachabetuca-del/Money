@@ -26,7 +26,7 @@ function downloadTxt(a: GameAnalysis) {
     `Generado: ${when(a.generatedAt)} · Modelo: ${a.model}`,
     `Datos hasta: ${when(a.dataThrough)} · Última operación: ${when(a.latestTradeAt)}`,
     `Alcance: todas las bandas y mercados guardados del partido · ${a.totalTrades} operaciones · ${a.includedMarkets} de ${a.totalMarkets} mercados incluidos`,
-    'Limitaciones: basado solo en operaciones públicas guardadas; sin lesiones, alineaciones ni cuotas en vivo verificadas. No es un modelo de probabilidad de ganar ni datos de ventas confirmadas. Instantánea, no recomendación en vivo.',
+    'Limitaciones: basado solo en operaciones públicas guardadas; sin estado deportivo en directo, lesiones, alineaciones ni cuotas en vivo verificadas. No es un modelo de probabilidad de ganar ni datos de ventas confirmadas. Instantánea, no recomendación en vivo.',
     '',
     '----------------------------------------',
     '',
@@ -103,7 +103,7 @@ export function GameAnalysisPanel({ ticker }: { ticker: string }) {
             </div>
             <p className="ws-sub"><strong>{a.gameName}</strong> · {a.betLabel}</p>
             {a.includedMarkets < a.totalMarkets && <p className="ws-sub warn" style={{ padding: 0 }}>Cobertura limitada: el informe incluyó {a.includedMarkets} de {a.totalMarkets} mercados del partido.</p>}
-            <p className="ws-ai-snap">Instantánea fija hasta {when(a.dataThrough)}; la gráfica de arriba sigue en vivo y puede haber cambiado. No es una recomendación en vivo.</p>
+            <p className="ws-ai-snap">Instantánea fija hasta {when(a.dataThrough)}; la gráfica del mercado puede contener datos más recientes. El estado en directo del partido no está verificado por este informe. No es una recomendación en vivo.</p>
             <div className="ws-ai-text" data-testid="text-analysis">{a.text}</div>
           </article>
         )}

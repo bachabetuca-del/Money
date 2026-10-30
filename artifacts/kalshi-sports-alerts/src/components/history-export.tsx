@@ -1,5 +1,5 @@
-import { useRef, useState } from 'react';
-import { Download, FileJson, FileSpreadsheet } from 'lucide-react';
+import { useEffect, useRef, useState } from 'react';
+import { Download, FileJson, FileSpreadsheet, X } from 'lucide-react';
 import { downloadKalshiHistory } from '@workspace/api-client-react';
 
 type Format = 'json' | 'csv';
@@ -26,6 +26,11 @@ export function HistoryExport() {
   const [error, setError] = useState('');
   const [done, setDone] = useState('');
   const busy = useRef(false);
+  const controller = useRef<AbortController | null>(null);
+  useEffect(() => () => {
+    controller.current?.abort();
+    controller.current = null;
+  }, []);
 
   async function run(format: Format) {
     if (busy.current) return;
@@ -33,16 +38,24 @@ export function HistoryExport() {
     setPending(format);
     setError('');
     setDone('');
+    const ctrl = new AbortController();
+    controller.current = ctrl;
     try {
-      const blob = await downloadKalshiHistory({ format }, { responseType: 'blob' });
+      const blob = await downloadKalshiHistory({ format }, { responseType: 'blob', signal: ctrl.signal });
+      if (ctrl.signal.aborted || controller.current !== ctrl) return;
       const stamp = new Date().toISOString().slice(0, 19).replace(/[:T]/g, '-');
       saveBlob(blob, `fieldnote-kalshi-historial-${stamp}.${format}`);
       setDone(format === 'json' ? 'JSON descargado.' : 'CSV descargado.');
     } catch (err) {
-      setError(errorText(err, 'No se pudo descargar el historial. Inténtalo de nuevo.'));
+      if (controller.current !== ctrl) return;
+      if (ctrl.signal.aborted) setDone('Descarga cancelada. Puedes volver a intentarlo.');
+      else setError(errorText(err, 'No se pudo descargar el historial. Inténtalo de nuevo.'));
     } finally {
       busy.current = false;
-      setPending(null);
+      if (controller.current === ctrl) {
+        controller.current = null;
+        setPending(null);
+      }
     }
   }
 
@@ -55,6 +68,7 @@ export function HistoryExport() {
         {done && !error && <p className="ok" role="status" data-testid="status-export-done">{done}</p>}
       </div>
       <div className="ws-tools">
+        {pending && <button className="button secondary" onClick={() => controller.current?.abort()} data-testid="button-cancel-export"><X /> Cancelar descarga</button>}
         <button className="button secondary" disabled={pending !== null} onClick={() => void run('json')} data-testid="button-export-json">
           <FileJson /> {pending === 'json' ? 'Preparando JSON…' : 'JSON para IA'}
         </button>

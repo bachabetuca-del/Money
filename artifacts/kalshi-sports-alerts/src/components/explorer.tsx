@@ -18,11 +18,13 @@ import { useLiveExplorer } from '@/hooks/use-live-explorer';
 import { MarketFlow } from '@/components/market-flow';
 import { HistoryExport } from '@/components/history-export';
 import { GameAnalysisPanel } from '@/components/game-analysis-panel';
+import { setUrlParams } from '@/lib/navigation';
 import { diffFresh, FALLBACK_MS, FRESH_MS, lastExecution, viewSnapshot, type SeenState } from '@/lib/live-model';
-import { MINUTE, RECENT_MS, yesQuote, bubbleRadius, buildBuckets, groupMarkets, type Bucket, type Dir } from '@/lib/explorer-model';
+import { MINUTE, RECENT_MS, yesQuote, bubbleRadius, buildBuckets, chartTimeTicks, groupMarkets, type Bucket, type Dir } from '@/lib/explorer-model';
 import type {
   KalshiExplorer,
   ExplorerTrade,
+  ExplorerMarket,
   GetKalshiExplorerBand,
   GetKalshiExplorerScope,
   GetKalshiExplorerWindow,
@@ -93,16 +95,7 @@ function readParams(): Params {
   const win = w === '1h' || w === '24h' ? w : 'all';
   const direction = p.get('direction') === 'yes' ? 'yes' : p.get('direction') === 'no' ? 'no' : 'all';
   const marketType = MARKET_TYPES.find(([key]) => key === p.get('marketType'))?.[0] ?? 'all';
-  return { band, scope, win, direction, marketType, ticker: (p.get('ticker') ?? '').slice(0, 200), q: '' };
-}
-
-export function setUrlParams(values: Record<string, string | null>) {
-  const p = new URLSearchParams(window.location.search);
-  for (const [key, value] of Object.entries(values)) {
-    if (value) p.set(key, value); else p.delete(key);
-  }
-  const qs = p.toString();
-  window.history.replaceState(null, '', `${window.location.pathname}${qs ? `?${qs}` : ''}`);
+  return { band, scope, win, direction, marketType, ticker: (p.get('ticker') ?? '').slice(0, 200), q: (p.get('q') ?? '').slice(0, 150) };
 }
 
 function Seg<T extends string>({ value, options, onChange, label }: { value: T; options: [T, string][]; onChange: (v: T) => void; label: string }) {
@@ -241,7 +234,7 @@ function Charts({ trades, scope, now, truncated, total, fresh }: { trades: Explo
             <ResponsiveContainer width="100%" height="100%">
               <ScatterChart margin={{ top: 8, right: 12, left: 4, bottom: 0 }}>
                 <CartesianGrid stroke="#e3e0d4" strokeDasharray="3 6" />
-                <XAxis type="number" dataKey="t" domain={[model.start, model.end]} tickFormatter={(v: number) => axisTime(v, span)} tick={{ fontSize: 11, fill: '#667' }} scale="time" minTickGap={36} />
+                <XAxis type="number" dataKey="t" domain={[model.start, model.end]} ticks={chartTimeTicks(model.start, model.end)} tickFormatter={(v: number) => axisTime(v, span)} tick={{ fontSize: 11, fill: '#667' }} scale="time" minTickGap={36} />
                 <YAxis type="number" dataKey="quote" domain={[0, 100]} unit="¢" tick={{ fontSize: 11, fill: '#667' }} width={48} />
                 <ZAxis type="number" dataKey="usd" range={[40, 360]} />
                 <ChartTooltip content={<ScatterTip />} cursor={{ strokeDasharray: '3 3' }} />
@@ -343,12 +336,16 @@ export function Explorer() {
   const [openSports, setOpenSports] = useState<Set<string>>(new Set());
   const [openGames, setOpenGames] = useState<Set<string>>(new Set());
   const { band, scope, win, ticker, q, direction, marketType } = params;
+  const selKey = `${ticker}:${band}:${win}:${scope}:${direction}:${marketType}`;
 
   useEffect(() => {
-    setUrlParams({ band: band === 'large' ? null : band, scope: scope === 'active' ? null : scope, window: win === 'all' ? null : win, ticker: ticker || null, direction: direction === 'all' ? null : direction, marketType: marketType === 'all' ? null : marketType });
-  }, [band, scope, win, ticker, direction, marketType]);
+    setUrlParams({ band: band === 'large' ? null : band, scope: scope === 'active' ? null : scope, window: win === 'all' ? null : win, ticker: ticker || null, direction: direction === 'all' ? null : direction, marketType: marketType === 'all' ? null : marketType, q: q || null });
+  }, [band, scope, win, ticker, direction, marketType, q]);
 
   const [paused, setPaused] = useState(false);
+  const [frozen, setFrozen] = useState<{
+    data: KalshiExplorer | undefined; now: number; key: string; market: ExplorerMarket | undefined;
+  } | null>(null);
   const catalogParams = { band, scope, direction, marketType, window: 'all' as const };
   const catalog = useGetKalshiExplorer(catalogParams, { query: {
     refetchInterval: FALLBACK_MS, staleTime: 10_000, refetchOnWindowFocus: false, retry: false,
@@ -399,21 +396,21 @@ export function Explorer() {
   });
 
   const markets = catalog.data?.markets;
-  const selected = markets?.find((m) => m.ticker === ticker);
+  const catalogSelected = markets?.find((m) => m.ticker === ticker);
+  const selected = paused && frozen?.key === selKey ? frozen.market : catalogSelected;
   const grouped = useMemo(() => groupMarkets(markets ?? [], q), [markets, q]);
 
   // Open a real chart immediately; never keep an incompatible band/scope selection.
   useEffect(() => {
-    if (markets && (!ticker || !markets.some((m) => m.ticker === ticker))) {
+    if (!paused && markets && (!ticker || !markets.some((m) => m.ticker === ticker))) {
       const next = markets[0]?.ticker ?? '';
       if (ticker !== next) setParams((p) => ({ ...p, ticker: next }));
     }
-  }, [markets, ticker]);
+  }, [markets, ticker, paused]);
 
   const change = (patch: Partial<Params>) => setParams((p) => ({ ...p, ...patch }));
   const liveData = detail.data;
   const liveNow = useMemo(() => Date.now(), [liveData]);
-  const selKey = `${ticker}:${band}:${win}:${scope}:${direction}:${marketType}`;
 
   // Genuinely new IDs: only from refetches triggered by a live event for the same selection.
   const seen = useRef<SeenState>(null);
@@ -446,7 +443,6 @@ export function Explorer() {
   const freshIds = useMemo(() => new Set(fresh.keys()), [fresh]);
 
   // Pause: freeze the whole selected snapshot (data + clock); the catalog may keep updating.
-  const [frozen, setFrozen] = useState<{ data: KalshiExplorer | undefined; now: number; key: string } | null>(null);
   const togglePause = () => {
     if (paused) {
       setPaused(false);
@@ -455,13 +451,13 @@ export function Explorer() {
       liveFreshIds.current.clear();
       void qc.invalidateQueries({ queryKey: detailKey, exact: true });
     } else {
-      setFrozen({ data: liveData, now: liveNow, key: selKey });
+      setFrozen({ data: liveData, now: liveNow, key: selKey, market: catalogSelected });
       setFresh(new Map());
       setPaused(true);
     }
   };
   useEffect(() => { if (paused && frozen && frozen.key !== selKey) { setPaused(false); setFrozen(null); } }, [selKey]); // eslint-disable-line react-hooks/exhaustive-deps
-  const view = viewSnapshot(paused, frozen, { data: liveData, now: liveNow, key: selKey });
+  const view = viewSnapshot(paused, frozen, { data: liveData, now: liveNow, key: selKey, market: catalogSelected });
   const dData = view.data;
   const now = view.now;
   const trades = useMemo(() => (dData && selected ? dData.trades.filter((t) => t.ticker === ticker) : []), [dData, selected, ticker]);
@@ -479,11 +475,6 @@ export function Explorer() {
 
   return (
     <div className="ws" data-testid="explorer">
-      {catalog.data?.workersPaused && (
-        <Notice tone="info" title="Bot de desarrollo en pausa">
-          Esta es la versión de desarrollo: el bot no está conectado ni ingiriendo datos en vivo. Se muestran únicamente los datos ya guardados.
-        </Notice>
-      )}
       {stale && <Notice tone="warn" title="Datos desactualizados">No se pudo actualizar; se muestra la última carga correcta. Se reintenta automáticamente.</Notice>}
 
       <div className="ws-filters">
@@ -510,7 +501,7 @@ export function Explorer() {
       <div className="ws-layout">
         <aside className="ws-tree" aria-label="Deporte, partido y mercado">
           <label className="ws-search"><Search size={14} />
-            <input value={q} onChange={(e) => change({ q: e.target.value })} placeholder="Buscar deporte, partido o apuesta" aria-label="Buscar mercados" data-testid="input-search-market" />
+            <input value={q} maxLength={150} onChange={(e) => change({ q: e.target.value })} placeholder="Buscar deporte, partido o apuesta" aria-label="Buscar mercados" data-testid="input-search-market" />
           </label>
           <div className="ws-tree-scroll">
             {catalog.isLoading && [0, 1, 2, 3, 4].map((i) => <div key={i} className="skeleton skeleton-line" style={{ height: 38, margin: '8px 0' }} />)}
@@ -623,9 +614,14 @@ export function Explorer() {
               )}
               {dData && (
                 <>
+                  <div className="ws-notice" role="status" data-testid="status-history-import">
+                    <div><strong>Estado del histórico del mercado</strong><p>{dData.historyStatus}</p>
+                      {dData.truncated && <p>Se cargaron {trades.length.toLocaleString('es-US')} de {dData.totalTrades.toLocaleString('es-US')} operaciones. El dinero mostrado, las gráficas y el PDF corresponden solo a las operaciones cargadas.</p>}
+                    </div>
+                  </div>
                   <div className="ws-kpis">
                     <div><span>Operaciones en la ventana</span><b data-testid="text-window-trades">{dData.totalTrades.toLocaleString('en-US')}</b><small>{win === 'all' ? 'todo lo guardado' : win === '1h' ? 'última hora' : 'últimas 24 horas'}</small></div>
-                    <div><span>Dinero total</span><b>{usd(grand)}</b><small>{trades.length.toLocaleString('en-US')} cargadas</small></div>
+                    <div><span>Dinero en la vista</span><b>{usd(grand)}</b><small>{trades.length.toLocaleString('en-US')} operaciones cargadas</small></div>
                     {(['yes', 'no'] as Dir[]).map((d) => (
                       <div key={d}><span><i className="ws-dot" style={{ background: COLORS[d] }} /> {DIR_LABEL[d]}</span><b>{usd(totals[d])}</b><small>{grand ? Math.round((totals[d] / grand) * 100) : 0}% · {DIR_MEANING[d]}</small></div>
                     ))}

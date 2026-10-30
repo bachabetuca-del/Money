@@ -8,6 +8,7 @@
 import type { KalshiTrade } from './kalshiTrade';
 
 export interface KalshiDashboard {
+  workersPaused: boolean;
   enabled: boolean;
   minimumNotional: number;
   /** @nullable */

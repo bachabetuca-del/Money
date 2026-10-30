@@ -249,6 +249,7 @@ export const HealthCheckResponse = zod.object({
  * @summary Get monitor status and recent qualifying sports trades
  */
 export const GetKalshiDashboardResponse = zod.object({
+  "workersPaused": zod.boolean(),
   "enabled": zod.boolean(),
   "minimumNotional": zod.number(),
   "chatId": zod.string().nullable(),
@@ -278,17 +279,19 @@ export const GetKalshiDashboardResponse = zod.object({
 /**
  * @summary Save sports trade alert settings
  */
+export const saveKalshiSettingsBodyMinimumNotionalMax = 999999999999.99;
 
 
 
 
 export const SaveKalshiSettingsBody = zod.object({
   "enabled": zod.boolean(),
-  "minimumNotional": zod.number().min(1),
+  "minimumNotional": zod.number().min(1).max(saveKalshiSettingsBodyMinimumNotionalMax),
   "chatId": zod.string().min(1)
 })
 
 export const SaveKalshiSettingsResponse = zod.object({
+  "workersPaused": zod.boolean(),
   "enabled": zod.boolean(),
   "minimumNotional": zod.number(),
   "chatId": zod.string().nullable(),

@@ -53,6 +53,13 @@ export function bubbleRadius(area = 40) {
   return Math.sqrt(area / Math.PI);
 }
 
+/** Explicit time ticks avoid repeated labels/React keys for coincident executions. */
+export function chartTimeTicks(start: number, end: number): number[] {
+  if (!Number.isFinite(start) || !Number.isFinite(end) || end < start) return [];
+  const intervals = Math.min(4, Math.max(1, Math.floor((end - start) / MINUTE)));
+  return [...new Set(Array.from({ length: intervals + 1 }, (_, i) => Math.round(start + (end - start) * i / intervals)))];
+}
+
 export function buildBuckets(trades: ExplorerTrade[], now: number, highlight: boolean) {
   if (!trades.length) return { buckets: [] as Bucket[], width: MINUTE, start: now, end: now, recentCount: 0, recentSum: 0 };
   let oldest = Infinity;

@@ -72,6 +72,9 @@ export function diffFresh(prev: SeenState, key: string, ids: string[], fromLiveE
 
 /** Frozen snapshot: when paused the previous snapshot is kept regardless of live data. */
 export function viewSnapshot<T>(paused: boolean, frozen: T | null, live: T): T {
+  // Never render the previous market's snapshot under a newly selected market.
+  if (frozen && typeof frozen === 'object' && live && typeof live === 'object' &&
+    'key' in frozen && 'key' in live && frozen.key !== live.key) return live;
   return paused && frozen !== null ? frozen : live;
 }
 

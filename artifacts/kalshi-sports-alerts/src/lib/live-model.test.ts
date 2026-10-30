@@ -45,6 +45,17 @@ test('viewSnapshot freezes while paused', () => {
   assert.equal(viewSnapshot(true, null, 'new'), 'new');
 });
 
+test('pause retains market metadata and trades when catalog refreshes, but never carries across filter changes', () => {
+  const frozen = { key: 'A:large', market: { ticker: 'A', state: 'live' }, data: [1, 2], now: 100 };
+  const expired = { key: 'A:large', market: undefined, data: [3], now: 200 };
+  assert.equal(viewSnapshot(true, frozen, expired), frozen);
+  assert.equal(viewSnapshot(false, frozen, expired), expired);
+  const changed = { ...expired, key: 'A:small' };
+  assert.equal(viewSnapshot(true, frozen, changed), changed);
+  const differentMarket = { ...expired, key: 'B:large' };
+  assert.equal(viewSnapshot(true, frozen, differentMarket), differentMarket);
+});
+
 test('concentration requires three large same-direction trades in large band', () => {
   const win = w({ largeYesCount: 3, largeYesUsd: 41250.5, largeNoCount: 2, largeNoUsd: 30000 });
   assert.deepEqual(concentration(win, 'large'), [{ dir: 'yes', count: 3, usd: 41250.5 }]);

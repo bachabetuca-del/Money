@@ -31,3 +31,4 @@ development bot.
 
 **How to apply:** Verify changes without turning on development Telegram workers.
 Do not claim a workspace edit is live; publication updates the existing bot.
+This also applies to manual Telegram actions: a development dashboard button must not edit the published bot's messages or create a second dashboard.

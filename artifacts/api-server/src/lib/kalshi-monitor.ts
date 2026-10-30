@@ -800,6 +800,7 @@ export async function getKalshiDashboard() {
     ));
 
   return {
+    workersPaused: process.env.BOT_WORKERS_ENABLED === "false",
     enabled: settings.enabled,
     minimumNotional: settings.minimumNotional,
     chatId: settings.chatId,

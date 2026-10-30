@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { lazy, Suspense, useEffect, useState } from 'react';
 import { QueryClient, QueryClientProvider, useQueryClient } from '@tanstack/react-query';
 import { ErrorBoundary } from '@/components/error-boundary';
 import { Toaster } from '@/components/ui/toaster';
@@ -38,12 +38,15 @@ import {
   Router as WouterRouter,
 } from 'wouter';
 import type { ReactNode } from 'react';
-import { Explorer, setUrlParams } from '@/components/explorer';
-import { RoiLeaderboard } from '@/components/roi-leaderboard';
+import { setUrlParams } from '@/lib/navigation';
+import { errorText } from '@/components/history-export';
 import { UserButton } from '@clerk/react';
 import { OwnerAuthProvider, ClearOwnerCache, OwnerLanding, RequireSignIn, OwnerSignIn, OwnerSignUp } from '@/components/owner-access';
 
 const queryClient = new QueryClient();
+const Explorer = lazy(() => import('@/components/explorer').then(m => ({ default: m.Explorer })));
+const RoiLeaderboard = lazy(() => import('@/components/roi-leaderboard').then(m => ({ default: m.RoiLeaderboard })));
+const MAX_NOTIONAL = 999_999_999_999.99;
 
 function money(value: number) {
   return new Intl.NumberFormat('en-US', {
@@ -54,15 +57,16 @@ function money(value: number) {
 }
 
 function dateTime(value: string | null) {
-  if (!value) return 'Not checked yet';
+  if (!value) return 'Sin comprobar todavía';
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return value;
-  return new Intl.DateTimeFormat('en-US', {
+  return new Intl.DateTimeFormat('es-US', {
+    timeZone: 'America/New_York',
     month: 'short',
     day: 'numeric',
     hour: 'numeric',
     minute: '2-digit',
-  }).format(date);
+  }).format(date) + ' ET';
 }
 
 function LoadingDashboard() {
@@ -99,14 +103,16 @@ function Home() {
   const { data: dashboard, isLoading, isError, error, refetch, isFetching } = useGetKalshiDashboard({
     query: { refetchInterval: 15000, retry: false },
   });
-  const saveSettings = useSaveKalshiSettings();
+  const saveSettings = useSaveKalshiSettings({ mutation: {
+    onMutate: () => queryClient.cancelQueries({ queryKey: getGetKalshiDashboardQueryKey() }),
+  } });
   const findChat = useFindTelegramChat();
   const sendTest = useSendTelegramTest();
 
   const [enabled, setEnabled] = useState(false);
   const [minimumNotional, setMinimumNotional] = useState('1000');
   const [chatId, setChatId] = useState('');
-  const [initialized, setInitialized] = useState(false);
+  const [dirty, setDirty] = useState(false);
   const [findMessage, setFindMessage] = useState('');
   const [findError, setFindError] = useState(false);
   const [testMessage, setTestMessage] = useState('');
@@ -116,31 +122,44 @@ function Home() {
   function pickTab(next: 'analysis' | 'settings' | 'leaderboard') { setTab(next); setUrlParams({ tab: next === 'analysis' ? null : next }); }
 
   useEffect(() => {
-    if (!dashboard) return;
-    if (!initialized) {
-      setEnabled(dashboard.enabled);
-      setMinimumNotional(String(dashboard.minimumNotional));
-      setChatId(dashboard.chatId ?? '');
-      setInitialized(true);
-      return;
-    }
-    if (!chatId.trim() && dashboard.chatId) {
-      setChatId(dashboard.chatId);
-    }
-  }, [dashboard, initialized, chatId]);
+    if (!dashboard || dirty || saveSettings.isPending) return;
+    setEnabled(dashboard.enabled);
+    setMinimumNotional(String(dashboard.minimumNotional));
+    setChatId(dashboard.chatId ?? '');
+  }, [dashboard, dirty, saveSettings.isPending]);
 
   const minimumValue = Number(minimumNotional);
-  const canSave = Number.isFinite(minimumValue) && minimumValue >= 1 && chatId.trim().length > 0;
+  const validMinimum = minimumNotional.trim() !== '' && Number.isFinite(minimumValue) && minimumValue >= 1 && minimumValue <= MAX_NOTIONAL;
+  const canSave = validMinimum && chatId.trim().length > 0 && dirty;
+
+  function discardSettings() {
+    if (!dashboard) return;
+    setEnabled(dashboard.enabled);
+    setMinimumNotional(String(dashboard.minimumNotional));
+    setChatId(dashboard.chatId ?? '');
+    setDirty(false);
+    setSavedMessage('');
+    saveSettings.reset();
+  }
 
   function persistSettings() {
-    if (!canSave) return;
+    if (!canSave || saveSettings.isPending) return;
     setSavedMessage('');
     saveSettings.mutate(
       { data: { enabled, minimumNotional: minimumValue, chatId: chatId.trim() } },
       {
         onSuccess: (updated) => {
           queryClient.setQueryData(getGetKalshiDashboardQueryKey(), updated);
-          setSavedMessage('Monitor settings saved.');
+          setEnabled(updated.enabled);
+          setMinimumNotional(String(updated.minimumNotional));
+          setChatId(updated.chatId ?? '');
+          setDirty(false);
+          // Cached views use the configured threshold even though it is not a URL filter.
+          for (const key of ['/api/kalshi/explorer', '/api/kalshi/leaderboard']) {
+            void queryClient.invalidateQueries({ queryKey: [key] });
+            queryClient.removeQueries({ queryKey: [key], type: 'inactive' });
+          }
+          setSavedMessage(updated.workersPaused ? 'Ajustes guardados en desarrollo. El bot publicado no cambió.' : 'Ajustes guardados.');
         },
       },
     );
@@ -152,7 +171,7 @@ function Home() {
     findChat.mutate(undefined, {
       onSuccess: (result) => {
         setFindMessage(result.message);
-        if (result.found && result.chatId) setChatId(result.chatId);
+        if (result.found && result.chatId && result.chatId !== chatId) { setChatId(result.chatId); setDirty(true); }
         setFindError(!result.found);
       },
       onError: (lookupError) => {
@@ -163,7 +182,7 @@ function Home() {
   }
 
   function sendTestMessage() {
-    if (!chatId.trim()) return;
+    if (!chatId.trim() || dashboard?.workersPaused || sendTest.isPending) return;
     setTestMessage('');
     setTestError(false);
     sendTest.mutate(
@@ -199,17 +218,20 @@ function Home() {
         {isError && (
           <div className="error-box" role="alert" data-testid="status-dashboard-error">
             <div className="error-copy">
-              <strong>Dashboard access unavailable</strong>
+              <strong>No se pudo acceder al panel</strong>
               <p>{error instanceof Error ? error.message : 'The monitor could not load its latest status.'}</p>
             </div>
             <button className="button secondary" onClick={() => void refetch()} data-testid="button-retry-dashboard">
-              <RefreshCw size={14} /> Try again
+              <RefreshCw size={14} /> Reintentar
             </button>
           </div>
         )}
 
         {dashboard && (
           <>
+            {dashboard.workersPaused && <div className="ws-notice" role="status" data-testid="notice-development">
+              <div><strong>Vista de desarrollo · bot en pausa</strong><p>Los datos de este entorno pueden ser antiguos. Telegram sigue funcionando solo en la versión publicada. Guardar ajustes aquí no cambia el bot 24/7.</p></div>
+            </div>}
             {dashboard.lastError && (
               <div className="error-box" role="status" data-testid="status-monitor-error">
                 <div>
@@ -246,37 +268,39 @@ function Home() {
               <button className={tab === 'leaderboard' ? 'on' : ''} onClick={() => pickTab('leaderboard')} data-testid="tab-leaderboard">Ranking ROI</button>
             </nav>
 
-            {tab === 'analysis' && <Explorer />}
-
-            {tab === 'leaderboard' && <RoiLeaderboard />}
+            <Suspense fallback={<div className="ws-empty" role="status"><LoaderCircle className="spin" size={20} /><p>Cargando sección…</p></div>}>
+              {tab === 'analysis' && <Explorer />}
+              {tab === 'leaderboard' && <RoiLeaderboard />}
+            </Suspense>
 
             {tab === 'settings' && <div className="main-grid">
               <section className="panel" aria-labelledby="monitor-settings-heading">
                 <div className="panel-head">
                   <div>
-                    <div className="panel-title" id="monitor-settings-heading"><Radio /> Monitor settings</div>
-                    <div className="panel-subtitle">Tune the public sports-trade signal.</div>
+                    <div className="panel-title" id="monitor-settings-heading"><Radio /> Ajustes del monitor</div>
+                    <div className="panel-subtitle">Configura el umbral principal y consulta el estado de Telegram.</div>
                   </div>
-                  <div className="time-text" title="Dashboard refreshes automatically">
-                    {isFetching ? 'Updating…' : `Checked ${dateTime(dashboard.lastChecked)}`}
+                  <div className="time-text" title="El panel se actualiza automáticamente">
+                    {isFetching ? 'Actualizando…' : dateTime(dashboard.lastChecked)}
                   </div>
                 </div>
                 <div className="section-body">
                   <div className="status-row">
                     <div className="monitor-state">
-                      <span className={`state-orb ${enabled ? '' : 'off'}`}><Signal /></span>
+                      <span className={`state-orb ${dashboard.enabled && !dashboard.workersPaused ? '' : 'off'}`}><Signal /></span>
                       <div>
-                        <div className="state-name" data-testid="status-monitor">{enabled ? 'Monitoring is on' : 'Monitoring is paused'}</div>
-                        <div className="state-detail">Service status: {dashboard.status}</div>
+                        <div className="state-name" data-testid="status-monitor">{dashboard.workersPaused ? 'Desarrollo en pausa' : dashboard.enabled ? 'Monitor activado' : 'Monitor en pausa'}</div>
+                        <div className="state-detail">{dirty ? 'Tienes cambios sin guardar' : 'Configuración guardada'} · {dashboard.workersPaused ? 'Sin conexiones de Telegram aquí' : dashboard.status}</div>
                       </div>
                     </div>
                     <button
                       type="button"
                       role="switch"
                       aria-checked={enabled}
-                      aria-label="Enable sports trade monitoring"
+                      aria-label="Activar monitor deportivo"
+                      disabled={saveSettings.isPending}
                       className={`switch ${enabled ? 'on' : ''}`}
-                      onClick={() => { setEnabled(!enabled); setSavedMessage(''); }}
+                      onClick={() => { setEnabled(!enabled); setDirty(true); setSavedMessage(''); }}
                       data-testid="toggle-monitor"
                     >
                       <span className="switch-knob" />
@@ -285,8 +309,8 @@ function Home() {
 
                   <div className="setting-field">
                     <label className="field-label" htmlFor="notional-input">
-                      Minimum trade notional
-                      <span className="field-help">USD · single execution</span>
+                      Umbral principal por operación
+                      <span className="field-help">USD · precio × contratos</span>
                     </label>
                     <div className="input-wrap">
                       <span className="input-prefix">$</span>
@@ -294,19 +318,25 @@ function Home() {
                         id="notional-input"
                         type="number"
                         min="1"
+                        max={MAX_NOTIONAL}
                         step="100"
+                        disabled={saveSettings.isPending}
+                        aria-invalid={!validMinimum}
+                        aria-describedby="notional-help"
                         value={minimumNotional}
-                        onChange={(event) => { setMinimumNotional(event.target.value); setSavedMessage(''); }}
+                        onChange={(event) => { setMinimumNotional(event.target.value); setDirty(true); setSavedMessage(''); }}
                         data-testid="input-minimum-notional"
                       />
                     </div>
-                    <div className="small-note" style={{ marginTop: 7 }}>Only individual public trades at or above this amount qualify.</div>
+                    <div id="notional-help" className={`small-note ${validMinimum ? '' : 'err'}`} style={{ marginTop: 7 }}>
+                      {validMinimum ? 'Las bandas menores conservan su propio rango. La sección grande nunca baja de $10,000 y los avisos requieren superar $10,000.' : 'Introduce un importe válido entre $1 y $999,999,999,999.99.'}
+                    </div>
                   </div>
 
                   <div className="setting-field">
                     <label className="field-label" htmlFor="chat-id-input">
-                      Telegram chat ID
-                      <span className="field-help">{dashboard.telegramConfigured ? 'Destination configured' : 'Required to deliver alerts'}</span>
+                      Chat de Telegram
+                      <span className="field-help">{dashboard.telegramConfigured ? 'Destino configurado' : 'Necesario para los avisos'}</span>
                     </label>
                     <div className="input-wrap">
                       <MessageCircle size={15} color="#78837d" />
@@ -317,18 +347,19 @@ function Home() {
                         readOnly
                         aria-readonly="true"
                         onChange={(event) => { setChatId(event.target.value); setSavedMessage(''); }}
-                        placeholder="Find it with the setup below"
+                        placeholder="Comprueba la vinculación abajo"
                         autoComplete="off"
                         data-testid="input-telegram-chat-id"
                       />
                     </div>
-                    <div className="small-note">Owner-locked destination. Telegram /start cannot change it.</div>
+                    <div className="small-note">Destino exclusivo del propietario. /start no puede cambiarlo.</div>
                   </div>
 
                   <div className="save-row">
-                    <span className="small-note" data-testid="status-settings-saved">
-                      {savedMessage || (saveSettings.isError ? 'Settings did not save. Check the connection and retry.' : 'Changes apply after you save.')}
+                    <span className="small-note" role="status" data-testid="status-settings-saved">
+                      {savedMessage || (saveSettings.isError ? errorText(saveSettings.error, 'No se guardaron los ajustes. Reintenta.') : dirty ? 'Cambios sin guardar.' : 'No hay cambios pendientes.')}
                     </span>
+                    {dirty && <button className="button secondary" disabled={saveSettings.isPending} onClick={discardSettings} data-testid="button-discard-settings">Descartar</button>}
                     <button
                       className="button"
                       onClick={persistSettings}
@@ -336,27 +367,27 @@ function Home() {
                       data-testid="button-save-settings"
                     >
                       {saveSettings.isPending ? <LoaderCircle className="spin" /> : <Save />}
-                      {saveSettings.isPending ? 'Saving' : 'Save settings'}
+                      {saveSettings.isPending ? 'Guardando…' : 'Guardar ajustes'}
                     </button>
                   </div>
 
                   <div className="telegram-card">
                     <div className="telegram-top">
-                      <div className="tg-mark"><span className="tg-icon"><MessageCircle /></span> Telegram delivery</div>
+                      <div className="tg-mark"><span className="tg-icon"><MessageCircle /></span> Avisos de Telegram</div>
                       <span className={`connection-tag ${dashboard.telegramConfigured ? 'connected' : ''}`} data-testid="status-telegram">
-                        {dashboard.telegramConfigured ? 'Configured' : 'Setup required'}
+                        {dashboard.telegramConfigured ? 'Configurado' : 'Falta configurar'}
                       </span>
                     </div>
                     <p className="setup-copy">
                       {dashboard.telegramConfigured
-                        ? <>Your live dashboard is connected. Choose a section, then Sport → Game → Market. The graph updates in place. Only new trades over $10,000 send notifications; only the latest notice is kept.</>
-                        : <>Open your bot in Telegram and send <strong>/start</strong> first. Then find the chat to link this monitor.</>}
+                        ? <>Navega por Deporte → Partido → Mercado. La gráfica se actualiza en el mismo mensaje. Solo las operaciones nuevas mayores a $10,000 generan avisos y se conserva únicamente el último.</>
+                        : <>Abre tu bot en Telegram y envía <strong>/start</strong>. Después comprueba la vinculación del chat.</>}
                     </p>
                     {!dashboard.telegramConfigured && (
                       <div className="steps" aria-label="Telegram setup steps">
-                        <div className="step"><b>1</b>Open bot</div>
-                        <div className="step"><b>2</b>Send /start</div>
-                        <div className="step"><b>3</b>Find chat</div>
+                        <div className="step"><b>1</b>Abrir bot</div>
+                        <div className="step"><b>2</b>Enviar /start</div>
+                        <div className="step"><b>3</b>Comprobar chat</div>
                       </div>
                     )}
                     <div className="telegram-actions">
@@ -367,18 +398,20 @@ function Home() {
                         data-testid="button-find-telegram-chat"
                       >
                         {findChat.isPending ? <LoaderCircle className="spin" /> : <RefreshCw />}
-                        {findChat.isPending ? 'Looking…' : 'Find Telegram chat'}
+                        {findChat.isPending ? 'Comprobando…' : 'Comprobar chat'}
                       </button>
                       <button
                         className="button ghost"
                         onClick={sendTestMessage}
-                        disabled={!chatId.trim() || sendTest.isPending}
+                        disabled={!chatId.trim() || sendTest.isPending || dashboard.workersPaused}
+                        title={dashboard.workersPaused ? 'Usa esta función en el website publicado' : undefined}
                         data-testid="button-send-test"
                       >
                         {sendTest.isPending ? <LoaderCircle className="spin" /> : <ArrowUpRight />}
-                        {sendTest.isPending ? 'Refreshing…' : 'Refresh Telegram menu'}
+                        {sendTest.isPending ? 'Actualizando…' : 'Actualizar menú de Telegram'}
                       </button>
                     </div>
+                    {dashboard.workersPaused && <p className="small-note">La actualización de Telegram está desactivada aquí para no interferir con el bot publicado.</p>}
                     {findMessage && <div className={`feedback ${findError ? 'error' : ''}`} role="status" data-testid="status-chat-lookup">{findMessage}</div>}
                     {testMessage && <div className={`feedback ${testError ? 'error' : ''}`} role="status" data-testid="status-telegram-test">{testMessage}</div>}
                     {findChat.isError && !findMessage && <div className="feedback error" role="alert">Could not find a chat. Confirm /start was sent, then try again.</div>}

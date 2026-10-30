@@ -164,7 +164,9 @@ button { cursor: pointer; }
 .input-wrap:focus-within { border-color: #3a8061; box-shadow: 0 0 0 3px #3a806118; }
 .input-prefix { font: 12px var(--app-font-mono); color: #79837e; }
 .input-wrap input { background: transparent; border: 0; outline: 0; color: #2b3d3b; width: 100%; font: 13px var(--app-font-mono); }
-.save-row { display: flex; align-items: center; justify-content: space-between; margin-top: 18px; gap: 10px; }
+.save-row { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; margin-top: 18px; gap: 10px; }
+.save-row > .small-note { flex: 1 1 180px; }
+.save-row > button { flex-shrink: 0; }
 .small-note { color: #88918d; font-size: 10px; }
 .button { border: 0; border-radius: 7px; padding: 11px 15px; min-height: 39px; display: inline-flex; align-items: center; justify-content: center; gap: 8px; background: #185b45; color: #f8f6ed; font-weight: 800; font-size: 11px; transition: transform .18s, background .18s, opacity .18s; }
 .button:hover:not(:disabled) { background: #0f4b38; transform: translateY(-1px); }
@@ -239,6 +241,9 @@ button { cursor: pointer; }
 .ws-tabs { display: flex; gap: 4px; border-bottom: 1px solid #d9d8cc; margin-bottom: 18px; }
 .ws-tabs button { border: 0; background: none; padding: 12px 16px; font-weight: 800; font-size: 13px; color: #74807b; border-bottom: 3px solid transparent; margin-bottom: -1px; }
 .ws-tabs button.on { color: #185b45; border-bottom-color: #185b45; }
+@media (max-width: 560px) {
+  .ws-tabs button { flex: 1; min-width: 0; padding: 12px 7px; font-size: 12px; }
+}
 .ws-seg { display: inline-flex; background: #e7e9df; border-radius: 9px; padding: 3px; }
 .ws-seg button { border: 0; background: none; padding: 7px 13px; border-radius: 7px; font-size: 12px; font-weight: 700; color: #58655f; }
 .ws-seg button.on { background: #185b45; color: #f8f6ed; }

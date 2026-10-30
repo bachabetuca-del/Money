@@ -6,7 +6,7 @@ import { AnalyzeKalshiGameResponse, type GameAnalysis } from "@workspace/api-zod
 import { telegramDashboardStore } from "./telegram-dashboard-store";
 import { buildCatalog } from "./telegram-dashboard-view";
 import { publicDirection } from "./telegram-trade-direction";
-import { ANALYSIS_MODEL, ANALYSIS_PROMPT, AnalysisError, GameAnalysisService, type GameContext } from "./game-analysis";
+import { ANALYSIS_MODEL, ANALYSIS_PROMPT, AnalysisError, GameAnalysisService, analysisGameState, type GameContext } from "./game-analysis";
 
 export function analysisAvailable() {
   return Boolean(process.env.AI_INTEGRATIONS_OPENAI_BASE_URL && process.env.AI_INTEGRATIONS_OPENAI_API_KEY);
@@ -57,7 +57,8 @@ export async function loadGameContext(ticker: string, now = new Date()): Promise
     gameName: selected.gameName, selectedBet: selected.betLabel, selectedTicker: ticker,
     sport: selected.sport, dataThrough: now.toISOString(), latestTradeAt, totalTrades,
     totalMarkets: game.length, includedMarkets: included.length,
-    gameState: selected.gameState ?? "unknown", startsAt: selected.gameStartsAt ?? null,
+    gameState: analysisGameState(selected.gameState), startsAt: selected.gameStartsAt ?? null,
+    liveSportsStatusVerified: false,
     finalScore: selected.gameResult ?? null,
     scope: "All saved bands and execution times for this game, not current dashboard filters.",
     limitations: "Incomplete exchange coverage. No verified sports statistics, injuries, lineups, order book, current quotes or confirmed position sales. No calibrated probability model.",

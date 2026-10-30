@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { csvCell, csvTrade, EXPORT_COLUMNS, exportMetadata, exportTrade, valueBand } from "./history-export-format";
-import { ANALYSIS_PROMPT, AnalysisError, GameAnalysisService, type GameContext } from "./game-analysis";
+import { ANALYSIS_PROMPT, AnalysisError, GameAnalysisService, analysisGameState, type GameContext } from "./game-analysis";
 import type { GameAnalysis } from "@workspace/api-zod";
 
 const time = new Date("2026-10-29T12:00:00Z");
@@ -18,6 +18,15 @@ const row = {
   blockTrade: false, marketUrl: "https://kalshi.com/markets/example", savedAt: time,
 };
 const extra = { startsAt: null, state: "finished", gameResult: "A 2–1 B", historyPhase: "complete", historyMinimum: 1000 };
+
+test("AI context never presents an inferred or stale catalog status as a live sports confirmation", () => {
+  assert.equal(analysisGameState("finished"), "finished");
+  for (const state of ["live", "upcoming", "unknown", null, undefined]) {
+    assert.equal(analysisGameState(state), "unknown");
+  }
+  assert.match(ANALYSIS_PROMPT, /dataThrough es el corte de lectura/);
+  assert.match(ANALYSIS_PROMPT, /no afirmes que sigue en vivo/);
+});
 
 test("export preserves executions, actual score, side, money, fractional contracts and UTC", () => {
   const result = exportTrade({ ...row, count: 25000.5 }, extra);

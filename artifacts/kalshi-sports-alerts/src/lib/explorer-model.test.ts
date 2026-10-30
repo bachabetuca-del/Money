@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { bubbleRadius, buildBuckets, groupMarkets, MINUTE, yesQuote } from './explorer-model.ts';
+import { bubbleRadius, buildBuckets, chartTimeTicks, groupMarkets, MINUTE, yesQuote } from './explorer-model.ts';
 import type { ExplorerMarket, ExplorerTrade } from '@workspace/api-client-react';
 
 const market = (key: string, startsAt: string | null, changes: Partial<ExplorerMarket> = {}): ExplorerMarket => ({
@@ -8,6 +8,18 @@ const market = (key: string, startsAt: string | null, changes: Partial<ExplorerM
   gameTimeLabel: 'Hora por confirmar', gameStartsAt: startsAt, betLabel: 'Gana',
   marketUrl: '', trades: 1, lastTradeAt: '2026-10-24T20:00:00Z', state: 'upcoming',
   gameResult: null, marketResult: null, ...changes,
+});
+
+test('chart ticks stay unique with coincident and fractional timestamps', () => {
+  const start = 1792757326647;
+  const ticks = chartTimeTicks(start, start + MINUTE);
+  assert.deepEqual(ticks, [start, start + MINUTE]);
+  assert.equal(chartTimeTicks(start, start + 4 * MINUTE).length, 5);
+  assert.deepEqual(chartTimeTicks(start, start), [start]);
+  const narrow = chartTimeTicks(start, start + 1);
+  assert.deepEqual(narrow, [start, start + 1]);
+  assert.deepEqual(chartTimeTicks(NaN, start), []);
+  assert.deepEqual(chartTimeTicks(start, start - 1), []);
 });
 
 test('games sort by actual kickoff across dates, not activity, volume or formatted AM/PM', () => {
