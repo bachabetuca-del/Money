@@ -580,6 +580,53 @@ test("failed final audit cannot claim coverage and resumes the same frozen archi
   assert(repo.jobs.get(moneyline)?.auditedAt);
 });
 
+test("current final audits finish before old-version phase flags can consume the entire backlog", async () => {
+  const repo = new HistoryMemory();
+  const now = new Date("2026-10-30T12:00:00Z");
+  const old = new Date("2026-10-22T12:00:00Z");
+  const legacy = Array.from({ length: 150 }, (_, i) => `${moneyline}-LEGACY-${i}`);
+  for (const ticker of [...legacy, moneyline, spread]) {
+    repo.jobs.set(ticker, { ticker, phase: ticker === moneyline ? "live" : "archive", cursor: null,
+      snapshotAt: now, sinceAt: null, scanned: 100, captureMinimum: 1000,
+      auditVersion: legacy.includes(ticker) ? 0 : 1, finalPass: !legacy.includes(ticker),
+      auditedAt: null, error: null, updatedAt: ticker === spread ? now : old });
+  }
+  repo.candidates = async () => [...legacy, moneyline, spread].map(ticker => ({
+    ticker, job: repo.jobs.get(ticker), closed: true, closedAt: now,
+  }));
+  const calls: string[] = [];
+  const importer = new MarketHistory(repo, async job => {
+    calls.push(job.ticker);
+    return { rows: [], scanned: 0, cursor: null };
+  }, () => now);
+  await importer.tick();
+  assert.equal(calls[0], spread, "the current archive pass should finish despite older live and legacy jobs");
+  assert.equal(repo.jobs.get(spread)?.phase, "complete");
+  assert(repo.jobs.get(spread)?.auditedAt);
+  await importer.tick();
+  assert.equal(calls[1], moneyline, "resume the current live pass instead of restarting another legacy market");
+});
+
+test("explicitly selected active market still has priority over the final-audit backlog", async () => {
+  const repo = new HistoryMemory();
+  const now = new Date("2026-10-30T12:00:00Z");
+  repo.jobs.set(moneyline, { ticker: moneyline, phase: "archive", cursor: null,
+    snapshotAt: now, sinceAt: null, scanned: 100, captureMinimum: 1000,
+    auditVersion: 1, finalPass: true, auditedAt: null, error: null, updatedAt: now });
+  repo.candidates = async () => [
+    { ticker: moneyline, job: repo.jobs.get(moneyline), closed: true, closedAt: now },
+    { ticker: spread, job: undefined, closed: false },
+  ];
+  const calls: string[] = [];
+  const importer = new MarketHistory(repo, async job => {
+    calls.push(job.ticker);
+    return { rows: [], scanned: 0, cursor: null };
+  }, () => now);
+  await importer.status(spread);
+  await importer.tick();
+  assert.equal(calls[0], spread);
+});
+
 test("legacy or malformed audit flags force a complete refresh rather than certifying an incremental import", async () => {
   for (const version of [0, 1]) {
     const repo = new HistoryMemory();

@@ -14,3 +14,7 @@ Default to markets whose available execution history has been fully reconciled a
 **Why:** Stopping live checks at game end can leave gaps precisely in the resolved markets used for backtesting. Mixing those partial histories into the main ranking can bias it.
 
 **How to apply:** Certify only after both available trade sources finish all pages successfully. Changing validation rules or the capture floor requires a new full pass, not just an incremental refresh. Canonical corrections must preserve notification/delivery timestamps and never replay old alerts. Keep sub-cent transaction values through ingestion and storage; round for display, not band eligibility. An audit proves retrieval of the provider's available data for known markets, not complete exchange-wide coverage.
+
+Finish resumable current-version final audits before starting more legacy imports, while preserving priority for a user-selected chart. Apply the same priorities before the database candidate limit and in the worker.
+
+**Why:** Legacy in-progress flags and old timestamps can otherwise fill a bounded candidate window indefinitely, starting thousands of imports without completing verified markets.

@@ -18,6 +18,14 @@ export function createMarketHistoryStore(database: HistoryDatabase = db): Histor
 return {
   async candidates(preferred) {
     const g = kalshiGameStatusTable, h = kalshiTradeHistoryTable, s = kalshiSettlementsTable;
+    const resumable = sql`${h.phase} <> 'complete' AND ${h.auditVersion} >= ${HISTORY_AUDIT_VERSION}
+      AND ${h.captureMinimum} <= ${CAPTURE_MINIMUM}
+      AND (coalesce(${s.terminal}, false) = false OR
+        (${h.finalPass} = true AND ${h.sinceAt} IS NULL AND ${h.snapshotAt} >= ${s.checkedAt}))`;
+    // Match historyQueuePriority before LIMIT: otherwise legacy "archive" jobs
+    // fill the candidate window and prevent current final audits from finishing.
+    const queuePriority = sql`CASE WHEN coalesce(${s.terminal}, false) THEN 0 ELSE 3 END
+      + CASE WHEN ${resumable} THEN CASE WHEN ${h.phase} = 'archive' THEN 0 ELSE 1 END ELSE 2 END`;
     const markets = await database.select({
       ticker: g.ticker, history: h, closed: sql<boolean>`coalesce(${s.terminal}, false)`, closedAt: s.checkedAt,
     }).from(g).leftJoin(h, eq(h.ticker, g.ticker)).leftJoin(s, eq(s.ticker, g.ticker))
@@ -37,7 +45,7 @@ return {
               OR ${h.snapshotAt} <= ${new Date(Date.now() - 15 * 60_000)}))
         )`)
       .orderBy(sql`(${g.ticker} = ${preferred ?? ""}) DESC`,
-        sql`(${h.phase} IS NOT NULL AND ${h.phase} <> 'complete') DESC`,
+        queuePriority,
         sql`${h.updatedAt} ASC NULLS FIRST`, g.ticker)
       .limit(100);
     return markets.map(row => ({ ticker: row.ticker, job: row.history ? job(row.history) : undefined, closed: row.closed, closedAt: row.closedAt }));

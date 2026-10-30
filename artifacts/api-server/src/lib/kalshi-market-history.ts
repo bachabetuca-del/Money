@@ -21,6 +21,22 @@ export type HistoryStatus = {
   error: boolean;
 };
 export type HistoryCandidate = { ticker: string; job?: HistoryJob; closed?: boolean; closedAt?: Date | null };
+function needsFinalAudit({ job, closed, closedAt }: HistoryCandidate) {
+  return Boolean(closed && (!job?.finalPass || (job.phase === "complete" && !job.auditedAt) ||
+    job.sinceAt !== null || (closedAt && job.snapshotAt < closedAt)));
+}
+
+/** Keep this order aligned with the bounded database selector. Old phase flags
+ * do not mean an import can resume under the current validation rules. */
+export function historyQueuePriority(candidate: HistoryCandidate, preferred?: string) {
+  if (candidate.ticker === preferred) return -1;
+  const { job, closed } = candidate;
+  const resumable = job && job.phase !== "complete" &&
+    (job.auditVersion ?? 0) >= HISTORY_AUDIT_VERSION &&
+    (job.captureMinimum ?? 5000) <= CAPTURE_MINIMUM && !needsFinalAudit(candidate);
+  const stage = resumable ? job.phase === "archive" ? 0 : 1 : 2;
+  return (closed ? 0 : 3) + stage;
+}
 export interface HistoryRepository<T> {
   candidates(preferred?: string): Promise<HistoryCandidate[]>;
   job(ticker: string): Promise<HistoryJob | undefined>;
@@ -48,10 +64,6 @@ export class MarketHistory<T> {
     if (job.finalPass && job.auditedAt && job.phase === "complete" && job.sinceAt === null) return false;
     return job.snapshotAt < this.startedAt || now.getTime() - job.snapshotAt.getTime() >= 15 * 60_000;
   }
-  private needsFinalAudit({ job, closed, closedAt }: HistoryCandidate) {
-    return Boolean(closed && (!job?.finalPass || (job.phase === "complete" && !job.auditedAt) ||
-      job.sinceAt !== null || (closedAt && job.snapshotAt < closedAt)));
-  }
 
   async status(ticker: string): Promise<HistoryStatus> {
     this.preferred = ticker;
@@ -69,12 +81,11 @@ export class MarketHistory<T> {
         const { job } = candidate;
         return (
         (!job || job.phase !== "complete" || this.stale(job, now) ||
-          this.needsFinalAudit(candidate)) &&
+          needsFinalAudit(candidate)) &&
         (!job?.error || now.getTime() - job.updatedAt.getTime() >= 60_000));
       });
       candidates.sort((a, b) =>
-        Number(b.ticker === this.preferred) - Number(a.ticker === this.preferred) ||
-        Number(Boolean(b.job && b.job.phase !== "complete")) - Number(Boolean(a.job && a.job.phase !== "complete")) ||
+        historyQueuePriority(a, this.preferred) - historyQueuePriority(b, this.preferred) ||
         (a.job?.updatedAt.getTime() ?? 0) - (b.job?.updatedAt.getTime() ?? 0));
       const candidate = candidates[0];
       if (!candidate) return;
@@ -82,7 +93,7 @@ export class MarketHistory<T> {
       // a fresh full pass. Final audits stop permanently after both sources finish.
       const needsExpandedCoverage = candidate.job && ((candidate.job.captureMinimum ?? 5_000) > CAPTURE_MINIMUM ||
         (candidate.job.auditVersion ?? 0) < HISTORY_AUDIT_VERSION ||
-        this.needsFinalAudit(candidate));
+        needsFinalAudit(candidate));
       let job: HistoryJob = !candidate.job || needsExpandedCoverage ? {
         ticker: candidate.ticker, phase: "live", cursor: null,
         snapshotAt: now, sinceAt: null, scanned: 0, captureMinimum: CAPTURE_MINIMUM,
