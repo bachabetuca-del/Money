@@ -5,6 +5,113 @@
  * API specification
  * OpenAPI spec version: 0.1.0
  */
+export type RoiLeaderboardGroupBy = typeof RoiLeaderboardGroupBy[keyof typeof RoiLeaderboardGroupBy];
+
+
+export const RoiLeaderboardGroupBy = {
+  sport: 'sport',
+  marketType: 'marketType',
+  odds: 'odds',
+  segment: 'segment',
+  market: 'market',
+} as const;
+
+export type RoiLeaderboardWindow = typeof RoiLeaderboardWindow[keyof typeof RoiLeaderboardWindow];
+
+
+export const RoiLeaderboardWindow = {
+  all: 'all',
+  '30d': '30d',
+  '7d': '7d',
+} as const;
+
+export type RoiLeaderboardBand = typeof RoiLeaderboardBand[keyof typeof RoiLeaderboardBand];
+
+
+export const RoiLeaderboardBand = {
+  all: 'all',
+  large: 'large',
+  medium: 'medium',
+  small: 'small',
+} as const;
+
+export type RoiLeaderboardDirection = typeof RoiLeaderboardDirection[keyof typeof RoiLeaderboardDirection];
+
+
+export const RoiLeaderboardDirection = {
+  all: 'all',
+  yes: 'yes',
+  no: 'no',
+} as const;
+
+export interface RoiCoverage {
+  savedTrades: number;
+  settledTrades: number;
+  pendingTrades: number;
+  excludedTrades: number;
+  settledMarkets: number;
+  pendingMarkets: number;
+  games: number;
+  /** @nullable */
+  roiPct: number | null;
+  profit: number;
+  /** @nullable */
+  recentRoiPct: number | null;
+  recentTrades: number;
+  /** @nullable */
+  firstTradeAt: string | null;
+  /** @nullable */
+  lastTradeAt: string | null;
+  /** @nullable */
+  lastSettlementCheckAt: string | null;
+  settlementErrors: number;
+}
+
+export interface RoiRankingRow {
+  id: string;
+  rank: number;
+  label: string;
+  /** @nullable */
+  sport: string | null;
+  /** @nullable */
+  marketType: string | null;
+  /** @nullable */
+  marketUrl: string | null;
+  /** @nullable */
+  oddsMin: number | null;
+  /** @nullable */
+  oddsMax: number | null;
+  trades: number;
+  games: number;
+  markets: number;
+  wins: number;
+  losses: number;
+  winRatePct: number;
+  roiPct: number;
+  profit: number;
+  invested: number;
+  /** @nullable */
+  recentRoiPct: number | null;
+  recentTrades: number;
+  sampleWarning: boolean;
+}
+
+export interface RoiLeaderboard {
+  generatedAt: string;
+  stakePerTrade: number;
+  groupBy: RoiLeaderboardGroupBy;
+  window: RoiLeaderboardWindow;
+  band: RoiLeaderboardBand;
+  direction: RoiLeaderboardDirection;
+  minGames: number;
+  summary: RoiCoverage;
+  rows: RoiRankingRow[];
+  totalRows: number;
+  page: number;
+  pageSize: number;
+  totalPages: number;
+}
+
 export interface GameAnalysisInput {
   /**
      * @minLength 1
@@ -218,6 +325,62 @@ export type OwnerRequiredResponse = ApiError;
  * Owner authorization is unavailable or not configured
  */
 export type OwnerUnavailableResponse = ApiError;
+
+export type GetKalshiLeaderboardParams = {
+groupBy?: GetKalshiLeaderboardGroupBy;
+window?: GetKalshiLeaderboardWindow;
+band?: GetKalshiLeaderboardBand;
+direction?: GetKalshiLeaderboardDirection;
+/**
+ * @minimum 1
+ * @maximum 1000
+ */
+minGames?: number;
+/**
+ * @minimum 1
+ * @maximum 100000
+ */
+page?: number;
+};
+
+export type GetKalshiLeaderboardGroupBy = typeof GetKalshiLeaderboardGroupBy[keyof typeof GetKalshiLeaderboardGroupBy];
+
+
+export const GetKalshiLeaderboardGroupBy = {
+  sport: 'sport',
+  marketType: 'marketType',
+  odds: 'odds',
+  segment: 'segment',
+  market: 'market',
+} as const;
+
+export type GetKalshiLeaderboardWindow = typeof GetKalshiLeaderboardWindow[keyof typeof GetKalshiLeaderboardWindow];
+
+
+export const GetKalshiLeaderboardWindow = {
+  all: 'all',
+  '30d': '30d',
+  '7d': '7d',
+} as const;
+
+export type GetKalshiLeaderboardBand = typeof GetKalshiLeaderboardBand[keyof typeof GetKalshiLeaderboardBand];
+
+
+export const GetKalshiLeaderboardBand = {
+  all: 'all',
+  large: 'large',
+  medium: 'medium',
+  small: 'small',
+} as const;
+
+export type GetKalshiLeaderboardDirection = typeof GetKalshiLeaderboardDirection[keyof typeof GetKalshiLeaderboardDirection];
+
+
+export const GetKalshiLeaderboardDirection = {
+  all: 'all',
+  yes: 'yes',
+  no: 'no',
+} as const;
 
 export type DownloadKalshiHistoryParams = {
 format: DownloadKalshiHistoryFormat;

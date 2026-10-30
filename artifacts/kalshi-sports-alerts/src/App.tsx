@@ -39,6 +39,7 @@ import {
 } from 'wouter';
 import type { ReactNode } from 'react';
 import { Explorer, setUrlParams } from '@/components/explorer';
+import { RoiLeaderboard } from '@/components/roi-leaderboard';
 import { UserButton } from '@clerk/react';
 import { OwnerAuthProvider, ClearOwnerCache, OwnerLanding, RequireSignIn, OwnerSignIn, OwnerSignUp } from '@/components/owner-access';
 
@@ -111,8 +112,8 @@ function Home() {
   const [testMessage, setTestMessage] = useState('');
   const [testError, setTestError] = useState(false);
   const [savedMessage, setSavedMessage] = useState('');
-  const [tab, setTab] = useState<'analysis' | 'settings'>(() => new URLSearchParams(window.location.search).get('tab') === 'settings' ? 'settings' : 'analysis');
-  function pickTab(next: 'analysis' | 'settings') { setTab(next); setUrlParams({ tab: next === 'settings' ? 'settings' : null }); }
+  const [tab, setTab] = useState<'analysis' | 'settings' | 'leaderboard'>(() => { const t = new URLSearchParams(window.location.search).get('tab'); return t === 'settings' || t === 'leaderboard' ? t : 'analysis'; });
+  function pickTab(next: 'analysis' | 'settings' | 'leaderboard') { setTab(next); setUrlParams({ tab: next === 'analysis' ? null : next }); }
 
   useEffect(() => {
     if (!dashboard) return;
@@ -242,9 +243,12 @@ function Home() {
             <nav className="ws-tabs" aria-label="Secciones">
               <button className={tab === 'analysis' ? 'on' : ''} onClick={() => pickTab('analysis')} data-testid="tab-analysis">Análisis de mercados</button>
               <button className={tab === 'settings' ? 'on' : ''} onClick={() => pickTab('settings')} data-testid="tab-settings">Ajustes y Telegram</button>
+              <button className={tab === 'leaderboard' ? 'on' : ''} onClick={() => pickTab('leaderboard')} data-testid="tab-leaderboard">Ranking ROI</button>
             </nav>
 
             {tab === 'analysis' && <Explorer />}
+
+            {tab === 'leaderboard' && <RoiLeaderboard />}
 
             {tab === 'settings' && <div className="main-grid">
               <section className="panel" aria-labelledby="monitor-settings-heading">

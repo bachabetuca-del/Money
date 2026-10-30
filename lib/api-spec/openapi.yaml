@@ -15,6 +15,46 @@ tags:
   - name: kalshi
     description: Kalshi sports trade monitoring and Telegram alerts
 paths:
+  /kalshi/leaderboard:
+    get:
+      operationId: getKalshiLeaderboard
+      tags: [kalshi]
+      summary: Equal-stake hypothetical ROI from saved trades and official binary settlements
+      parameters:
+        - in: query
+          name: groupBy
+          schema: { type: string, enum: [sport, marketType, odds, segment, market], default: sport }
+        - in: query
+          name: window
+          schema: { type: string, enum: [all, 30d, 7d], default: all }
+        - in: query
+          name: band
+          schema: { type: string, enum: [all, large, medium, small], default: all }
+        - in: query
+          name: direction
+          schema: { type: string, enum: [all, yes, no], default: all }
+        - in: query
+          name: minGames
+          schema: { type: integer, minimum: 1, maximum: 1000, default: 10 }
+        - in: query
+          name: page
+          schema: { type: integer, minimum: 1, maximum: 100000, default: 1 }
+      responses:
+        "200":
+          description: Saved-history ranking, never trader profits or a forecast
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/RoiLeaderboard" }
+        "400":
+          description: Invalid filters
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ApiError" }
+        "503":
+          description: Ranking could not be refreshed
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ApiError" }
   /kalshi/history/export:
     get:
       operationId: downloadKalshiHistory
@@ -286,6 +326,68 @@ components:
           schema:
             $ref: "#/components/schemas/ApiError"
   schemas:
+    RoiLeaderboard:
+      type: object
+      required: [generatedAt, stakePerTrade, summary, rows, totalRows, page, pageSize, totalPages, groupBy, window, band, direction, minGames]
+      properties:
+        generatedAt: { type: string, format: date-time }
+        stakePerTrade: { type: number }
+        groupBy: { type: string, enum: [sport, marketType, odds, segment, market] }
+        window: { type: string, enum: [all, 30d, 7d] }
+        band: { type: string, enum: [all, large, medium, small] }
+        direction: { type: string, enum: [all, yes, no] }
+        minGames: { type: integer }
+        summary: { $ref: "#/components/schemas/RoiCoverage" }
+        rows:
+          type: array
+          items: { $ref: "#/components/schemas/RoiRankingRow" }
+        totalRows: { type: integer }
+        page: { type: integer }
+        pageSize: { type: integer }
+        totalPages: { type: integer }
+    RoiCoverage:
+      type: object
+      required: [savedTrades, settledTrades, pendingTrades, excludedTrades, settledMarkets, pendingMarkets, games, roiPct, profit, recentRoiPct, recentTrades, firstTradeAt, lastTradeAt, lastSettlementCheckAt, settlementErrors]
+      properties:
+        savedTrades: { type: integer }
+        settledTrades: { type: integer }
+        pendingTrades: { type: integer }
+        excludedTrades: { type: integer }
+        settledMarkets: { type: integer }
+        pendingMarkets: { type: integer }
+        games: { type: integer }
+        roiPct: { type: [number, "null"] }
+        profit: { type: number }
+        recentRoiPct: { type: [number, "null"] }
+        recentTrades: { type: integer }
+        firstTradeAt: { type: [string, "null"], format: date-time }
+        lastTradeAt: { type: [string, "null"], format: date-time }
+        lastSettlementCheckAt: { type: [string, "null"], format: date-time }
+        settlementErrors: { type: integer }
+    RoiRankingRow:
+      type: object
+      required: [id, rank, label, sport, marketType, marketUrl, oddsMin, oddsMax, trades, games, markets, wins, losses, winRatePct, roiPct, profit, invested, recentRoiPct, recentTrades, sampleWarning]
+      properties:
+        id: { type: string }
+        rank: { type: integer }
+        label: { type: string }
+        sport: { type: [string, "null"] }
+        marketType: { type: [string, "null"] }
+        marketUrl: { type: [string, "null"] }
+        oddsMin: { type: [number, "null"] }
+        oddsMax: { type: [number, "null"] }
+        trades: { type: integer }
+        games: { type: integer }
+        markets: { type: integer }
+        wins: { type: integer }
+        losses: { type: integer }
+        winRatePct: { type: number }
+        roiPct: { type: number }
+        profit: { type: number }
+        invested: { type: number }
+        recentRoiPct: { type: [number, "null"] }
+        recentTrades: { type: integer }
+        sampleWarning: { type: boolean }
     GameAnalysisInput:
       type: object
       required: [ticker]

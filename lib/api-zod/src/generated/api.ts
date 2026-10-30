@@ -9,6 +9,84 @@ import * as zod from 'zod';
 
 
 /**
+ * @summary Equal-stake hypothetical ROI from saved trades and official binary settlements
+ */
+export const getKalshiLeaderboardQueryGroupByDefault = `sport`;
+export const getKalshiLeaderboardQueryWindowDefault = `all`;
+export const getKalshiLeaderboardQueryBandDefault = `all`;
+export const getKalshiLeaderboardQueryDirectionDefault = `all`;
+export const getKalshiLeaderboardQueryMinGamesDefault = 10;
+export const getKalshiLeaderboardQueryMinGamesMax = 1000;
+
+export const getKalshiLeaderboardQueryPageDefault = 1;
+export const getKalshiLeaderboardQueryPageMax = 100000;
+
+
+
+export const GetKalshiLeaderboardQueryParams = zod.object({
+  "groupBy": zod.enum(['sport', 'marketType', 'odds', 'segment', 'market']).default(getKalshiLeaderboardQueryGroupByDefault),
+  "window": zod.enum(['all', '30d', '7d']).default(getKalshiLeaderboardQueryWindowDefault),
+  "band": zod.enum(['all', 'large', 'medium', 'small']).default(getKalshiLeaderboardQueryBandDefault),
+  "direction": zod.enum(['all', 'yes', 'no']).default(getKalshiLeaderboardQueryDirectionDefault),
+  "minGames": zod.coerce.number().int().min(1).max(getKalshiLeaderboardQueryMinGamesMax).default(getKalshiLeaderboardQueryMinGamesDefault),
+  "page": zod.coerce.number().int().min(1).max(getKalshiLeaderboardQueryPageMax).default(getKalshiLeaderboardQueryPageDefault)
+})
+
+export const GetKalshiLeaderboardResponse = zod.object({
+  "generatedAt": zod.coerce.date(),
+  "stakePerTrade": zod.number(),
+  "groupBy": zod.enum(['sport', 'marketType', 'odds', 'segment', 'market']),
+  "window": zod.enum(['all', '30d', '7d']),
+  "band": zod.enum(['all', 'large', 'medium', 'small']),
+  "direction": zod.enum(['all', 'yes', 'no']),
+  "minGames": zod.number().int(),
+  "summary": zod.object({
+  "savedTrades": zod.number().int(),
+  "settledTrades": zod.number().int(),
+  "pendingTrades": zod.number().int(),
+  "excludedTrades": zod.number().int(),
+  "settledMarkets": zod.number().int(),
+  "pendingMarkets": zod.number().int(),
+  "games": zod.number().int(),
+  "roiPct": zod.number().nullable(),
+  "profit": zod.number(),
+  "recentRoiPct": zod.number().nullable(),
+  "recentTrades": zod.number().int(),
+  "firstTradeAt": zod.coerce.date().nullable(),
+  "lastTradeAt": zod.coerce.date().nullable(),
+  "lastSettlementCheckAt": zod.coerce.date().nullable(),
+  "settlementErrors": zod.number().int()
+}),
+  "rows": zod.array(zod.object({
+  "id": zod.string(),
+  "rank": zod.number().int(),
+  "label": zod.string(),
+  "sport": zod.string().nullable(),
+  "marketType": zod.string().nullable(),
+  "marketUrl": zod.string().nullable(),
+  "oddsMin": zod.number().nullable(),
+  "oddsMax": zod.number().nullable(),
+  "trades": zod.number().int(),
+  "games": zod.number().int(),
+  "markets": zod.number().int(),
+  "wins": zod.number().int(),
+  "losses": zod.number().int(),
+  "winRatePct": zod.number(),
+  "roiPct": zod.number(),
+  "profit": zod.number(),
+  "invested": zod.number(),
+  "recentRoiPct": zod.number().nullable(),
+  "recentTrades": zod.number().int(),
+  "sampleWarning": zod.boolean()
+})),
+  "totalRows": zod.number().int(),
+  "page": zod.number().int(),
+  "pageSize": zod.number().int(),
+  "totalPages": zod.number().int()
+})
+
+
+/**
  * @summary Download every stored execution, without dashboard filters or row limits
  */
 export const DownloadKalshiHistoryQueryParams = zod.object({

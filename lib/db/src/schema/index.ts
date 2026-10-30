@@ -24,3 +24,4 @@ export * from "./kalshi-notifications";
 export * from "./kalshi-game-status";
 export * from "./kalshi-results";
 export * from "./kalshi-analysis";
+export * from "./kalshi-settlements";

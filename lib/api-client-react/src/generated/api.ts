@@ -32,12 +32,14 @@ import type {
   GameAnalysisState,
   GetKalshiAnalysisParams,
   GetKalshiExplorerParams,
+  GetKalshiLeaderboardParams,
   HealthStatus,
   KalshiDashboard,
   KalshiExplorer,
   KalshiSettingsInput,
   OwnerRequiredResponse,
   OwnerUnavailableResponse,
+  RoiLeaderboard,
   SignInRequiredResponse,
   TelegramChatLookup,
   TelegramTestInput,
@@ -70,6 +72,114 @@ const withQueryKey = <T extends object, K>(query: T, queryKey: K): T & { queryKe
   }
   return result;
 };
+
+export const getGetKalshiLeaderboardUrl = (params?: GetKalshiLeaderboardParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/api/kalshi/leaderboard?${stringifiedParams}` : `/api/kalshi/leaderboard`
+}
+
+/**
+ * @summary Equal-stake hypothetical ROI from saved trades and official binary settlements
+ */
+export const getKalshiLeaderboard = async (params?: GetKalshiLeaderboardParams, options?: Parameters<typeof customFetch>[1]): Promise<RoiLeaderboard> => {
+
+  return customFetch<RoiLeaderboard>(getGetKalshiLeaderboardUrl(params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetKalshiLeaderboardQueryKey = (params?: GetKalshiLeaderboardParams,) => {
+    return [
+    `/api/kalshi/leaderboard`, ...(params ? [params] : [])
+    ] as const;
+    }
+
+
+export const getGetKalshiLeaderboardQueryOptions = <TData = Awaited<ReturnType<typeof getKalshiLeaderboard>>, TError = ErrorType<ApiError>>(params?: GetKalshiLeaderboardParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getKalshiLeaderboard>>, TError, TData>>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetKalshiLeaderboardQueryKey(params);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getKalshiLeaderboard>>> = ({ signal }) => getKalshiLeaderboard(params, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getKalshiLeaderboard>>, TError, TData> & { queryKey: DataTag<QueryKey, TData, TError> }
+}
+
+export type GetKalshiLeaderboardQueryResult = NonNullable<Awaited<ReturnType<typeof getKalshiLeaderboard>>>
+export type GetKalshiLeaderboardQueryError = ErrorType<ApiError>
+
+
+export function useGetKalshiLeaderboard<TData = Awaited<ReturnType<typeof getKalshiLeaderboard>>, TError = ErrorType<ApiError>>(
+ params: undefined |  GetKalshiLeaderboardParams, options: { query:Partial<UseQueryOptions<Awaited<ReturnType<typeof getKalshiLeaderboard>>, TError, TData>> & Pick<
+        DefinedInitialDataOptions<
+          Awaited<ReturnType<typeof getKalshiLeaderboard>>,
+          TError,
+          Awaited<ReturnType<typeof getKalshiLeaderboard>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient
+  ):  DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useGetKalshiLeaderboard<TData = Awaited<ReturnType<typeof getKalshiLeaderboard>>, TError = ErrorType<ApiError>>(
+ params?: GetKalshiLeaderboardParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getKalshiLeaderboard>>, TError, TData>> & Pick<
+        UndefinedInitialDataOptions<
+          Awaited<ReturnType<typeof getKalshiLeaderboard>>,
+          TError,
+          Awaited<ReturnType<typeof getKalshiLeaderboard>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useGetKalshiLeaderboard<TData = Awaited<ReturnType<typeof getKalshiLeaderboard>>, TError = ErrorType<ApiError>>(
+ params?: GetKalshiLeaderboardParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getKalshiLeaderboard>>, TError, TData>>, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+/**
+ * @summary Equal-stake hypothetical ROI from saved trades and official binary settlements
+ */
+
+export function useGetKalshiLeaderboard<TData = Awaited<ReturnType<typeof getKalshiLeaderboard>>, TError = ErrorType<ApiError>>(
+ params?: GetKalshiLeaderboardParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getKalshiLeaderboard>>, TError, TData>>, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient
+ ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
+
+  const queryOptions = getGetKalshiLeaderboardQueryOptions(params,options)
+
+  const query = useQuery(queryOptions, queryClient) as  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
 
 export const getDownloadKalshiHistoryUrl = (params: DownloadKalshiHistoryParams,) => {
   const normalizedParams = new URLSearchParams();

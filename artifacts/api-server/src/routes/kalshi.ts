@@ -13,6 +13,8 @@ import {
   GetKalshiAnalysisResponse,
   AnalyzeKalshiGameBody,
   AnalyzeKalshiGameResponse,
+  GetKalshiLeaderboardQueryParams,
+  GetKalshiLeaderboardResponse,
 } from "@workspace/api-zod";
 import {
   findTelegramChat,
@@ -26,10 +28,26 @@ import { kalshiLiveEvents } from "../lib/kalshi-live-events";
 import { streamHistoryExport } from "../lib/kalshi-history-export";
 import { analysisAvailable, gameAnalysisService, loadGameAnalysis } from "../lib/kalshi-game-analysis";
 import { AnalysisError } from "../lib/game-analysis";
+import { getRoiLeaderboard } from "../lib/kalshi-roi-leaderboard";
 
 const router: IRouter = Router();
 // The parent router applies requireOwner to ALL /kalshi routes, including SSE.
 router.get("/kalshi/live", (req, res) => kalshiLiveEvents.serve(req, res));
+router.get("/kalshi/leaderboard", async (req, res): Promise<void> => {
+  const parsed = GetKalshiLeaderboardQueryParams.safeParse(req.query);
+  if (!parsed.success) { res.status(400).json({ error: "Filtros del ranking no válidos." }); return; }
+  res.set("Cache-Control", "private, no-store");
+  try {
+    const data = await getRoiLeaderboard({
+      groupBy: parsed.data.groupBy ?? "sport", window: parsed.data.window ?? "all",
+      band: parsed.data.band ?? "all", direction: parsed.data.direction ?? "all",
+      minGames: parsed.data.minGames ?? 10, page: parsed.data.page ?? 1,
+    });
+    res.json(GetKalshiLeaderboardResponse.parse(data));
+  } catch {
+    res.status(503).json({ error: "No se pudo actualizar el ranking. Inténtalo de nuevo; el histórico se conserva." });
+  }
+});
 let exportInProgress = false;
 router.get("/kalshi/history/export", async (req, res): Promise<void> => {
   const parsed = DownloadKalshiHistoryQueryParams.safeParse(req.query);

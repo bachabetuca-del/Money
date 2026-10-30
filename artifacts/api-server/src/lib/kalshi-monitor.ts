@@ -5,6 +5,8 @@ import {
   kalshiMonitorSettingsTable,
 } from "@workspace/db";
 import { logger } from "./logger";
+import { MarketSettlementWorker } from "./kalshi-settlement-source";
+import { settlementStore } from "./kalshi-settlement-store";
 import { TelegramDashboard, type CallbackQuery } from "./telegram-dashboard";
 import { telegramDashboardStore } from "./telegram-dashboard-store";
 import { shouldCaptureTrade } from "./kalshi-trade-bands";
@@ -176,6 +178,11 @@ const kalshiHttp = new KalshiHttpClient(fetch, Date.now, (retryAt, delayMs) => {
 function fetchJson<T>(url: string): Promise<T> {
   return kalshiHttp.json<T>(url);
 }
+
+const marketSettlementWorker = new MarketSettlementWorker(
+  settlementStore, <T>(path: string) => fetchJson<T>(`${KALSHI_API}${path}`),
+  () => kalshiHttp.isPaused,
+);
 
 async function getSportsSeries(): Promise<Map<string, KalshiSeries>> {
   if (sportsSeries.size > 0 && Date.now() - seriesFetchedAt < SERIES_CACHE_MS) {
@@ -713,6 +720,14 @@ export function startKalshiMonitor() {
       if (settings.enabled) await finalResultsWorker.tick();
     }).catch(error => logger.warn({ error: String(error) }, "Final result worker failed"));
   }, 5_000);
+  // Official per-market resolutions for the ROI leaderboard. Same paced HTTP client,
+  // shared 429 cooldown and production worker lock; never starts a second bot.
+  setInterval(() => {
+    if (kalshiHttp.isPaused) return;
+    void readSettings().then(async settings => {
+      if (settings.enabled) await marketSettlementWorker.tick();
+    }).catch(error => logger.warn({ error: String(error) }, "Market settlement enrichment failed"));
+  }, 30_000);
   setInterval(() => {
     if (kalshiHttp.isPaused) return;
     void readSettings().then(async settings => {
