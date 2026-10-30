@@ -15,7 +15,9 @@ export function publicTradeExecution(trade: ExecutionFields) {
   const cents = outcomeSide === "no" ? trade.no_price : trade.yes_price;
   const price = raw !== undefined ? Number(raw) : typeof cents === "number" ? cents / 100 : NaN;
   const count = Number(trade.count_fp ?? trade.count);
-  const notional = price * count;
+  // Four-decimal dollar quotes × two-decimal fractional contracts require
+  // six decimals. Round only binary floating-point noise, never to cents.
+  const notional = Number((price * count).toFixed(6));
   if (!Number.isFinite(price) || price <= 0 || price > 1 || !Number.isFinite(count) || count <= 0 ||
       !Number.isFinite(notional)) return undefined;
   return { outcomeSide, price, count, notional };

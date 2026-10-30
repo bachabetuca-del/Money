@@ -490,7 +490,7 @@ test("completed history reconciles downtime using an overlapping incremental tim
   repo.tickers = [moneyline];
   const old = new Date("2026-10-22T17:00:00Z");
   repo.jobs.set(moneyline, { ticker: moneyline, phase: "complete", cursor: null,
-    snapshotAt: old, sinceAt: null, scanned: 1000, captureMinimum: 1000, error: null, updatedAt: old });
+    snapshotAt: old, sinceAt: null, scanned: 1000, captureMinimum: 1000, auditVersion: 1, error: null, updatedAt: old });
   const now = new Date("2026-10-22T18:00:00Z");
   let requested: HistoryJob | undefined;
   const importer = new MarketHistory(repo, async job => {
@@ -519,6 +519,82 @@ test("loading and incomplete-history status edits the existing dashboard rather 
   assert.match(String(api.photos().at(-1)?.body.media), /Historial incompleto/);
   assert.ok(api.photos().every(call => call.method === "editMessageMedia"));
   assert.equal((await store.state(settings.chatId))?.messageId, 400);
+});
+
+test("officially settled markets get one full final audit, survive restart, then never poll again", async () => {
+  const repo = new HistoryMemory();
+  repo.tickers = [moneyline];
+  let now = new Date("2026-10-30T12:00:00Z");
+  const closedAt = now;
+  repo.jobs.set(moneyline, { ticker: moneyline, phase: "complete", cursor: null,
+    snapshotAt: new Date(now.getTime() - 3600_000), sinceAt: new Date(now.getTime() - 7200_000),
+    scanned: 100, captureMinimum: 1000, auditVersion: 1, error: null, updatedAt: now });
+  repo.candidates = async () => [{ ticker: moneyline, job: repo.jobs.get(moneyline), closed: true, closedAt }];
+  const calls: HistoryJob[] = [];
+  const source = async (job: HistoryJob) => {
+    calls.push({ ...job });
+    return { rows: ["overlap"], scanned: 1, cursor: null };
+  };
+  await new MarketHistory(repo, source, () => now).tick();
+  assert.equal(calls[0].sinceAt, null, "a final audit must not reuse an incremental lower boundary");
+  assert.equal(calls[0].finalPass, true);
+  assert.equal(repo.jobs.get(moneyline)?.auditedAt, null);
+  now = new Date(now.getTime() + 1000);
+  const restarted = new MarketHistory(repo, source, () => now);
+  await restarted.tick();
+  assert.equal(calls[1].phase, "archive");
+  assert.equal(repo.jobs.get(moneyline)?.phase, "complete");
+  assert(repo.jobs.get(moneyline)?.auditedAt);
+  now = new Date(now.getTime() + 30 * 86400_000);
+  const later = new MarketHistory(repo, source, () => now);
+  await later.tick();
+  assert.equal((await later.status(moneyline)).phase, "complete");
+  assert.equal(calls.length, 2, "finished-game history is not a recurring poll");
+  assert.equal(repo.rows.size, 1);
+});
+
+test("failed final audit cannot claim coverage and resumes the same frozen archive cursor", async () => {
+  const repo = new HistoryMemory();
+  let now = new Date("2026-10-30T12:00:00Z");
+  const closedAt = now;
+  repo.candidates = async () => [{ ticker: moneyline, job: repo.jobs.get(moneyline), closed: true, closedAt }];
+  let fail = true;
+  const calls: HistoryJob[] = [];
+  const importer = new MarketHistory(repo, async job => {
+    calls.push({ ...job });
+    if (job.phase === "archive" && fail) throw new Error("Archive unavailable");
+    return { rows: ["saved"], scanned: 1, cursor: null };
+  }, () => now);
+  await importer.tick();
+  await importer.tick();
+  assert.equal(repo.jobs.get(moneyline)?.phase, "archive");
+  assert.equal(repo.jobs.get(moneyline)?.auditedAt, null);
+  await importer.tick();
+  assert.equal(calls.length, 2);
+  now = new Date(now.getTime() + 60_000);
+  fail = false;
+  await importer.tick();
+  assert.equal(calls[2].snapshotAt.getTime(), closedAt.getTime());
+  assert.equal(calls[2].sinceAt, null);
+  assert.equal(repo.jobs.get(moneyline)?.phase, "complete");
+  assert(repo.jobs.get(moneyline)?.auditedAt);
+});
+
+test("legacy or malformed audit flags force a complete refresh rather than certifying an incremental import", async () => {
+  for (const version of [0, 1]) {
+    const repo = new HistoryMemory();
+    const now = new Date("2026-10-30T12:00:00Z");
+    repo.jobs.set(moneyline, { ticker: moneyline, phase: "complete", cursor: null,
+      snapshotAt: now, sinceAt: now, scanned: 100, captureMinimum: 1000,
+      auditVersion: version, finalPass: true, auditedAt: now, error: null, updatedAt: now });
+    repo.candidates = async () => [{ ticker: moneyline, job: repo.jobs.get(moneyline), closed: true, closedAt: now }];
+    let seen: HistoryJob | undefined;
+    const importer = new MarketHistory(repo, async job => { seen = job; return { rows: [], scanned: 0, cursor: null }; }, () => now);
+    await importer.tick();
+    assert.equal(seen?.sinceAt, null);
+    assert.equal(seen?.auditVersion, 1);
+    assert.equal(repo.jobs.get(moneyline)?.auditedAt, null);
+  }
 });
 
 test("phone cards render safely for sparse history, long names, large amounts and both value sections", async () => {

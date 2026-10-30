@@ -1,6 +1,9 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { buildRoiRanking, hypotheticalProfit, oddsBucket, type RoiRollup } from "./roi-ranking";
+import { checkedHistoryRows } from "./history-page-integrity";
+import type { PublicTrade } from "./kalshi-monitor";
+import { publicTradeExecution } from "./kalshi-trade-execution";
 import {
   MarketSettlementWorker, officialSettlement, type SettlementStore, type SettlementWrite,
 } from "./kalshi-settlement-source";
@@ -87,6 +90,46 @@ test("no settled data has null ROI, including recent; errors and pending are vis
   assert.equal(summary.recentRoiPct, null);
   const settled = buildRoiRanking([row({ recentTrades: 0, recentProfit: 0 })], "sport", 1);
   assert.equal(settled.rows[0].recentRoiPct, null);
+});
+
+test("history quality distinguishes excluded resolved trades from pending settlements without inventing ROI", () => {
+  const { summary, rows } = buildRoiRanking([
+    row({ category: "incomplete", historyVerified: false, historyError: true, trades: 12 }),
+    row({ ticker: "PENDING", category: "pending", historyVerified: false, trades: 5 }),
+    row({ ticker: "VERIFIED", historyVerified: true }),
+  ], "sport", 1);
+  assert.equal(summary.savedTrades, 18);
+  assert.equal(summary.historyExcludedTrades, 12);
+  assert.equal(summary.excludedTrades, 12);
+  assert.equal(summary.pendingTrades, 5);
+  assert.equal(summary.settledTrades, 1);
+  assert.equal(summary.verifiedHistoryMarkets, 1);
+  assert.equal(summary.incompleteHistoryMarkets, 2);
+  assert.equal(summary.historyErrorMarkets, 1);
+  assert.equal(rows[0].roiPct, 100);
+});
+
+test("history pages validate own-side money, identity and timestamps, deduplicate identical records and reject conflicts", () => {
+  const trade: PublicTrade = {
+    tradeId: "ID", ticker: "T", title: "Game", eventTitle: "A vs B", marketTitle: "A wins", sport: "Tennis",
+    price: 0.4, count: 10000, notional: 4000, outcomeSide: "no", bookSide: "ask",
+    createdTime: "2026-10-29T12:00:00Z", blockTrade: false, marketUrl: "https://kalshi.com",
+  };
+  const job = { ticker: "T", snapshotAt: now };
+  assert.equal(checkedHistoryRows([trade, { ...trade }], job).length, 1);
+  assert.equal(checkedHistoryRows([trade, { ...trade, createdTime: "2026-10-29T12:00:00+00:00" }], job).length, 1);
+  for (const patch of [
+    { ticker: "OTHER" }, { notional: 4500 }, { price: 0 }, { count: NaN },
+    { createdTime: "2026-11-01T12:00:00Z" }, { outcomeSide: "unknown" }, { tradeId: "" },
+  ]) assert.throws(() => checkedHistoryRows([{ ...trade, ...patch }], job), /integrity/);
+  assert.throws(() => checkedHistoryRows([trade, { ...trade, price: 0.5, notional: 5000 }], job), /conflicting/);
+});
+
+test("canonical ingestion preserves sub-cent value so 5k/10k boundaries do not move when stored", () => {
+  const below = publicTradeExecution({ taker_outcome_side: "yes", yes_price_dollars: "0.9999", count_fp: "10001.00" });
+  const above = publicTradeExecution({ taker_outcome_side: "no", no_price_dollars: "0.0001", count_fp: "100000001.00" });
+  assert.equal(below?.notional, 9999.9999);
+  assert.equal(above?.notional, 10000.0001);
 });
 
 test("official market settlement is distinct from final score, closure and provisional results", () => {

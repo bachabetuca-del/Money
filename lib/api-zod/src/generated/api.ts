@@ -11,6 +11,7 @@ import * as zod from 'zod';
 /**
  * @summary Equal-stake hypothetical ROI from saved trades and official binary settlements
  */
+export const getKalshiLeaderboardQueryCoverageDefault = `verified`;
 export const getKalshiLeaderboardQueryGroupByDefault = `sport`;
 export const getKalshiLeaderboardQueryWindowDefault = `all`;
 export const getKalshiLeaderboardQueryBandDefault = `all`;
@@ -24,6 +25,7 @@ export const getKalshiLeaderboardQueryPageMax = 100000;
 
 
 export const GetKalshiLeaderboardQueryParams = zod.object({
+  "coverage": zod.enum(['verified', 'all']).default(getKalshiLeaderboardQueryCoverageDefault),
   "groupBy": zod.enum(['sport', 'marketType', 'odds', 'segment', 'market']).default(getKalshiLeaderboardQueryGroupByDefault),
   "window": zod.enum(['all', '30d', '7d']).default(getKalshiLeaderboardQueryWindowDefault),
   "band": zod.enum(['all', 'large', 'medium', 'small']).default(getKalshiLeaderboardQueryBandDefault),
@@ -35,6 +37,7 @@ export const GetKalshiLeaderboardQueryParams = zod.object({
 export const GetKalshiLeaderboardResponse = zod.object({
   "generatedAt": zod.coerce.date(),
   "stakePerTrade": zod.number(),
+  "coverage": zod.enum(['verified', 'all']),
   "groupBy": zod.enum(['sport', 'marketType', 'odds', 'segment', 'market']),
   "window": zod.enum(['all', '30d', '7d']),
   "band": zod.enum(['all', 'large', 'medium', 'small']),
@@ -55,7 +58,11 @@ export const GetKalshiLeaderboardResponse = zod.object({
   "firstTradeAt": zod.coerce.date().nullable(),
   "lastTradeAt": zod.coerce.date().nullable(),
   "lastSettlementCheckAt": zod.coerce.date().nullable(),
-  "settlementErrors": zod.number().int()
+  "settlementErrors": zod.number().int(),
+  "verifiedHistoryMarkets": zod.number().int(),
+  "incompleteHistoryMarkets": zod.number().int(),
+  "historyErrorMarkets": zod.number().int(),
+  "historyExcludedTrades": zod.number().int()
 }),
   "rows": zod.array(zod.object({
   "id": zod.string(),

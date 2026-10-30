@@ -245,19 +245,25 @@ async function readHistoryPage(job: HistoryJob) {
   if (job.sinceAt) query.set("min_ts", String(Math.max(0, Math.floor(job.sinceAt.getTime() / 1000) - 1)));
   if (job.cursor) query.set("cursor", job.cursor);
   const endpoint = job.phase === "live" ? "markets/trades" : "historical/trades";
-  const [response, index, context] = await Promise.all([
+  const [response, saved] = await Promise.all([
     fetchJson<TradeFeedResponse>(`${KALSHI_API}/${endpoint}?${query}`),
-    getSportsSeries(), getTradeContext(job.ticker),
+    db.select().from(kalshiAlertsTable).where(eq(kalshiAlertsTable.ticker, job.ticker)).limit(1),
   ]);
-  if (!resolveSeries(job.ticker, index)) throw new Error("Sports metadata unavailable for historical market.");
+  if (!saved[0] || !Array.isArray(response.trades)) throw new Error("Historical source or saved sports metadata unavailable.");
+  // Retired series can disappear from today's sports catalog. Its already-saved
+  // sports identity remains usable; do not block an old market on current discovery.
+  const series = job.ticker.split("-")[0];
+  const index = new Map(sportsSeries);
+  if (!index.has(series)) index.set(series, { ticker: series, title: saved[0].sport, category: "Sports" });
+  const context = saved[0].eventTitle && saved[0].marketTitle
+    ? { eventTitle: saved[0].eventTitle, marketTitle: saved[0].marketTitle }
+    : await getTradeContext(job.ticker);
   const rows: PublicTrade[] = [];
   for (const raw of response.trades) {
     if (raw.ticker !== job.ticker) throw new Error("Historical response contains a different market.");
     const trade = toPublicTrade(raw, index);
     if (!trade) throw new Error("Historical response contains an unreadable trade; page will be retried.");
-    if (shouldCaptureTrade(trade.notional)) {
-      rows.push({ ...trade, ...context, title: `${context.eventTitle} · ${context.marketTitle}` });
-    }
+    rows.push({ ...trade, ...context, title: `${context.eventTitle} · ${context.marketTitle}` });
   }
   return { rows, scanned: response.trades.length, cursor: response.cursor || null };
 }
@@ -303,7 +309,7 @@ function toPublicTrade(
     bookSide: (trade.taker_book_side ?? "unknown").toLowerCase(),
     price,
     count,
-    notional: Math.round(notional * 100) / 100,
+    notional,
     createdTime: createdAt.toISOString(),
     blockTrade: trade.is_block_trade ?? false,
     marketUrl: `https://kalshi.com/markets/${series.ticker}/${trade.ticker}`,
@@ -739,7 +745,7 @@ export function startKalshiMonitor() {
   setInterval(() => {
     if (kalshiHttp.isPaused) return;
     void readSettings().then(async settings => {
-      if (settings.enabled && settings.chatId && botToken()) await marketHistory.tick();
+      if (settings.enabled) await marketHistory.tick();
     }).catch(error => logger.warn({ error: error instanceof Error ? error.message : "History worker failed" },
       "Market history worker failed"));
   }, 2000);

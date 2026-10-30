@@ -27,4 +27,8 @@ export interface RoiCoverage {
   /** @nullable */
   lastSettlementCheckAt: Date | null;
   settlementErrors: number;
+  verifiedHistoryMarkets: number;
+  incompleteHistoryMarkets: number;
+  historyErrorMarkets: number;
+  historyExcludedTrades: number;
 }

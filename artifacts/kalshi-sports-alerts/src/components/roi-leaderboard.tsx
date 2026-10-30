@@ -4,6 +4,7 @@ import {
   getGetKalshiLeaderboardQueryKey,
   useGetKalshiLeaderboard,
   type GetKalshiLeaderboardBand,
+  type GetKalshiLeaderboardCoverage,
   type GetKalshiLeaderboardDirection,
   type GetKalshiLeaderboardGroupBy,
   type GetKalshiLeaderboardParams,
@@ -37,6 +38,10 @@ const DIRS: { v: GetKalshiLeaderboardDirection; l: string }[] = [
   { v: 'all', l: 'SÍ y NO' }, { v: 'yes', l: 'Solo SÍ' }, { v: 'no', l: 'Solo NO' },
 ];
 const MIN_OPTS = [1, 5, 10, 20, 50];
+const COVERAGE: { v: GetKalshiLeaderboardCoverage; l: string }[] = [
+  { v: 'verified', l: 'Solo historial final verificado' },
+  { v: 'all', l: 'Incluir historiales parciales' },
+];
 
 function pick<T extends string>(v: string | null, opts: { v: T }[], d: T): T {
   return (opts.find((o) => o.v === v)?.v ?? d);
@@ -79,6 +84,7 @@ function readInitial() {
     window: pick(p.get('lbWin'), WINDOWS, 'all'),
     band: pick(p.get('lbBand'), BANDS, 'all'),
     direction: pick(p.get('lbDir'), DIRS, 'all'),
+    coverage: pick(p.get('lbCoverage'), COVERAGE, 'verified'),
     minGames: Number.isInteger(mg) && mg >= 1 && mg <= 1000 ? mg : groupBy === 'market' ? 1 : 10,
   };
 }
@@ -86,6 +92,7 @@ function readInitial() {
 function writeUrl(f: ReturnType<typeof readInitial>) {
   const p = new URLSearchParams(window.location.search);
   p.set('lbGroup', f.groupBy); p.set('lbWin', f.window); p.set('lbBand', f.band); p.set('lbDir', f.direction); p.set('lbMin', String(f.minGames));
+  p.set('lbCoverage', f.coverage);
   window.history.replaceState(null, '', `${window.location.pathname}?${p.toString()}`);
 }
 
@@ -149,6 +156,7 @@ export function RoiLeaderboard() {
         <Sel id="lb-window" label="Periodo (fecha de ejecución)" value={f.window} opts={WINDOWS} onChange={(v) => update({ window: v })} />
         <Sel id="lb-band" label="Banda de tamaño" value={f.band} opts={BANDS} onChange={(v) => update({ band: v })} />
         <Sel id="lb-dir" label="Dirección" value={f.direction} opts={DIRS} onChange={(v) => update({ direction: v })} />
+        <Sel id="lb-coverage" label="Calidad del histórico" value={f.coverage} opts={COVERAGE} onChange={(v) => update({ coverage: v })} />
         <div className="lb-filter">
           <span id="lb-min">Mínimo de partidos</span>
           <div className="ws-seg lb-seg" role="radiogroup" aria-labelledby="lb-min">
@@ -158,6 +166,10 @@ export function RoiLeaderboard() {
           </div>
         </div>
       </div>
+
+      {f.coverage === 'all' && <div className="lb-caution" role="note" data-testid="warning-partial-history">
+        <AlertTriangle size={16} /><div><strong>Incluye historiales sin verificar.</strong> Pueden faltar operaciones y el ranking puede estar sesgado. Usa el historial final verificado para la comparación principal.</div>
+      </div>}
 
       {f.groupBy === 'market' && (
         <div className="ws-notice warn" role="note" data-testid="text-market-view-note">
@@ -217,7 +229,7 @@ export function RoiLeaderboard() {
               </>
             )}
           </section>
-          <p className="lb-foot">ROI = resultado hipotético total / invertido × 100. Operaciones pendientes, con liquidación no soportada o registros inválidos se excluyen; nunca cuentan como pérdidas. "Muestra pequeña" = menos de 10 partidos o menos de 30 operaciones; superar ese umbral no implica significancia estadística. Cuotas por precio del lado operado (NO usa su precio NO real), en tramos de 10¢.</p>
+          <p className="lb-foot">ROI = resultado hipotético total / invertido × 100. Operaciones pendientes, con liquidación no soportada o registros inválidos se excluyen; nunca cuentan como pérdidas. Por defecto también se excluyen los mercados cuyo historial final no está verificado. "Muestra pequeña" = menos de 10 partidos o menos de 30 operaciones; superar ese umbral no implica significancia estadística. Cuotas por precio del lado operado (NO usa su precio NO real), en tramos de 10¢.</p>
         </>
       )}
     </div>
@@ -282,6 +294,7 @@ function Coverage({ s }: { s: RoiCoverage }) {
           <span>Cobertura</span>
           <b data-testid="text-summary-coverage">{s.settledTrades.toLocaleString('es-US')} / {s.savedTrades.toLocaleString('es-US')}</b>
           <small>{s.pendingTrades.toLocaleString('es-US')} pendientes · {s.excludedTrades.toLocaleString('es-US')} excluidas</small>
+          <small>{s.historyExcludedTrades.toLocaleString('es-US')} excluidas por historial sin verificar</small>
         </div>
         <div>
           <span>Mercados · partidos</span>
@@ -289,13 +302,16 @@ function Coverage({ s }: { s: RoiCoverage }) {
           <small>{s.pendingMarkets} mercados por liquidar · partidos estimados</small>
         </div>
       </section>
-      <div className={`ws-notice ${s.settlementErrors > 0 || pend ? 'warn' : ''}`} role="status" data-testid="text-settlement-coverage">
+      <div className={`ws-notice ${s.settlementErrors > 0 || pend || s.incompleteHistoryMarkets > 0 ? 'warn' : ''}`} role="status" data-testid="text-settlement-coverage">
         <div>
           <strong><Scale size={13} /> Liquidaciones oficiales</strong>
           <p>
             Ejecuciones del {when(s.firstTradeAt)} al {when(s.lastTradeAt)}. Última revisión de liquidaciones: {when(s.lastSettlementCheckAt)}.
             {' '}Las resoluciones se incorporan automáticamente por lotes. La primera carga puede tardar; mientras tanto, las operaciones pendientes no participan en el ROI. La cobertura corresponde solo al histórico guardado por este monitor, no a todas las operaciones de Kalshi.
             {s.settlementErrors > 0 ? ` ${s.settlementErrors} consultas de liquidación fallaron y se reintentarán.` : ''}
+            {' '}Historial final: {s.verifiedHistoryMarkets} mercados verificados y {s.incompleteHistoryMarkets} sin verificar.
+            {' '}Se verifica recorriendo ambas fuentes de operaciones disponibles, sin saltar páginas y después de la resolución oficial. No garantiza que Kalshi publique todas las operaciones ni que este monitor haya descubierto todos los mercados.
+            {s.historyErrorMarkets > 0 ? ` ${s.historyErrorMarkets} históricos tienen errores y se reintentarán; no se certifican como completos.` : ''}
           </p>
         </div>
       </div>
@@ -307,8 +323,10 @@ function EmptyRows({ s, minGames, onLower }: { s: RoiCoverage; minGames: number;
   const none = s.settledTrades === 0;
   return (
     <div className="ws-empty small lb-empty" data-testid={none ? 'empty-leaderboard' : 'empty-qualified-groups'}>
-      <h3>{none ? 'Aún no hay operaciones liquidadas' : 'Ningún grupo alcanza el mínimo'}</h3>
-      <p>{none
+      <h3>{none ? s.historyExcludedTrades > 0 ? 'Historial final en verificación' : 'Aún no hay operaciones liquidadas' : 'Ningún grupo alcanza el mínimo'}</h3>
+      <p>{none && s.historyExcludedTrades > 0
+        ? `${s.historyExcludedTrades.toLocaleString('es-US')} operaciones resueltas esperan la revisión completa del historial de su mercado. Todavía no participan en el ROI. Puedes incluir datos parciales con el filtro de calidad, con las limitaciones indicadas.`
+        : none
         ? `Hay ${s.pendingTrades.toLocaleString('es-US')} operaciones esperando liquidación oficial. El ranking aparece cuando lleguen resultados; no se muestran filas inventadas.`
         : `Con estos filtros ningún grupo tiene al menos ${minGames} partidos liquidados.`}</p>
       {!none && onLower && <button className="button secondary" onClick={onLower} data-testid="button-lower-min-games">Bajar el mínimo a 1</button>}

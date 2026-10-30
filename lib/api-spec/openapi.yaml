@@ -22,6 +22,9 @@ paths:
       summary: Equal-stake hypothetical ROI from saved trades and official binary settlements
       parameters:
         - in: query
+          name: coverage
+          schema: { type: string, enum: [verified, all], default: verified }
+        - in: query
           name: groupBy
           schema: { type: string, enum: [sport, marketType, odds, segment, market], default: sport }
         - in: query
@@ -328,10 +331,11 @@ components:
   schemas:
     RoiLeaderboard:
       type: object
-      required: [generatedAt, stakePerTrade, summary, rows, totalRows, page, pageSize, totalPages, groupBy, window, band, direction, minGames]
+      required: [generatedAt, stakePerTrade, summary, rows, totalRows, page, pageSize, totalPages, groupBy, window, band, direction, minGames, coverage]
       properties:
         generatedAt: { type: string, format: date-time }
         stakePerTrade: { type: number }
+        coverage: { type: string, enum: [verified, all] }
         groupBy: { type: string, enum: [sport, marketType, odds, segment, market] }
         window: { type: string, enum: [all, 30d, 7d] }
         band: { type: string, enum: [all, large, medium, small] }
@@ -347,7 +351,7 @@ components:
         totalPages: { type: integer }
     RoiCoverage:
       type: object
-      required: [savedTrades, settledTrades, pendingTrades, excludedTrades, settledMarkets, pendingMarkets, games, roiPct, profit, recentRoiPct, recentTrades, firstTradeAt, lastTradeAt, lastSettlementCheckAt, settlementErrors]
+      required: [savedTrades, settledTrades, pendingTrades, excludedTrades, settledMarkets, pendingMarkets, games, roiPct, profit, recentRoiPct, recentTrades, firstTradeAt, lastTradeAt, lastSettlementCheckAt, settlementErrors, verifiedHistoryMarkets, incompleteHistoryMarkets, historyErrorMarkets, historyExcludedTrades]
       properties:
         savedTrades: { type: integer }
         settledTrades: { type: integer }
@@ -364,6 +368,10 @@ components:
         lastTradeAt: { type: [string, "null"], format: date-time }
         lastSettlementCheckAt: { type: [string, "null"], format: date-time }
         settlementErrors: { type: integer }
+        verifiedHistoryMarkets: { type: integer }
+        incompleteHistoryMarkets: { type: integer }
+        historyErrorMarkets: { type: integer }
+        historyExcludedTrades: { type: integer }
     RoiRankingRow:
       type: object
       required: [id, rank, label, sport, marketType, marketUrl, oddsMin, oddsMax, trades, games, markets, wins, losses, winRatePct, roiPct, profit, invested, recentRoiPct, recentTrades, sampleWarning]

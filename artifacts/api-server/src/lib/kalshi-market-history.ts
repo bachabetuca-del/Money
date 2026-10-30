@@ -1,4 +1,5 @@
 import { CAPTURE_MINIMUM } from "./kalshi-trade-bands";
+export const HISTORY_AUDIT_VERSION = 1;
 
 export type HistoryJob = {
   ticker: string;
@@ -8,6 +9,9 @@ export type HistoryJob = {
   sinceAt: Date | null;
   scanned: number;
   captureMinimum?: number;
+  auditVersion?: number;
+  finalPass?: boolean;
+  auditedAt?: Date | null;
   error: string | null;
   updatedAt: Date;
 };
@@ -16,10 +20,11 @@ export type HistoryStatus = {
   scanned: number;
   error: boolean;
 };
+export type HistoryCandidate = { ticker: string; job?: HistoryJob; closed?: boolean; closedAt?: Date | null };
 export interface HistoryRepository<T> {
-  candidates(): Promise<{ ticker: string; job?: HistoryJob }[]>;
+  candidates(preferred?: string): Promise<HistoryCandidate[]>;
   job(ticker: string): Promise<HistoryJob | undefined>;
-  eligible?(ticker: string): Promise<boolean>;
+  eligible?(ticker: string, finalPass?: boolean): Promise<boolean>;
   // Page inserts and cursor advancement must be one atomic transaction.
   commit(job: HistoryJob, rows: T[]): Promise<void>;
 }
@@ -39,8 +44,13 @@ export class MarketHistory<T> {
   ) { this.startedAt = this.now(); }
 
   private stale(job: HistoryJob, now: Date) {
-    return (job.captureMinimum ?? 5_000) > CAPTURE_MINIMUM ||
-      job.snapshotAt < this.startedAt || now.getTime() - job.snapshotAt.getTime() >= 15 * 60_000;
+    if ((job.auditVersion ?? 0) < HISTORY_AUDIT_VERSION || (job.captureMinimum ?? 5_000) > CAPTURE_MINIMUM) return true;
+    if (job.finalPass && job.auditedAt && job.phase === "complete" && job.sinceAt === null) return false;
+    return job.snapshotAt < this.startedAt || now.getTime() - job.snapshotAt.getTime() >= 15 * 60_000;
+  }
+  private needsFinalAudit({ job, closed, closedAt }: HistoryCandidate) {
+    return Boolean(closed && (!job?.finalPass || (job.phase === "complete" && !job.auditedAt) ||
+      job.sinceAt !== null || (closedAt && job.snapshotAt < closedAt)));
   }
 
   async status(ticker: string): Promise<HistoryStatus> {
@@ -55,27 +65,35 @@ export class MarketHistory<T> {
     this.busy = true;
     try {
       const now = this.now();
-      const candidates = (await this.repository.candidates()).filter(({ job }) =>
-        (!job || job.phase !== "complete" || this.stale(job, now)) &&
+      const candidates = (await this.repository.candidates(this.preferred)).filter(candidate => {
+        const { job } = candidate;
+        return (
+        (!job || job.phase !== "complete" || this.stale(job, now) ||
+          this.needsFinalAudit(candidate)) &&
         (!job?.error || now.getTime() - job.updatedAt.getTime() >= 60_000));
+      });
       candidates.sort((a, b) =>
         Number(b.ticker === this.preferred) - Number(a.ticker === this.preferred) ||
+        Number(Boolean(b.job && b.job.phase !== "complete")) - Number(Boolean(a.job && a.job.phase !== "complete")) ||
         (a.job?.updatedAt.getTime() ?? 0) - (b.job?.updatedAt.getTime() ?? 0));
       const candidate = candidates[0];
       if (!candidate) return;
-      // A lower capture floor needs a complete fresh pass, not just trades since
-      // the last snapshot. Rows are deduplicated and finished games stay excluded.
-      const needsExpandedCoverage = candidate.job && (candidate.job.captureMinimum ?? 5_000) > CAPTURE_MINIMUM;
+      // A new validation version, lower capture floor or official settlement needs
+      // a fresh full pass. Final audits stop permanently after both sources finish.
+      const needsExpandedCoverage = candidate.job && ((candidate.job.captureMinimum ?? 5_000) > CAPTURE_MINIMUM ||
+        (candidate.job.auditVersion ?? 0) < HISTORY_AUDIT_VERSION ||
+        this.needsFinalAudit(candidate));
       let job: HistoryJob = !candidate.job || needsExpandedCoverage ? {
         ticker: candidate.ticker, phase: "live", cursor: null,
         snapshotAt: now, sinceAt: null, scanned: 0, captureMinimum: CAPTURE_MINIMUM,
+        auditVersion: HISTORY_AUDIT_VERSION, finalPass: Boolean(candidate.closed), auditedAt: null,
         error: null, updatedAt: now,
       } : candidate.job;
       if (job.phase === "complete") {
         job = { ...job, phase: "live", sinceAt: job.snapshotAt, snapshotAt: now, cursor: null };
       }
       // Recheck immediately before requesting a page; the game can finish while queued.
-      if (this.repository.eligible && !await this.repository.eligible(job.ticker)) return;
+      if (this.repository.eligible && !await this.repository.eligible(job.ticker, job.finalPass)) return;
       try {
         const result = await this.page(job);
         if (result.cursor && result.cursor === job.cursor) {
@@ -86,6 +104,7 @@ export class MarketHistory<T> {
           phase: result.cursor ? job.phase : job.phase === "live" ? "archive" : "complete",
           cursor: result.cursor,
           scanned: job.scanned + result.scanned,
+          auditedAt: job.finalPass && job.phase === "archive" && !result.cursor ? this.now() : null,
           error: null, updatedAt: this.now(),
         }, result.rows);
       } catch (error) {

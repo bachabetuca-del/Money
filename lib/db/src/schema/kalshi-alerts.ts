@@ -38,8 +38,8 @@ export const kalshiAlertsTable = pgTable("kalshi_alerts", {
   price: numeric("price", { precision: 10, scale: 4, mode: "number" }).notNull(),
   count: numeric("count", { precision: 14, scale: 2, mode: "number" }).notNull(),
   notional: numeric("notional", {
-    precision: 14,
-    scale: 2,
+    precision: 18,
+    scale: 6,
     mode: "number",
   }).notNull(),
   createdTime: timestamp("created_time", { withTimezone: true }).notNull(),

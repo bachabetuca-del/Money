@@ -7,6 +7,7 @@
  */
 import type { RoiCoverage } from './roiCoverage';
 import type { RoiLeaderboardBand } from './roiLeaderboardBand';
+import type { RoiLeaderboardCoverage } from './roiLeaderboardCoverage';
 import type { RoiLeaderboardDirection } from './roiLeaderboardDirection';
 import type { RoiLeaderboardGroupBy } from './roiLeaderboardGroupBy';
 import type { RoiLeaderboardWindow } from './roiLeaderboardWindow';
@@ -15,6 +16,7 @@ import type { RoiRankingRow } from './roiRankingRow';
 export interface RoiLeaderboard {
   generatedAt: Date;
   stakePerTrade: number;
+  coverage: RoiLeaderboardCoverage;
   groupBy: RoiLeaderboardGroupBy;
   window: RoiLeaderboardWindow;
   band: RoiLeaderboardBand;

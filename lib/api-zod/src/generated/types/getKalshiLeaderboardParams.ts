@@ -6,11 +6,13 @@
  * OpenAPI spec version: 0.1.0
  */
 import type { GetKalshiLeaderboardBand } from './getKalshiLeaderboardBand';
+import type { GetKalshiLeaderboardCoverage } from './getKalshiLeaderboardCoverage';
 import type { GetKalshiLeaderboardDirection } from './getKalshiLeaderboardDirection';
 import type { GetKalshiLeaderboardGroupBy } from './getKalshiLeaderboardGroupBy';
 import type { GetKalshiLeaderboardWindow } from './getKalshiLeaderboardWindow';
 
 export type GetKalshiLeaderboardParams = {
+coverage?: GetKalshiLeaderboardCoverage;
 groupBy?: GetKalshiLeaderboardGroupBy;
 window?: GetKalshiLeaderboardWindow;
 band?: GetKalshiLeaderboardBand;

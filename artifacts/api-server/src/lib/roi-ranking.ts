@@ -12,7 +12,8 @@ export const ROI_TYPE_LABELS: Record<MarketType, string> = {
 export type RoiRollup = {
   ticker: string; sport: string; eventTitle: string | null; marketTitle: string | null;
   gameId: string; marketUrl: string; bucket: number;
-  category: "settled" | "pending" | "excluded";
+  category: "settled" | "pending" | "excluded" | "incomplete";
+  historyVerified?: boolean; historyError?: boolean;
   trades: number; wins: number; profit: number; recentTrades: number; recentProfit: number;
   firstAt: string; lastAt: string; checkedAt: string | null; error: boolean;
 };
@@ -43,15 +44,22 @@ export function buildRoiRanking(rollups: RoiRollup[], groupBy: RoiGroup, minGame
   const groups = new Map<string, Accumulator>();
   const settledMarkets = new Set<string>(), pendingMarkets = new Set<string>();
   const games = new Set<string>(), errorMarkets = new Set<string>();
+  const verifiedHistory = new Set<string>(), incompleteHistory = new Set<string>(), historyErrors = new Set<string>();
+  let historyExcludedTrades = 0;
   let savedTrades = 0, settledTrades = 0, pendingTrades = 0, excludedTrades = 0;
   let profit = 0, recentTrades = 0, recentProfit = 0;
   let firstTradeAt: string | null = null, lastTradeAt: string | null = null, lastSettlementCheckAt: string | null = null;
   for (const r of rollups) {
     savedTrades += r.trades;
+    (r.historyVerified ? verifiedHistory : incompleteHistory).add(r.ticker);
+    if (r.historyError) historyErrors.add(r.ticker);
     if (!firstTradeAt || r.firstAt < firstTradeAt) firstTradeAt = r.firstAt;
     if (!lastTradeAt || r.lastAt > lastTradeAt) lastTradeAt = r.lastAt;
     if (r.checkedAt && (!lastSettlementCheckAt || r.checkedAt > lastSettlementCheckAt)) lastSettlementCheckAt = r.checkedAt;
     if (r.category === "excluded") { excludedTrades += r.trades; continue; }
+    if (r.category === "incomplete") {
+      excludedTrades += r.trades; historyExcludedTrades += r.trades; continue;
+    }
     if (r.category === "pending") {
       pendingTrades += r.trades; pendingMarkets.add(r.ticker);
       if (r.error) errorMarkets.add(r.ticker);
@@ -106,6 +114,8 @@ export function buildRoiRanking(rollups: RoiRollup[], groupBy: RoiGroup, minGame
     lastTradeAt: lastTradeAt ? new Date(lastTradeAt) : null,
     lastSettlementCheckAt: lastSettlementCheckAt ? new Date(lastSettlementCheckAt) : null,
     settlementErrors: errorMarkets.size,
+    verifiedHistoryMarkets: verifiedHistory.size, incompleteHistoryMarkets: incompleteHistory.size,
+    historyErrorMarkets: historyErrors.size, historyExcludedTrades,
   };
   return { rows, summary };
 }

@@ -5,6 +5,14 @@
  * API specification
  * OpenAPI spec version: 0.1.0
  */
+export type RoiLeaderboardCoverage = typeof RoiLeaderboardCoverage[keyof typeof RoiLeaderboardCoverage];
+
+
+export const RoiLeaderboardCoverage = {
+  verified: 'verified',
+  all: 'all',
+} as const;
+
 export type RoiLeaderboardGroupBy = typeof RoiLeaderboardGroupBy[keyof typeof RoiLeaderboardGroupBy];
 
 
@@ -65,6 +73,10 @@ export interface RoiCoverage {
   /** @nullable */
   lastSettlementCheckAt: string | null;
   settlementErrors: number;
+  verifiedHistoryMarkets: number;
+  incompleteHistoryMarkets: number;
+  historyErrorMarkets: number;
+  historyExcludedTrades: number;
 }
 
 export interface RoiRankingRow {
@@ -99,6 +111,7 @@ export interface RoiRankingRow {
 export interface RoiLeaderboard {
   generatedAt: string;
   stakePerTrade: number;
+  coverage: RoiLeaderboardCoverage;
   groupBy: RoiLeaderboardGroupBy;
   window: RoiLeaderboardWindow;
   band: RoiLeaderboardBand;
@@ -327,6 +340,7 @@ export type OwnerRequiredResponse = ApiError;
 export type OwnerUnavailableResponse = ApiError;
 
 export type GetKalshiLeaderboardParams = {
+coverage?: GetKalshiLeaderboardCoverage;
 groupBy?: GetKalshiLeaderboardGroupBy;
 window?: GetKalshiLeaderboardWindow;
 band?: GetKalshiLeaderboardBand;
@@ -342,6 +356,14 @@ minGames?: number;
  */
 page?: number;
 };
+
+export type GetKalshiLeaderboardCoverage = typeof GetKalshiLeaderboardCoverage[keyof typeof GetKalshiLeaderboardCoverage];
+
+
+export const GetKalshiLeaderboardCoverage = {
+  verified: 'verified',
+  all: 'all',
+} as const;
 
 export type GetKalshiLeaderboardGroupBy = typeof GetKalshiLeaderboardGroupBy[keyof typeof GetKalshiLeaderboardGroupBy];
 
