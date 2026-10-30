@@ -14,3 +14,9 @@ Use authenticated public-trade WebSocket as the primary live source, with REST f
 **Why:** The user explicitly approved this hybrid approach to reduce the repeated REST requests behind the rate-limit discussion. WebSocket does not remove REST quotas or expose confirmed exits from previously held positions.
 
 **How to apply:** Keep production as the sole active bot. Validate the connection separately without Telegram or database writes before suggesting publication. Startup snapshots and recovery overlap must not generate historical push alerts; notification deduplication remains independent of graph storage.
+
+When assessing capacity, distinguish token budgets from request counts. Read the configured account's current `/account/limits` and `/account/endpoint_costs`; do not treat a published tier number as requests per second or assume every route has the same cost.
+
+**Why:** Kalshi's current quota contract reports refill rate and bucket capacity in tokens. The account budget, the application's pacing limit, and each worker's scheduling cadence are separate constraints; increasing only one may leave the actual bottleneck unchanged.
+
+**How to apply:** Recheck the live quota before recommending a higher read rate, reserve capacity for live recovery, and measure queue age as well as HTTP errors. A clean 429 log alone does not establish that collection is timely or complete.
