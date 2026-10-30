@@ -53,6 +53,7 @@ export class GameStatusMonitor {
       if (!active.length) return;
       let preparationError: unknown;
       try { await this.prepare?.(active, now); } catch (error) { preparationError = error; }
+      const reportedErrors = new Set<string>();
       for (const candidate of active) try {
         if (preparationError) throw preparationError;
         await this.repository.save(await this.resolve(candidate.ticker, candidate.previous, now));
@@ -64,7 +65,12 @@ export class GameStatusMonitor {
           startsAt: null, ...candidate.previous, delayed: true, error: message,
           checkedAt: now, nextCheckAt: new Date(now.getTime() + 60_000),
         });
-        this.warn(message);
+        // Each affected game retains its own error and retry time, but one failed
+        // batch must not emit the same warning up to 100 times.
+        if (!reportedErrors.has(message)) {
+          reportedErrors.add(message);
+          this.warn(message);
+        }
       }
     } finally { this.busy = false; }
   }

@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { KalshiReadPacer } from "./kalshi-read-scheduler";
 import { KalshiHttpClient } from "./kalshi-http";
-import { KalshiGameStatusSource } from "./kalshi-game-status-source";
+import { KalshiGameStatusSource, parseLiveDataBatch } from "./kalshi-game-status-source";
 import { GameStatusMonitor, type GameStatus } from "./kalshi-game-status";
 import { MarketHistory, HISTORY_AUDIT_VERSION, type HistoryJob } from "./kalshi-market-history";
 import { decodeLifecycle, KalshiLifecycle } from "./kalshi-lifecycle";
@@ -125,6 +125,66 @@ test("batch omissions and ambiguous milestones never attach an unrelated scorebo
   assert.equal(b.milestoneId, null);
   assert.equal(b.state, "unknown");
   assert.equal(calls.length, 3);
+});
+
+test("the actual nullable empty batch is valid, while missing, malformed or duplicate boards remain errors", () => {
+  assert.deepEqual(parseLiveDataBatch({ live_datas: null }), []);
+  assert.deepEqual(parseLiveDataBatch({ live_datas: [] }), []);
+  const board = { milestone_id: "A", details: { status: "live" } };
+  assert.deepEqual(parseLiveDataBatch({ live_datas: [board] }), [board]);
+  for (const response of [null, {}, { live_datas: undefined }, { live_datas: {} },
+    { live_datas: [null] }, { live_datas: [{ milestone_id: "" }] },
+    { live_datas: [{ milestone_id: "A", details: null }] }, { live_datas: [board, board] }]) {
+    assert.throws(() => parseLiveDataBatch(response), /invalid live-data batch/);
+  }
+});
+
+test("empty batch data preserves future schedules and unresolved games without a request flood or invented finish", async () => {
+  const candidates = [
+    { ticker: "UPCOMING", previous: { ...game("UPCOMING"), startsAt: new Date(now.getTime() + 3600_000), state: "scheduled" as const } },
+    { ticker: "STARTED", previous: game("STARTED") },
+    { ticker: "RESOLVED", previous: game("RESOLVED") },
+  ];
+  const calls: string[] = [], warnings: string[] = [], saved: GameStatus[] = [];
+  const source = new KalshiGameStatusSource(async <T>(path: string) => {
+    calls.push(path);
+    if (path.startsWith("/markets?")) return { markets: candidates.map(c => ({
+      ticker: c.ticker, event_ticker: "EVENT", status: c.ticker === "RESOLVED" ? "settled" : "active",
+    })) } as T;
+    assert.ok(path.startsWith("/live_data/batch?"));
+    return { live_datas: null } as T;
+  });
+  const monitor = new GameStatusMonitor({
+    next: async () => undefined, batch: async () => candidates, save: async value => { saved.push(value); },
+  }, (ticker, previous, at) => source.resolve(ticker, previous, at), () => now,
+  message => warnings.push(message), (batch, at) => source.prepare(batch, at));
+  await monitor.tick();
+  assert.equal(calls.length, 2, "No per-market fallback requests for an empty batch");
+  assert.deepEqual(warnings, []);
+  assert.equal(saved[0].state, "scheduled");
+  assert.equal(saved[0].source, "schedule");
+  assert.equal(saved[0].delayed, false);
+  assert.equal(saved[0].error, null);
+  assert.equal(saved[1].state, "unknown");
+  assert.equal(saved[1].delayed, true);
+  assert.match(saved[1].error!, /omitted/);
+  assert.equal(saved[1].marketTerminal, false);
+  assert.equal(saved[2].state, "finished");
+  assert.equal(saved[2].source, "market", "A settled market is not presented as a verified game score");
+});
+
+test("one failed batch logs once while keeping every game's error and retry state", async () => {
+  const candidates = Array.from({ length: 100 }, (_, i) => ({ ticker: `M${i}`, previous: game(`M${i}`) }));
+  const saved: GameStatus[] = [], warnings: string[] = [];
+  const monitor = new GameStatusMonitor({
+    next: async () => undefined, batch: async () => candidates, save: async value => { saved.push(value); },
+  }, async () => { throw new Error("Resolver must not run after failed preparation"); }, () => now,
+  message => warnings.push(message), async () => { throw new Error("Upstream temporarily unavailable"); });
+  await monitor.tick();
+  assert.equal(saved.length, 100);
+  assert.deepEqual(warnings, ["Upstream temporarily unavailable"]);
+  assert.ok(saved.every(value => value.state === "live" && value.delayed &&
+    value.error === warnings[0] && value.nextCheckAt.getTime() === now.getTime() + 60_000));
 });
 
 test("batch status errors back off without overwriting known states; finished games stay archived", async () => {

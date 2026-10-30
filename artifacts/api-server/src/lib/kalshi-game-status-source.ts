@@ -4,7 +4,25 @@ import { mapConcurrent } from "./async-pool";
 type Market = { ticker?: string; event_ticker: string; status: string };
 type Milestone = { id: string; start_date: string; primary_event_tickers?: string[]; details?: { status?: string } };
 type LiveData = { details: { status?: string; live_data_delayed?: boolean } };
+type LiveDataBoard = LiveData & { milestone_id: string };
 type Request = <T>(path: string) => Promise<T>;
+
+/** Kalshi's actual empty response is {live_datas:null}, despite its array-only
+ * schema. Only this explicit empty value is accepted; malformed payloads fail. */
+export function parseLiveDataBatch(response: unknown): LiveDataBoard[] {
+  if (!response || typeof response !== "object" || !("live_datas" in response)) {
+    throw new Error("Kalshi returned an invalid live-data batch.");
+  }
+  const boards = response.live_datas;
+  if (boards === null) return [];
+  if (!Array.isArray(boards) || boards.some(board =>
+    !board || typeof board.milestone_id !== "string" || !board.milestone_id.trim() ||
+    !board.details || typeof board.details !== "object" || Array.isArray(board.details)) ||
+    new Set(boards.map(board => board.milestone_id)).size !== boards.length) {
+    throw new Error("Kalshi returned an invalid live-data batch.");
+  }
+  return boards as LiveDataBoard[];
+}
 
 /** Cache live data by game, so winner/spread/total do not each poll the same scoreboard. */
 export class KalshiGameStatusSource {
@@ -54,14 +72,13 @@ export class KalshiGameStatusSource {
     if (!milestones.size) return;
     const query = new URLSearchParams();
     for (const id of milestones) query.append("milestone_ids", id);
-    const boards = await this.request<{ live_datas: (LiveData & { milestone_id: string })[] }>(`/live_data/batch?${query}`);
-    if (!Array.isArray(boards.live_datas)) throw new Error("Kalshi returned an invalid live-data batch.");
-    for (const board of boards.live_datas) if (milestones.has(board.milestone_id)) {
+    const boards = parseLiveDataBatch(await this.request<unknown>(`/live_data/batch?${query}`));
+    for (const board of boards) if (milestones.has(board.milestone_id)) {
       this.prime(`live:${board.milestone_id}`, { live_data: board }, now);
     }
     // An omitted board is unavailable, not a final score. Cache its absence so
     // it doesn't trigger one fallback request per market during this batch.
-    for (const id of milestones) if (!boards.live_datas.some(board => board.milestone_id === id)) {
+    for (const id of milestones) if (!boards.some(board => board.milestone_id === id)) {
       this.prime(`live:${id}`, { live_data: null }, now);
     }
   }
@@ -107,11 +124,16 @@ export class KalshiGameStatusSource {
     if (milestone) {
       try {
         const result = await this.cached(`live:${milestone.id}`, 60_000, now, () =>
-          this.request<{ live_data: LiveData }>(`/live_data/milestone/${encodeURIComponent(milestone!.id)}`));
-        if (!result.live_data) throw new Error("Kalshi omitted this scoreboard; game status is unconfirmed.");
-        state = providerGameState(result.live_data?.details?.status);
-        delayed = result.live_data?.details?.live_data_delayed === true;
-        source = "live";
+          this.request<{ live_data: LiveData | null }>(`/live_data/milestone/${encodeURIComponent(milestone!.id)}`));
+        if (result.live_data === null && startsAt && startsAt > now) {
+          // A valid empty board before the scheduled start isn't a live-feed error.
+          state = "scheduled"; source = "schedule";
+        } else {
+          if (!result.live_data) throw new Error("Kalshi omitted this scoreboard; game status is unconfirmed.");
+          state = providerGameState(result.live_data.details?.status);
+          delayed = result.live_data.details?.live_data_delayed === true;
+          source = "live";
+        }
       } catch (failure) {
         if (!(failure instanceof Error) || !/HTTP 404/.test(failure.message)) {
           error = failure instanceof Error ? failure.message : "Live game data unavailable.";

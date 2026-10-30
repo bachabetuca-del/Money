@@ -15,7 +15,7 @@ import { marketHistoryStore } from "./kalshi-market-history-store";
 import { liveNotificationTrades, TelegramTradeNotifications } from "./telegram-trade-notifications";
 import { enqueueLiveNotifications, tradeNotificationStore } from "./telegram-trade-notification-store";
 import { GameStatusMonitor } from "./kalshi-game-status";
-import { KalshiGameStatusSource } from "./kalshi-game-status-source";
+import { KalshiGameStatusSource, parseLiveDataBatch } from "./kalshi-game-status-source";
 import { KalshiResultsSource } from "./kalshi-results-source";
 import { FinalResultsWorker } from "./kalshi-results-store";
 import { bootstrapTrackedMarkets, canMonitorMarket, gameStatusRepository, readGameStatus } from "./kalshi-game-status-store";
@@ -208,16 +208,17 @@ const kalshiHttp = new KalshiHttpClient(fetch, Date.now, (retryAt, delayMs) => {
 
 async function fetchJson<T>(url: string, priority: ReadPriority = "metadata"): Promise<T> {
   const result = await kalshiHttp.cachedJson<T>(url, priority);
-  const data = result as { markets?: ({ ticker: string } & Record<string, unknown>)[];
-    live_datas?: ({ milestone_id: string } & Record<string, unknown>)[] };
+  const data = result as { markets?: ({ ticker: string } & Record<string, unknown>)[] };
   // Batch responses also warm individual readers used by descriptions and scores.
   if (new URL(url).pathname.endsWith("/markets") && Array.isArray(data.markets)) {
     for (const market of data.markets) if (market.ticker) {
       kalshiHttp.prime(`${KALSHI_API}/markets/${encodeURIComponent(market.ticker)}`, { market });
     }
   }
-  if (Array.isArray(data.live_datas)) for (const live_data of data.live_datas) if (live_data.milestone_id) {
-    kalshiHttp.prime(`${KALSHI_API}/live_data/milestone/${encodeURIComponent(live_data.milestone_id)}`, { live_data });
+  if (new URL(url).pathname.endsWith("/live_data/batch")) {
+    for (const live_data of parseLiveDataBatch(result)) {
+      kalshiHttp.prime(`${KALSHI_API}/live_data/milestone/${encodeURIComponent(live_data.milestone_id)}`, { live_data });
+    }
   }
   return result;
 }
