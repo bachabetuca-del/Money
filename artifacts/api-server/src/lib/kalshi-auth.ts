@@ -41,19 +41,4 @@ export class KalshiAuth {
   }
 }
 
-/** Globally space REST reads; don't release a burst after idle time. */
-export class KalshiReadPacer {
-  private next = 0;
-  private pending = 0;
-  async wait(): Promise<void> {
-    if (this.pending >= 500) throw new Error("Kalshi REST ocupado; se reintentará.");
-    const delay = Math.max(0, this.next - Date.now());
-    this.next = Math.max(this.next, Date.now()) + 250; // Four reads/sec across ALL workers.
-    this.pending++;
-    try {
-      if (delay) await new Promise(resolve => setTimeout(resolve, delay));
-    } finally {
-      this.pending--;
-    }
-  }
-}
+export { KalshiReadPacer } from "./kalshi-read-scheduler";

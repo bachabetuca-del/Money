@@ -201,6 +201,53 @@ test("subscription errors trigger reconnection rather than reporting a live feed
   }
 });
 
+test("trade and lifecycle subscriptions share one socket with independent per-SID sequences", async () => {
+  const server = new WebSocketServer({ port: 0 });
+  await new Promise<void>(resolve => server.once("listening", resolve));
+  const address = server.address();
+  assert.ok(address && typeof address !== "string");
+  let recovered = 0, saved = 0, connections = 0;
+  const events: string[] = [];
+  let peer: WebSocket | undefined;
+  server.on("connection", socket => {
+    connections++;
+    peer = socket;
+    socket.on("message", raw => {
+      assert.deepEqual(JSON.parse(raw.toString()).params.channels,
+        ["trade", "market_lifecycle_v2", "multivariate_market_lifecycle"]);
+      for (const [index, channel] of ["trade", "market_lifecycle_v2", "multivariate_market_lifecycle"].entries()) {
+        socket.send(JSON.stringify({ type: "subscribed", msg: { channel, sid: index + 1 } }));
+      }
+      socket.send(JSON.stringify({ type: "trade", sid: 1, seq: 1, msg: rawTrade }));
+      socket.send(JSON.stringify({ type: "market_lifecycle_v2", sid: 2, seq: 1,
+        msg: { market_ticker: rawTrade.market_ticker, event_type: "settled" } }));
+      socket.send(JSON.stringify({ type: "event_lifecycle", sid: 2, seq: 2,
+        msg: { series_ticker: "SPORTS" } }));
+      socket.send(JSON.stringify({ type: "trade", sid: 1, seq: 2, msg: { ...rawTrade, trade_id: "trade-2" } }));
+    });
+  });
+  const stream = new KalshiTradeStream({
+    auth, url: `ws://127.0.0.1:${address.port}`, retryMs: 20,
+    accept: () => true, batch: async rows => { saved += rows.length; },
+    lifecycle: event => { events.push(event.type); },
+    recovery: () => { recovered++; }, state: () => {},
+  });
+  try {
+    stream.start();
+    await waitFor(() => saved === 2 && events.length === 2);
+    assert.equal(connections, 1);
+    assert.equal(recovered, 1);
+    assert.deepEqual(events, ["settled", "event_created"]);
+    peer!.send(JSON.stringify({ type: "market_lifecycle_v2", sid: 2, seq: 4,
+      msg: { market_ticker: rawTrade.market_ticker, event_type: "metadata_updated" } }));
+    await waitFor(() => recovered === 2);
+  } finally {
+    stream.stop();
+    for (const client of server.clients) client.terminate();
+    await new Promise<void>(resolve => server.close(() => resolve()));
+  }
+});
+
 test("a silent half-open connection is terminated and resubscribed", async () => {
   const server = new WebSocketServer({ port: 0, autoPong: false });
   await new Promise<void>(resolve => server.once("listening", resolve));
@@ -218,6 +265,34 @@ test("a silent half-open connection is terminated and resubscribed", async () =>
   try {
     stream.start();
     await waitFor(() => connections >= 2);
+  } finally {
+    stream.stop();
+    for (const client of server.clients) client.terminate();
+    await new Promise<void>(resolve => server.close(() => resolve()));
+  }
+});
+
+test("reconnections must acknowledge lifecycle channels again, not reuse an earlier subscription", async () => {
+  const server = new WebSocketServer({ port: 0 });
+  await new Promise<void>(resolve => server.once("listening", resolve));
+  const address = server.address();
+  assert.ok(address && typeof address !== "string");
+  let connections = 0;
+  server.on("connection", socket => {
+    const connection = ++connections;
+    socket.on("message", () => {
+      const channels = connection === 1 ? ["trade", "market_lifecycle_v2", "multivariate_market_lifecycle"] : ["trade"];
+      for (const channel of channels) socket.send(JSON.stringify({ type: "subscribed", msg: { channel } }));
+      if (connection === 1) setTimeout(() => socket.terminate(), 30);
+    });
+  });
+  const stream = new KalshiTradeStream({
+    auth, url: `ws://127.0.0.1:${address.port}`, retryMs: 20, heartbeatMs: 100, subscriptionTimeoutMs: 70,
+    accept: () => true, batch: async () => {}, lifecycle: () => {}, recovery: () => {}, state: () => {},
+  });
+  try {
+    stream.start();
+    await waitFor(() => connections >= 3);
   } finally {
     stream.stop();
     for (const client of server.clients) client.terminate();

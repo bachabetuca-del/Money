@@ -22,10 +22,12 @@ export function officialSettlement(market: Market): SettlementValue {
 
 export type SettlementWrite = SettlementValue & {
   ticker: string; historical: boolean; checkedAt: Date; nextCheckAt: Date; error: string | null;
+  marketStatus?: string;
 };
 export type SettlementStore = {
   candidates(historical: boolean, limit: number, now: Date): Promise<string[]>;
   save(value: SettlementWrite): Promise<void>;
+  saveMany?(values: SettlementWrite[]): Promise<void>;
 };
 type Request = <T>(path: string) => Promise<T>;
 
@@ -44,7 +46,7 @@ export class MarketSettlementWorker {
         try {
           const response = await this.request<{ market: Market }>(`/historical/markets/${encodeURIComponent(ticker)}`);
           if (response.market?.ticker !== ticker) throw new Error("Unexpected market");
-          await this.save(ticker, officialSettlement(response.market), true, now);
+          await this.save(ticker, officialSettlement(response.market), true, now, null, response.market.status);
         } catch {
           await this.save(ticker, { result: null, terminal: false }, true, now, "No se pudo consultar la resolución histórica.");
         }
@@ -62,18 +64,27 @@ export class MarketSettlementWorker {
         throw error;
       }
       const byTicker = new Map(response.markets.map(m => [m.ticker, m]));
+      const writes: SettlementWrite[] = [];
       for (const ticker of tickers) {
         const market = byTicker.get(ticker);
         // Missing from the current database: schedule bounded historical lookups.
-        await this.save(ticker, market ? officialSettlement(market) : { result: null, terminal: false },
-          !market, now);
+        writes.push(this.value(ticker, market ? officialSettlement(market) : { result: null, terminal: false },
+          !market, now, null, market?.status));
       }
+      if (this.store.saveMany) await this.store.saveMany(writes);
+      else for (const value of writes) await this.store.save(value);
     } finally { this.busy = false; }
   }
-  private save(ticker: string, value: SettlementValue, historical: boolean, now: Date, error: string | null = null) {
-    return this.store.save({
+  private value(ticker: string, value: SettlementValue, historical: boolean, now: Date,
+    error: string | null = null, marketStatus?: string): SettlementWrite {
+    return {
       ticker, ...value, historical, checkedAt: now, error,
+      ...(marketStatus ? { marketStatus } : {}),
       nextCheckAt: new Date(now.getTime() + (error ? 15 * 60_000 : historical && !value.terminal ? 60_000 : 15 * 60_000)),
-    });
+    };
+  }
+  private save(ticker: string, value: SettlementValue, historical: boolean, now: Date,
+    error: string | null = null, marketStatus?: string) {
+    return this.store.save(this.value(ticker, value, historical, now, error, marketStatus));
   }
 }

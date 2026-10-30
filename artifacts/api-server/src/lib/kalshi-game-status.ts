@@ -26,27 +26,35 @@ export function gameBadge(state: string | null | undefined, source?: string | nu
   return { ...badge, label: badge.label + (delayed ? " · dato retrasado" : "") };
 }
 
+export type GameCandidate = { ticker: string; previous?: GameStatus };
 export interface GameStatusRepository {
-  next(now: Date, preferred?: string): Promise<{ ticker: string; previous?: GameStatus } | undefined>;
+  next(now: Date, preferred?: string): Promise<GameCandidate | undefined>;
+  batch?(now: Date, preferred?: string): Promise<GameCandidate[]>;
   save(status: GameStatus): Promise<void>;
 }
-/** One bounded lookup at a time; confirmed finished games are never polled again. */
+/** One representative per game, bounded batches; archived games are never polled again. */
 export class GameStatusMonitor {
   private busy = false;
   private preferred: string | undefined;
   constructor(private repository: GameStatusRepository,
     private resolve: (ticker: string, previous: GameStatus | undefined, now: Date) => Promise<GameStatus>,
     private now: () => Date = () => new Date(),
-    private warn: (error: string) => void = () => undefined) {}
+    private warn: (error: string) => void = () => undefined,
+    private prepare?: (candidates: GameCandidate[], now: Date) => Promise<void>) {}
   prefer(ticker: string) { this.preferred = ticker; }
   async tick() {
     if (this.busy) return;
     this.busy = true;
     try {
       const now = this.now();
-      const candidate = await this.repository.next(now, this.preferred);
-      if (!candidate || candidate.previous?.state === "finished") return;
-      try {
+      const candidates = this.repository.batch ? await this.repository.batch(now, this.preferred)
+        : [await this.repository.next(now, this.preferred)].filter((row): row is GameCandidate => !!row);
+      const active = candidates.filter(row => row.previous?.state !== "finished");
+      if (!active.length) return;
+      let preparationError: unknown;
+      try { await this.prepare?.(active, now); } catch (error) { preparationError = error; }
+      for (const candidate of active) try {
+        if (preparationError) throw preparationError;
         await this.repository.save(await this.resolve(candidate.ticker, candidate.previous, now));
       } catch (error) {
         const message = error instanceof Error ? error.message : "Game status unavailable.";

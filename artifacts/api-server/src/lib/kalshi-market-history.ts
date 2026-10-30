@@ -49,6 +49,7 @@ export type HistoryPage<T> = { rows: T[]; scanned: number; cursor: string | null
 /** Resumable, one-page-at-a-time backfill. Live monitoring remains independent. */
 export class MarketHistory<T> {
   private busy = false;
+  private inFlight = new Set<string>();
   private preferred: string | undefined;
   private startedAt: Date;
 
@@ -57,6 +58,7 @@ export class MarketHistory<T> {
     private page: (job: HistoryJob) => Promise<HistoryPage<T>>,
     private now: () => Date = () => new Date(),
     private onError: (ticker: string, error: string) => void = () => undefined,
+    private concurrency = 1,
   ) { this.startedAt = this.now(); }
 
   private stale(job: HistoryJob, now: Date) {
@@ -73,22 +75,32 @@ export class MarketHistory<T> {
   }
 
   async tick() {
-    if (this.busy) return;
+    if (this.busy || this.inFlight.size >= this.concurrency) return;
     this.busy = true;
+    const running: Promise<void>[] = [];
     try {
       const now = this.now();
       const candidates = (await this.repository.candidates(this.preferred)).filter(candidate => {
         const { job } = candidate;
         return (
-        (!job || job.phase !== "complete" || this.stale(job, now) ||
+        !this.inFlight.has(candidate.ticker) && (!job || job.phase !== "complete" || this.stale(job, now) ||
           needsFinalAudit(candidate)) &&
         (!job?.error || now.getTime() - job.updatedAt.getTime() >= 60_000));
       });
       candidates.sort((a, b) =>
         historyQueuePriority(a, this.preferred) - historyQueuePriority(b, this.preferred) ||
         (a.job?.updatedAt.getTime() ?? 0) - (b.job?.updatedAt.getTime() ?? 0));
-      const candidate = candidates[0];
-      if (!candidate) return;
+      for (const candidate of candidates.slice(0, this.concurrency - this.inFlight.size)) {
+        this.inFlight.add(candidate.ticker);
+        running.push(this.runCandidate(candidate, now).finally(() => this.inFlight.delete(candidate.ticker)));
+      }
+    } finally { this.busy = false; }
+    await Promise.all(running);
+  }
+
+  get activeJobs() { return this.inFlight.size; }
+
+  private async runCandidate(candidate: HistoryCandidate, now: Date) {
       // A new validation version, lower capture floor or official settlement needs
       // a fresh full pass. Final audits stop permanently after both sources finish.
       const needsExpandedCoverage = candidate.job && ((candidate.job.captureMinimum ?? 5_000) > CAPTURE_MINIMUM ||
@@ -123,8 +135,5 @@ export class MarketHistory<T> {
         await this.repository.commit({ ...job, error: message, updatedAt: this.now() }, []);
         this.onError(job.ticker, message);
       }
-    } finally {
-      this.busy = false;
-    }
   }
 }

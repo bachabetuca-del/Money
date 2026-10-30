@@ -11,7 +11,7 @@ Use equal hypothetical stakes per observed execution, held to official final bin
 
 Default to markets whose available execution history has been fully reconciled after official settlement. Keep an explicit opt-in for partial histories, with visible coverage and errors. A finished game's final reconciliation is a one-time audit, not renewed recurring game/trade polling.
 
-**Why:** Stopping live checks at game end can leave gaps precisely in the resolved markets used for backtesting. Mixing those partial histories into the main ranking can bias it.
+**Why:** Stopping live checks at game end can leave gaps precisely in the resolved markets used for backtesting. Mixing those partial histories into the main ranking can bias it. Fast live ingestion and a large number of official results do not establish historical completeness; those are separate stages, not substitutes for final reconciliation.
 
 **How to apply:** Certify only after both available trade sources finish all pages successfully. Changing validation rules or the capture floor requires a new full pass, not just an incremental refresh. Canonical corrections must preserve notification/delivery timestamps and never replay old alerts. Keep sub-cent transaction values through ingestion and storage; round for display, not band eligibility. An audit proves retrieval of the provider's available data for known markets, not complete exchange-wide coverage.
 

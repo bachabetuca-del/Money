@@ -1,5 +1,6 @@
 import WebSocket from "ws";
 import type { KalshiAuth } from "./kalshi-auth";
+import { decodeLifecycle, type LifecycleEvent } from "./kalshi-lifecycle";
 
 export const KALSHI_WS_URL = "wss://external-api-ws.kalshi.com/trade-api/ws/v2";
 export type StreamTrade = {
@@ -32,11 +33,13 @@ type Options = {
   accept: (trade: StreamTrade) => boolean;
   batch: (trades: StreamTrade[]) => Promise<void>;
   recovery: () => void;
+  lifecycle?: (event: LifecycleEvent) => void;
   checkpoint?: (timestamp: number) => void;
   state: (live: boolean, message: string) => void;
   url?: string;
   retryMs?: number;
   heartbeatMs?: number;
+  subscriptionTimeoutMs?: number;
 };
 
 /** Authenticated public feed. No orders, account fills, or trading permissions. */
@@ -49,9 +52,10 @@ export class KalshiTradeStream {
   private queue = new Map<string, StreamTrade>();
   private flushing = false;
   private attempts = 0;
-  private sequence: number | null = null;
+  private sequences = new Map<string, number>();
   private lastFrame = 0;
   private subscribed = false;
+  private subscribedChannels = new Set<string>();
   private openedAt = 0;
   private acknowledgedAt = 0;
   private storageFailed = false;
@@ -68,6 +72,7 @@ export class KalshiTradeStream {
   stop() {
     this.stopped = true;
     this.subscribed = false;
+    this.subscribedChannels.clear();
     clearTimeout(this.reconnect);
     clearInterval(this.heartbeat);
     clearInterval(this.flushTimer);
@@ -76,7 +81,8 @@ export class KalshiTradeStream {
 
   private connect() {
     if (this.stopped) return;
-    this.sequence = null;
+    this.sequences.clear();
+    this.subscribedChannels.clear();
     this.subscribed = false;
     this.openedAt = 0;
     this.acknowledgedAt = 0;
@@ -88,11 +94,15 @@ export class KalshiTradeStream {
     this.socket = socket;
     socket.on("open", () => {
       this.lastFrame = this.openedAt = Date.now();
-      socket.send(JSON.stringify({ id: 1, cmd: "subscribe", params: { channels: ["trade"] } }));
+      const channels = this.options.lifecycle ? ["trade", "market_lifecycle_v2", "multivariate_market_lifecycle"] : ["trade"];
+      socket.send(JSON.stringify({ id: 1, cmd: "subscribe", params: {
+        channels,
+      } }));
       this.heartbeat = setInterval(() => {
         // ws automatically answers server pings. Our ping verifies a quiet socket.
         if (Date.now() - this.lastFrame > (this.options.heartbeatMs ?? 60_000) ||
-            (!this.subscribed && Date.now() - this.openedAt > 15_000)) socket.terminate();
+            (!channels.every(channel => this.subscribedChannels.has(channel)) &&
+              Date.now() - this.openedAt > (this.options.subscriptionTimeoutMs ?? 15_000))) socket.terminate();
         else if (socket.readyState === WebSocket.OPEN) socket.ping();
       }, this.options.heartbeatMs ? Math.max(50, this.options.heartbeatMs / 2) : 15_000);
     });
@@ -102,19 +112,25 @@ export class KalshiTradeStream {
       this.lastFrame = Date.now();
       try {
         const frame = JSON.parse(data.toString());
+        if (typeof frame.seq === "number" && frame.type !== "subscribed") {
+          // Sequence numbers belong to a subscription, not the entire socket.
+          const key = String(frame.sid ?? frame.type);
+          const previous = this.sequences.get(key);
+          if (previous !== undefined && frame.seq !== previous + 1) this.options.recovery();
+          this.sequences.set(key, frame.seq);
+        }
         if (frame.type === "error") {
           this.options.state(false, `Kalshi rechazó la suscripción (código ${Number(frame.msg?.code) || 0}).`);
           socket.terminate();
-        } else if (frame.type === "subscribed" && frame.msg?.channel === "trade") {
-          this.subscribed = true;
-          this.acknowledgedAt = Date.now();
-          this.options.state(true, "WebSocket conectado");
-          this.options.recovery(); // REST overlap covers the connection/reconnection gap.
-        } else if (frame.type === "trade") {
-          if (typeof frame.seq === "number") {
-            if (this.sequence !== null && frame.seq !== this.sequence + 1) this.options.recovery();
-            this.sequence = frame.seq;
+        } else if (frame.type === "subscribed") {
+          this.subscribedChannels.add(String(frame.msg?.channel));
+          if (frame.msg?.channel === "trade") {
+            this.subscribed = true;
+            this.acknowledgedAt = Date.now();
+            this.options.state(true, "WebSocket conectado");
+            this.options.recovery(); // REST overlap covers the connection/reconnection gap.
           }
+        } else if (frame.type === "trade") {
           const trade = decodeStreamTrade(frame.msg ?? {});
           if (!trade) { this.options.recovery(); return; }
           if (!this.options.accept(trade)) return;
@@ -124,6 +140,9 @@ export class KalshiTradeStream {
             return;
           }
           this.queue.set(trade.trade_id, trade);
+        } else if (this.options.lifecycle) {
+          const event = decodeLifecycle(frame.type, frame.msg ?? {});
+          if (event) this.options.lifecycle(event);
         }
       } catch {
         this.options.recovery();

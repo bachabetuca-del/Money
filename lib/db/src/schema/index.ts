@@ -25,3 +25,5 @@ export * from "./kalshi-game-status";
 export * from "./kalshi-results";
 export * from "./kalshi-analysis";
 export * from "./kalshi-settlements";
+export * from "./kalshi-recovery";
+export * from "./kalshi-metadata-jobs";

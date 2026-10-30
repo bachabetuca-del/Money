@@ -18,7 +18,7 @@ import { GameStatusMonitor } from "./kalshi-game-status";
 import { KalshiGameStatusSource } from "./kalshi-game-status-source";
 import { KalshiResultsSource } from "./kalshi-results-source";
 import { FinalResultsWorker } from "./kalshi-results-store";
-import { canMonitorMarket, gameStatusRepository, readGameStatus } from "./kalshi-game-status-store";
+import { bootstrapTrackedMarkets, canMonitorMarket, gameStatusRepository, readGameStatus } from "./kalshi-game-status-store";
 import { isOwnerChat, ownerChatId } from "./owner-policy";
 import { publicTradeExecution } from "./kalshi-trade-execution";
 import { KalshiCooldownError, KalshiHttpClient } from "./kalshi-http";
@@ -26,6 +26,13 @@ import { KalshiAuth, KalshiReadPacer } from "./kalshi-auth";
 import { KalshiTradeStream, type StreamTrade } from "./kalshi-trade-stream";
 import { KalshiLiveCoverage } from "./kalshi-live-coverage";
 import { kalshiLiveEvents } from "./kalshi-live-events";
+import type { ReadPriority } from "./kalshi-read-scheduler";
+import { KalshiRecovery, type RecoveryState } from "./kalshi-recovery";
+import { recoveryStore } from "./kalshi-recovery-store";
+import { KalshiMetadataWorker, type MarketContext } from "./kalshi-metadata-worker";
+import { bootstrapMetadataJobs, metadataStore, persistTrades } from "./kalshi-ingestion-store";
+import { KalshiLifecycle } from "./kalshi-lifecycle";
+import { applyLifecycle } from "./kalshi-lifecycle-store";
 
 const KALSHI_API = "https://external-api.kalshi.com/trade-api/v2";
 const TELEGRAM_API = "https://api.telegram.org";
@@ -64,6 +71,7 @@ type TradeFeedResponse = {
 
 type KalshiMarketMetadata = {
   event_ticker?: string;
+  status?: string;
   title?: string;
   yes_sub_title?: string;
   no_sub_title?: string;
@@ -122,11 +130,15 @@ type TelegramUpdate = {
 
 let sportsSeries = new Map<string, KalshiSeries>();
 let seriesFetchedAt = 0;
+let seriesRefresh: Promise<Map<string, KalshiSeries>> | undefined;
+const unknownSeriesSince = new Map<string, number>();
 let latestQualifyingTrades: PublicTrade[] = [];
 let lastChecked: string | null = null;
 let lastError: string | null = null;
 let pollInProgress = false;
+let lastOfflineRecovery = 0;
 let monitorStarted = false;
+let monitorInitialized = false;
 let telegramPollInProgress = false;
 let kalshiAuth: KalshiAuth | null = null;
 let tradeStream: KalshiTradeStream | null = null;
@@ -141,18 +153,36 @@ function needsRestRecovery() {
 }
 const tradeContextCache = new Map<
   string,
-  Promise<{ eventTitle: string; marketTitle: string }>
+  Promise<MarketContext>
 >();
 const eventTitleCache = new Map<string, Promise<string>>();
 const marketHistory = new MarketHistory(marketHistoryStore, readHistoryPage, () => new Date(),
-  (ticker, error) => logger.warn({ ticker, error }, "Market history incomplete; retry scheduled"));
-const gameStatusSource = new KalshiGameStatusSource(<T>(path: string) => fetchJson<T>(`${KALSHI_API}${path}`));
-const resultsSource = new KalshiResultsSource(<T>(path: string) => fetchJson<T>(`${KALSHI_API}${path}`));
+  (ticker, error) => logger.warn({ ticker, error }, "Market history incomplete; retry scheduled"), 4);
+const gameStatusSource = new KalshiGameStatusSource(<T>(path: string) => fetchJson<T>(`${KALSHI_API}${path}`, "live"));
+const resultsSource = new KalshiResultsSource(<T>(path: string) => fetchJson<T>(`${KALSHI_API}${path}`, "metadata"));
 const finalResultsWorker = new FinalResultsWorker((ticker, milestone) => resultsSource.resolve(ticker, milestone),
   message => logger.warn({ message }, "Final result enrichment failed"));
 const gameStatusMonitor = new GameStatusMonitor(gameStatusRepository,
   (ticker, previous, now) => gameStatusSource.resolve(ticker, previous, now),
-  () => new Date(), error => logger.warn({ error }, "Game status lookup will retry"));
+  () => new Date(), error => logger.warn({ error }, "Game status lookup will retry"),
+  (candidates, now) => gameStatusSource.prepare(candidates, now));
+const recoveryWorker = new KalshiRecovery(recoveryStore, liveCoverage, readRecoveryPage,
+  (rows, boundary) => ingestTrades(rows, boundary));
+const metadataWorker = new KalshiMetadataWorker(metadataStore, ticker => getTradeContext(ticker, true),
+  () => new Date(), error => logger.warn({ error }, "Market description enrichment will retry"));
+const lifecycleWorker = new KalshiLifecycle(async work => {
+  const rows = await applyLifecycle(work);
+  for (const row of rows) {
+    gameStatusSource.invalidate(row.ticker, row.eventTicker, row.milestoneId);
+    tradeContextCache.delete(row.ticker);
+    kalshiHttp.invalidate(`/trade-api/v2/markets/${row.ticker}`);
+    if (row.eventTicker) {
+      eventTitleCache.delete(row.eventTicker);
+      kalshiHttp.invalidate(`/trade-api/v2/events/${row.eventTicker}`);
+    }
+    if (row.milestoneId) kalshiHttp.invalidate(`/trade-api/v2/live_data/milestone/${row.milestoneId}`);
+  }
+}, () => logger.warn("Lifecycle queue full; periodic reconciliation remains enabled"));
 const telegramDashboard = new TelegramDashboard(telegramDashboardStore, {
   request: telegramRequest,
   photo: telegramPhotoRequest,
@@ -167,31 +197,53 @@ const tradeNotifications = new TelegramTradeNotifications(tradeNotificationStore
 });
 
 const kalshiHttp = new KalshiHttpClient(fetch, Date.now, (retryAt, delayMs) => {
+  restPacer.limited();
   lastError = new KalshiCooldownError(retryAt).message;
   logger.warn({ retryAt: new Date(retryAt).toISOString(), delayMs },
     "Kalshi rate limit: shared pause activated");
-}, async url => {
-  await restPacer.wait();
+}, async (url, priority) => {
+  await restPacer.wait(url, priority);
   return kalshiAuth?.headers(new URL(url).pathname);
 });
 
-function fetchJson<T>(url: string): Promise<T> {
-  return kalshiHttp.json<T>(url);
+async function fetchJson<T>(url: string, priority: ReadPriority = "metadata"): Promise<T> {
+  const result = await kalshiHttp.cachedJson<T>(url, priority);
+  const data = result as { markets?: ({ ticker: string } & Record<string, unknown>)[];
+    live_datas?: ({ milestone_id: string } & Record<string, unknown>)[] };
+  // Batch responses also warm individual readers used by descriptions and scores.
+  if (new URL(url).pathname.endsWith("/markets") && Array.isArray(data.markets)) {
+    for (const market of data.markets) if (market.ticker) {
+      kalshiHttp.prime(`${KALSHI_API}/markets/${encodeURIComponent(market.ticker)}`, { market });
+    }
+  }
+  if (Array.isArray(data.live_datas)) for (const live_data of data.live_datas) if (live_data.milestone_id) {
+    kalshiHttp.prime(`${KALSHI_API}/live_data/milestone/${encodeURIComponent(live_data.milestone_id)}`, { live_data });
+  }
+  return result;
 }
 
 const marketSettlementWorker = new MarketSettlementWorker(
-  settlementStore, <T>(path: string) => fetchJson<T>(`${KALSHI_API}${path}`),
+  settlementStore, <T>(path: string) => fetchJson<T>(`${KALSHI_API}${path}`, "history"),
   () => kalshiHttp.isPaused,
 );
 
-async function getSportsSeries(): Promise<Map<string, KalshiSeries>> {
-  if (sportsSeries.size > 0 && Date.now() - seriesFetchedAt < SERIES_CACHE_MS) {
+async function getSportsSeries(force = false): Promise<Map<string, KalshiSeries>> {
+  if (!force && sportsSeries.size > 0 && Date.now() - seriesFetchedAt < SERIES_CACHE_MS) {
     return sportsSeries;
   }
+  if (seriesRefresh) return sportsSeries.size && !force ? sportsSeries : seriesRefresh;
+  seriesRefresh = refreshSportsSeries().finally(() => { seriesRefresh = undefined; });
+  // Expired metadata must not suspend saving known sports executions.
+  if (sportsSeries.size && !force) {
+    void seriesRefresh.catch(error => logger.warn({ error: String(error) }, "Sports catalog refresh deferred"));
+    return sportsSeries;
+  }
+  return seriesRefresh;
+}
 
-  const response = await fetchJson<{ series: KalshiSeries[] }>(
-    `${KALSHI_API}/series?category=Sports`,
-  );
+async function refreshSportsSeries() {
+  const response = await fetchJson<{ series: KalshiSeries[] }>(`${KALSHI_API}/series?category=Sports`, "control");
+  if (!Array.isArray(response.series) || !response.series.length) throw new Error("Sports catalog unavailable.");
   const nextSeries = new Map<string, KalshiSeries>();
   for (const series of response.series ?? []) {
     if (
@@ -201,40 +253,28 @@ async function getSportsSeries(): Promise<Map<string, KalshiSeries>> {
       nextSeries.set(series.ticker, series);
     }
   }
+  if (!nextSeries.size) throw new Error("Kalshi returned an empty sports catalog.");
+  for (const [ticker, since] of unknownSeriesSince) if (nextSeries.has(ticker)) {
+    liveCoverage.requestRecovery(since - 60_000);
+    unknownSeriesSince.delete(ticker);
+  }
   sportsSeries = nextSeries;
   seriesFetchedAt = Date.now();
   return sportsSeries;
 }
 
-async function getTradesSince(boundary: number | null) {
-  const trades: KalshiTradeApi[] = [];
-  let cursor: string | undefined;
-  const maxPages = boundary === null ? 1 : 50;
-
-  for (let page = 0; page < maxPages; page += 1) {
-    const query = new URLSearchParams({ limit: "1000" });
-    if (boundary !== null) {
-      query.set("min_ts", String(Math.max(0, Math.floor(boundary / 1000) - 1)));
-    }
-    if (cursor) query.set("cursor", cursor);
-
-    const response = await fetchJson<TradeFeedResponse>(
-      `${KALSHI_API}/markets/trades?${query.toString()}`,
-    );
-    trades.push(...(response.trades ?? []));
-    cursor = response.cursor;
-    if (!cursor) return trades;
-  }
-
-  // On startup, one page is enough to populate the dashboard and establish a
-  // poll boundary; older pages must not be replayed as fresh notifications.
-  if (boundary === null) return trades;
-  if (cursor) {
-    throw new Error(
-      "Kalshi returned more than 50,000 trades for one polling window; the monitor will retry.",
-    );
-  }
-  return trades;
+async function readRecoveryPage(state: RecoveryState) {
+  const min = Math.max(0, Math.floor(state.windowStartAt!.getTime() / 1000));
+  const max = Math.floor(state.windowEndAt!.getTime() / 1000);
+  const query = new URLSearchParams({ limit: "1000", min_ts: String(min), max_ts: String(max) });
+  if (state.cursor) query.set("cursor", state.cursor);
+  const endpoint = state.phase === "live" ? "markets/trades" : "historical/trades";
+  const result = await fetchJson<TradeFeedResponse>(`${KALSHI_API}/${endpoint}?${query}`, "recovery");
+  if (!Array.isArray(result.trades) || result.trades.some(row => !row.trade_id || !row.ticker ||
+    !Number.isFinite(Date.parse(row.created_time)) || Date.parse(row.created_time) < min * 1000 - 1000 ||
+    Date.parse(row.created_time) > (max + 1) * 1000)) throw new Error("Invalid recovery page; checkpoint not advanced.");
+  if (result.cursor !== undefined && typeof result.cursor !== "string") throw new Error("Invalid recovery cursor.");
+  return { rows: result.trades, cursor: result.cursor || null };
 }
 
 async function readHistoryPage(job: HistoryJob) {
@@ -246,7 +286,7 @@ async function readHistoryPage(job: HistoryJob) {
   if (job.cursor) query.set("cursor", job.cursor);
   const endpoint = job.phase === "live" ? "markets/trades" : "historical/trades";
   const [response, saved] = await Promise.all([
-    fetchJson<TradeFeedResponse>(`${KALSHI_API}/${endpoint}?${query}`),
+    fetchJson<TradeFeedResponse>(`${KALSHI_API}/${endpoint}?${query}`, "history"),
     db.select().from(kalshiAlertsTable).where(eq(kalshiAlertsTable.ticker, job.ticker)).limit(1),
   ]);
   if (!saved[0] || !Array.isArray(response.trades)) throw new Error("Historical source or saved sports metadata unavailable.");
@@ -316,19 +356,21 @@ function toPublicTrade(
   };
 }
 
-async function getTradeContext(ticker: string) {
+async function getTradeContext(ticker: string, allowArchivedLookup = false): Promise<MarketContext> {
   let contextPromise = tradeContextCache.get(ticker);
   if (!contextPromise) {
     contextPromise = (async () => {
       // An archived game needs no metadata refresh, including after a process restart.
-      if ((await readGameStatus(ticker))?.state === "finished") {
+      const game = await readGameStatus(ticker);
+      if (game?.state === "finished") {
         const [saved] = await db.select({ eventTitle: kalshiAlertsTable.eventTitle,
           marketTitle: kalshiAlertsTable.marketTitle }).from(kalshiAlertsTable)
           .where(eq(kalshiAlertsTable.ticker, ticker)).limit(1);
         if (saved?.eventTitle && saved.marketTitle && !saved.marketTitle.includes(ticker)) return {
-          eventTitle: saved.eventTitle, marketTitle: saved.marketTitle,
+          eventTitle: saved.eventTitle, marketTitle: saved.marketTitle, eventTicker: game.eventTicker ?? undefined,
+          marketStatus: game.marketStatus ?? undefined,
         };
-        throw new Error("Finished game has no saved readable metadata.");
+        if (!allowArchivedLookup) throw new Error("Finished game has no saved readable metadata.");
       }
       let marketResponse: { market: KalshiMarketMetadata };
       try {
@@ -352,7 +394,7 @@ async function getTradeContext(ticker: string) {
           eventTitleCache.delete(eventTicker);
           throw error;
         });
-        if (eventTitleCache.size >= 5_000) eventTitleCache.clear();
+        if (eventTitleCache.size >= 5_000) eventTitleCache.delete(eventTitleCache.keys().next().value!);
         eventTitleCache.set(eventTicker, eventTitlePromise);
       }
       const eventTitle = await eventTitlePromise;
@@ -360,9 +402,9 @@ async function getTradeContext(ticker: string) {
       if (!marketTitle || marketTitle.includes(ticker)) {
         throw new Error("Kalshi bet description is unavailable; will retry before sending.");
       }
-      return { eventTitle, marketTitle };
+      return { eventTitle, marketTitle, eventTicker, marketStatus: market.status };
     })();
-    if (tradeContextCache.size >= 5_000) tradeContextCache.clear();
+    if (tradeContextCache.size >= 5_000) tradeContextCache.delete(tradeContextCache.keys().next().value!);
     tradeContextCache.set(ticker, contextPromise);
   }
   try {
@@ -449,17 +491,14 @@ async function telegramPhotoRequest<T>(
 }
 
 async function pollOnce() {
-  if (pollInProgress || kalshiHttp.isPaused || !needsRestRecovery()) return;
+  if (!monitorInitialized || pollInProgress || kalshiHttp.isPaused || !needsRestRecovery()) return;
+  if (!tradeStream?.live && !recoveryWorker.stats.pending) {
+    if (Date.now() - lastOfflineRecovery < POLL_INTERVAL_MS) return;
+    lastOfflineRecovery = Date.now();
+  }
   pollInProgress = true;
-  const pollStartedAt = Date.now();
-  const snapshot = liveCoverage.snapshot();
-  const { boundary } = snapshot;
-
   try {
-    const tradeFeed = await getTradesSince(boundary);
-    await ingestTrades(tradeFeed, boundary);
-    // Leave an overlap for delayed executions and second-resolution REST filters.
-    liveCoverage.recoveredThrough(snapshot, pollStartedAt);
+    await recoveryWorker.tick();
   } catch (error) {
     const message = error instanceof Error ? error.message : "Unknown Kalshi monitor error.";
     lastError = message;
@@ -478,6 +517,9 @@ function ingestTrades(feed: KalshiTradeApi[], boundary: number | null, fromStrea
 
 async function processTrades(tradeFeed: KalshiTradeApi[], boundary: number | null, fromStream: boolean) {
     const [seriesIndex, settings] = await Promise.all([getSportsSeries(), readSettings()]);
+    if (tradeFeed.some(row => resolveSeries(row.ticker, seriesIndex) && !toPublicTrade(row, seriesIndex))) {
+      throw new Error("Invalid sports execution; persistence and recovery checkpoint will retry.");
+    }
     const allSportsTrades = tradeFeed
       .map((trade) => toPublicTrade(trade, seriesIndex))
       .filter((trade): trade is PublicTrade => trade !== undefined)
@@ -498,52 +540,20 @@ async function processTrades(tradeFeed: KalshiTradeApi[], boundary: number | nul
             (trade) => new Date(trade.createdTime).getTime() > boundary,
           );
 
-    const contextCandidates = [
-      ...qualifyingTrades.slice(0, 50),
-      ...newTrades,
-    ];
-    const uniqueContextCandidates = Array.from(
-      new Map(contextCandidates.map((trade) => [trade.tradeId, trade])).values(),
-    );
-    const enrichedCandidates = await Promise.all(
-      uniqueContextCandidates.map(async (trade) => [
-        trade.tradeId,
-        await withTradeContext(trade),
-      ] as const),
-    );
-    const enrichedByTradeId = new Map(enrichedCandidates);
+    // Financial capture never waits for per-market descriptions or Telegram.
+    // Metadata jobs are durable and notifications still require readable context.
+    const persisted = settings.enabled ? await persistTrades(newTrades) : [];
+    const enrichedByTradeId = new Map(persisted.map(row => [row.tradeId, row]));
     latestQualifyingTrades = [...new Map([...qualifyingTrades
       .slice(0, 50)
       .map((trade) => enrichedByTradeId.get(trade.tradeId) ?? trade),
       ...latestQualifyingTrades].map(trade => [trade.tradeId, trade])).values()]
       .sort((a, b) => Date.parse(b.createdTime) - Date.parse(a.createdTime)).slice(0, 50);
 
-    if (settings.enabled && settings.chatId && botToken()) {
-      for (const trade of newTrades) {
-        const enrichedTrade = enrichedByTradeId.get(trade.tradeId) ?? trade;
-        await db
-          .insert(kalshiAlertsTable)
-          .values({
-            tradeId: enrichedTrade.tradeId,
-            ticker: enrichedTrade.ticker,
-            title: enrichedTrade.title,
-            eventTitle: enrichedTrade.eventTitle,
-            marketTitle: enrichedTrade.marketTitle,
-            sport: enrichedTrade.sport,
-            outcomeSide: enrichedTrade.outcomeSide,
-            bookSide: enrichedTrade.bookSide,
-            price: enrichedTrade.price,
-            count: enrichedTrade.count,
-            notional: enrichedTrade.notional,
-            createdTime: new Date(enrichedTrade.createdTime),
-            blockTrade: enrichedTrade.blockTrade,
-            marketUrl: enrichedTrade.marketUrl,
-          })
-          .onConflictDoNothing();
-      }
+    if (settings.enabled) {
       // Historical imports can already have inserted the same trade. The separate
       // outbox deduplicates notifications independently of graph/history storage.
-      await enqueueLiveNotifications(settings.chatId,
+      if (settings.chatId && botToken()) await enqueueLiveNotifications(settings.chatId,
         liveNotificationTrades(newTrades, liveCoverage.notificationBoundary(boundary))
           .map(trade => trade.tradeId));
       kalshiLiveEvents.publish([...new Set(newTrades.map(trade => trade.ticker))],
@@ -555,14 +565,42 @@ async function processTrades(tradeFeed: KalshiTradeApi[], boundary: number | nul
     if (!kalshiHttp.isPaused) lastError = null;
 }
 
+let quotaRefreshing = false;
+async function refreshAccountQuota() {
+  if (!kalshiAuth || quotaRefreshing || kalshiHttp.isPaused) return;
+  quotaRefreshing = true;
+  try {
+    const [limits, costs] = await Promise.all([
+      fetchJson(`${KALSHI_API}/account/limits`, "control"),
+      fetchJson(`${KALSHI_API}/account/endpoint_costs`, "control"),
+    ]);
+    restPacer.configure(limits, costs);
+    logger.info(restPacer.stats, "Kalshi account read budget refreshed");
+  } catch (error) {
+    logger.warn({ error: error instanceof Error ? error.message : "Quota unavailable" },
+      "Keeping the last safe Kalshi read budget");
+  } finally { quotaRefreshing = false; }
+}
+
+function rememberUnknownSeries(ticker: string, timestamp: number) {
+  if (sportsSeries.has(ticker) || unknownSeriesSince.has(ticker)) return;
+  if (unknownSeriesSince.size >= 5000) unknownSeriesSince.delete(unknownSeriesSince.keys().next().value!);
+  unknownSeriesSince.set(ticker, Number.isFinite(timestamp) ? timestamp : Date.now());
+}
+
 async function startTradeStream() {
   try {
+    await bootstrapTrackedMarkets();
+    await bootstrapMetadataJobs();
+    await recoveryWorker.initialize();
+    monitorInitialized = true;
     kalshiAuth = new KalshiAuth(process.env.KALSHI_API_KEY_ID ?? "", process.env.KALSHI_PRIVATE_KEY ?? "");
-    // Seed metadata and establish the startup boundary without sending historical alerts.
+    await refreshAccountQuota();
+    // Saved coverage is restored before opening the stream. Catch-up runs in
+    // bounded background pages; it never holds the socket closed until finished.
     await getSportsSeries().catch(() => {
       logger.warn("Sports metadata temporarily unavailable; stream batches will retry enrichment");
     });
-    await pollOnce();
     // Even if REST is temporarily unavailable, start WebSocket and retry catch-up later.
     liveCoverage.establishStartupBoundary();
     tradeStream = new KalshiTradeStream({
@@ -575,7 +613,20 @@ async function startTradeStream() {
           return !!execution && shouldCaptureTrade(execution.notional);
         }
         const parsed = toPublicTrade(trade, sportsSeries);
+        if (!parsed) {
+          const execution = publicTradeExecution(trade);
+          if (execution && shouldCaptureTrade(execution.notional)) {
+            rememberUnknownSeries(trade.ticker.split("-")[0], Date.parse(trade.created_time));
+          }
+        }
         return !!parsed && shouldCaptureTrade(parsed.notional);
+      },
+      lifecycle: event => {
+        if (event.series) rememberUnknownSeries(event.series, Date.now());
+        if (event.ticker) {
+          if (resolveSeries(event.ticker, sportsSeries)) lifecycleWorker.enqueue(event);
+          else rememberUnknownSeries(event.ticker.split("-")[0], Date.now());
+        }
       },
       batch: async (trades: StreamTrade[]) => {
         await ingestTrades(trades, liveStartedAt - 1, true);
@@ -597,6 +648,7 @@ async function startTradeStream() {
     // Auth errors are deliberately sanitized in KalshiAuth; never log private keys.
     streamError = error instanceof Error ? error.message : "No se pudo iniciar Kalshi WebSocket.";
     logger.warn({ message: streamError }, "Kalshi WebSocket setup failed; REST recovery remains available");
+    if (!monitorInitialized) setTimeout(() => void startTradeStream(), 15_000);
   }
 }
 
@@ -699,6 +751,7 @@ async function telegramPollingLoop() {
 }
 
 export function startKalshiMonitor() {
+  if (process.env.BOT_WORKERS_ENABLED === "false") return;
   if (monitorStarted) return;
   monitorStarted = true;
   // Calendar rollover and game completion refresh even when the trade feed fails
@@ -715,13 +768,28 @@ export function startKalshiMonitor() {
   refreshDashboard();
   setInterval(refreshDashboard, POLL_INTERVAL_MS);
   void startTradeStream();
-  setInterval(() => void pollOnce(), POLL_INTERVAL_MS);
+  setInterval(() => void pollOnce(), 500);
   // Refresh sports metadata independently; the trade stream never needs REST per execution.
   setInterval(() => {
-    if (!kalshiHttp.isPaused) void getSportsSeries().catch(() => {});
-  }, SERIES_CACHE_MS);
+    if (!monitorInitialized || kalshiHttp.isPaused) return;
+    void getSportsSeries(unknownSeriesSince.size > 0).catch(error =>
+      logger.warn({ error: String(error) }, "Sports catalog refresh will retry"));
+    void refreshAccountQuota();
+    logger.info({ http: kalshiHttp.stats, budget: restPacer.stats, recovery: recoveryWorker.stats,
+      historyJobs: marketHistory.activeJobs, lifecycleQueued: lifecycleWorker.queued }, "Kalshi acquisition health");
+  }, 60_000);
   setInterval(() => {
-    if (kalshiHttp.isPaused) return;
+    if (monitorInitialized) void recoveryWorker.persistHealthy(tradeStream?.live ?? false)
+      .catch(error => logger.warn({ error: String(error) }, "Could not persist live checkpoint"));
+  }, POLL_INTERVAL_MS);
+  setInterval(() => {
+    if (!monitorInitialized) return;
+    void lifecycleWorker.tick().catch(error => logger.warn({ error: String(error) }, "Lifecycle verification queue will retry"));
+    if (!kalshiHttp.isPaused) void metadataWorker.tick()
+      .catch(error => logger.warn({ error: String(error) }, "Metadata worker will retry"));
+  }, 1000);
+  setInterval(() => {
+    if (!monitorInitialized || kalshiHttp.isPaused) return;
     void readSettings().then(async settings => {
       if (settings.enabled) await finalResultsWorker.tick();
     }).catch(error => logger.warn({ error: String(error) }, "Final result worker failed"));
@@ -729,13 +797,13 @@ export function startKalshiMonitor() {
   // Official per-market resolutions for the ROI leaderboard. Same paced HTTP client,
   // shared 429 cooldown and production worker lock; never starts a second bot.
   setInterval(() => {
-    if (kalshiHttp.isPaused) return;
+    if (!monitorInitialized || kalshiHttp.isPaused) return;
     void readSettings().then(async settings => {
       if (settings.enabled) await marketSettlementWorker.tick();
     }).catch(error => logger.warn({ error: String(error) }, "Market settlement enrichment failed"));
-  }, 30_000);
+  }, 5_000);
   setInterval(() => {
-    if (kalshiHttp.isPaused) return;
+    if (!monitorInitialized || kalshiHttp.isPaused) return;
     void readSettings().then(async settings => {
       if (settings.enabled) await gameStatusMonitor.tick();
     }).catch(error => logger.warn({ error: error instanceof Error ? error.message : "Game status worker failed" },
@@ -743,14 +811,16 @@ export function startKalshiMonitor() {
   }, 2000);
   // Independent of live polling: a large backfill must not block live trades or navigation.
   setInterval(() => {
-    if (kalshiHttp.isPaused) return;
+    if (!monitorInitialized || kalshiHttp.isPaused) return;
     void readSettings().then(async settings => {
       if (settings.enabled) await marketHistory.tick();
     }).catch(error => logger.warn({ error: error instanceof Error ? error.message : "History worker failed" },
       "Market history worker failed"));
-  }, 2000);
+  }, 500);
   setInterval(() => {
-    if (kalshiHttp.isPaused) return;
+    // Telegram can deliver already-readable saved executions during a REST
+    // pause. Missing context still fails explicitly and retries in the outbox.
+    if (!monitorInitialized) return;
     void readSettings().then(async settings => {
       if (botToken()) await tradeNotifications.tick(settings);
     }).catch(error => logger.warn({ error: error instanceof Error ? error.message : "Notification worker failed" },

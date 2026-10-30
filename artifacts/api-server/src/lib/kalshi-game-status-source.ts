@@ -1,6 +1,7 @@
-import { providerGameState, type GameStatus } from "./kalshi-game-status";
+import { providerGameState, type GameStatus, type GameCandidate } from "./kalshi-game-status";
+import { mapConcurrent } from "./async-pool";
 
-type Market = { event_ticker: string; status: string };
+type Market = { ticker?: string; event_ticker: string; status: string };
 type Milestone = { id: string; start_date: string; primary_event_tickers?: string[]; details?: { status?: string } };
 type LiveData = { details: { status?: string; live_data_delayed?: boolean } };
 type Request = <T>(path: string) => Promise<T>;
@@ -9,10 +10,65 @@ type Request = <T>(path: string) => Promise<T>;
 export class KalshiGameStatusSource {
   private cache = new Map<string, { until: number; value: Promise<unknown> }>();
   constructor(private request: Request) {}
+  invalidate(ticker: string, eventTicker?: string | null, milestoneId?: string | null) {
+    this.cache.delete(`market:${ticker}`);
+    if (eventTicker) this.cache.delete(`event:${eventTicker}`);
+    if (milestoneId) this.cache.delete(`live:${milestoneId}`);
+  }
+  private prime(key: string, value: unknown, now: Date) {
+    if (this.cache.size >= 5000) this.cache.delete(this.cache.keys().next().value!);
+    this.cache.set(key, { until: now.getTime() + 60_000, value: Promise.resolve(value) });
+  }
+  private chooseMilestone(matches: Milestone[], event: string) {
+    const primary = matches.filter(m => m.primary_event_tickers?.includes(event));
+    const choices = primary.length ? primary : matches;
+    return choices.length === 1 ? choices[0] : undefined;
+  }
+
+  /** Prime the same readers used by resolve: at most 100 games per batch.
+   * Missing/ambiguous boards are never replaced by another game's data. */
+  async prepare(candidates: GameCandidate[], now: Date) {
+    if (!candidates.length) return;
+    if (candidates.length > 100) throw new Error("Game status batch exceeds 100 markets.");
+    const wanted = new Set(candidates.map(row => row.ticker));
+    const response = await this.request<{ markets: Market[] }>(
+      `/markets?tickers=${encodeURIComponent([...wanted].join(","))}&limit=1000`);
+    if (!Array.isArray(response.markets)) throw new Error("Kalshi returned an invalid market batch.");
+    const markets = new Map<string, Market>();
+    for (const market of response.markets) if (market.ticker && wanted.has(market.ticker)) {
+      markets.set(market.ticker, market);
+      this.prime(`market:${market.ticker}`, market, now);
+    }
+    const milestones = new Set<string>();
+    await mapConcurrent(candidates, 4, async candidate => {
+      if (candidate.previous?.milestoneId) { milestones.add(candidate.previous.milestoneId); return; }
+      const event = markets.get(candidate.ticker)?.event_ticker;
+      if (!event) return;
+      try {
+        const data = await this.cached(`event:${event}`, 60_000, now, () =>
+          this.request<{ milestones: Milestone[] }>(`/milestones?limit=100&related_event_ticker=${encodeURIComponent(event)}`));
+        const milestone = this.chooseMilestone(data.milestones ?? [], event);
+        if (milestone) milestones.add(milestone.id);
+      } catch { /* resolve reports each cached error without issuing another request. */ }
+    });
+    if (!milestones.size) return;
+    const query = new URLSearchParams();
+    for (const id of milestones) query.append("milestone_ids", id);
+    const boards = await this.request<{ live_datas: (LiveData & { milestone_id: string })[] }>(`/live_data/batch?${query}`);
+    if (!Array.isArray(boards.live_datas)) throw new Error("Kalshi returned an invalid live-data batch.");
+    for (const board of boards.live_datas) if (milestones.has(board.milestone_id)) {
+      this.prime(`live:${board.milestone_id}`, { live_data: board }, now);
+    }
+    // An omitted board is unavailable, not a final score. Cache its absence so
+    // it doesn't trigger one fallback request per market during this batch.
+    for (const id of milestones) if (!boards.live_datas.some(board => board.milestone_id === id)) {
+      this.prime(`live:${id}`, { live_data: null }, now);
+    }
+  }
   private cached<T>(key: string, ttl: number, now: Date, read: () => Promise<T>): Promise<T> {
     const old = this.cache.get(key);
     if (old && old.until > now.getTime()) return old.value as Promise<T>;
-    if (this.cache.size > 5000) this.cache.clear();
+    if (this.cache.size >= 5000) this.cache.delete(this.cache.keys().next().value!);
     const value = read();
     // Keep short-lived failed reads too; otherwise a shared outage becomes a request flood.
     this.cache.set(key, { until: now.getTime() + ttl, value });
@@ -39,11 +95,8 @@ export class KalshiGameStatusSource {
       const response = await this.cached(`event:${market.event_ticker}`, 60_000, now, () =>
         this.request<{ milestones: Milestone[] }>(
           `/milestones?limit=100&related_event_ticker=${encodeURIComponent(market.event_ticker)}`));
-      const matches = response.milestones ?? [];
-      const primary = matches.filter(m => m.primary_event_tickers?.includes(market.event_ticker));
-      const choices = primary.length ? primary : matches;
       // Ambiguous milestones must not attach a different game's scoreboard.
-      if (choices.length === 1) milestone = choices[0];
+      milestone = this.chooseMilestone(response.milestones ?? [], market.event_ticker);
     }
     let state: GameStatus["state"] = "unknown";
     let source = "unknown";
@@ -55,6 +108,7 @@ export class KalshiGameStatusSource {
       try {
         const result = await this.cached(`live:${milestone.id}`, 60_000, now, () =>
           this.request<{ live_data: LiveData }>(`/live_data/milestone/${encodeURIComponent(milestone!.id)}`));
+        if (!result.live_data) throw new Error("Kalshi omitted this scoreboard; game status is unconfirmed.");
         state = providerGameState(result.live_data?.details?.status);
         delayed = result.live_data?.details?.live_data_delayed === true;
         source = "live";

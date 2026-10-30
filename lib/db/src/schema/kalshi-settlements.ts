@@ -1,4 +1,4 @@
-import { boolean, index, pgTable, text, timestamp } from "drizzle-orm/pg-core";
+import { boolean, index, integer, pgTable, text, timestamp } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod/v4";
 
@@ -8,6 +8,7 @@ export const kalshiSettlementsTable = pgTable("kalshi_market_settlements", {
   result: text("result"),
   terminal: boolean("terminal").notNull().default(false),
   historical: boolean("historical").notNull().default(false),
+  priority: integer("priority").notNull().default(0),
   checkedAt: timestamp("checked_at", { withTimezone: true }).notNull().defaultNow(),
   nextCheckAt: timestamp("next_check_at", { withTimezone: true }).notNull().defaultNow(),
   error: text("error"),

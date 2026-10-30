@@ -1,4 +1,4 @@
-import { boolean, pgTable, text, timestamp } from "drizzle-orm/pg-core";
+import { boolean, index, pgTable, text, timestamp } from "drizzle-orm/pg-core";
 
 export const kalshiGameStatusTable = pgTable("kalshi_game_status", {
   ticker: text("ticker").primaryKey(),
@@ -13,4 +13,8 @@ export const kalshiGameStatusTable = pgTable("kalshi_game_status", {
   checkedAt: timestamp("checked_at", { withTimezone: true }).notNull().defaultNow(),
   nextCheckAt: timestamp("next_check_at", { withTimezone: true }).notNull().defaultNow(),
   error: text("error"),
-});
+}, table => [
+  index("kalshi_game_status_due_idx").on(table.state, table.nextCheckAt),
+  index("kalshi_game_status_milestone_idx").on(table.milestoneId),
+  index("kalshi_game_status_event_idx").on(table.eventTicker),
+]);
