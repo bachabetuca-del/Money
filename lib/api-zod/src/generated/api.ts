@@ -9,6 +9,43 @@ import * as zod from 'zod';
 
 
 /**
+ * @summary Historical ROI context for comparable sport, market, side, odds and trade-size groups
+ */
+export const getKalshiExplorerRoiQueryBandDefault = `large`;
+export const getKalshiExplorerRoiQueryScopeDefault = `active`;
+
+export const GetKalshiExplorerRoiQueryParams = zod.object({
+  "band": zod.enum(['large', 'medium', 'small']).default(getKalshiExplorerRoiQueryBandDefault),
+  "scope": zod.enum(['active', 'history']).default(getKalshiExplorerRoiQueryScopeDefault)
+})
+
+export const GetKalshiExplorerRoiResponse = zod.object({
+  "generatedAt": zod.string(),
+  "historyAsOf": zod.string(),
+  "band": zod.enum(['large', 'medium', 'small']),
+  "scope": zod.enum(['active', 'history']),
+  "minimumGames": zod.number().int(),
+  "minimumTrades": zod.number().int(),
+  "greenMinRoiPct": zod.number(),
+  "markets": zod.array(zod.object({
+  "ticker": zod.string(),
+  "signals": zod.array(zod.object({
+  "side": zod.enum(['yes', 'no']),
+  "level": zod.enum(['good', 'medium', 'bad', 'insufficient']),
+  "reason": zod.union([zod.literal('no_price'),zod.literal('no_history'),zod.literal('small_sample'),zod.literal('unclassified'),zod.literal(null)]).nullable(),
+  "roiPct": zod.number().nullable(),
+  "trades": zod.number().int(),
+  "games": zod.number().int(),
+  "price": zod.number().nullable().describe('Last saved execution price of this side within the selected money band; not a live quote'),
+  "observedAt": zod.string().nullable(),
+  "oddsMin": zod.number().nullable(),
+  "oddsMax": zod.number().nullable()
+}))
+}))
+})
+
+
+/**
  * @summary Equal-stake hypothetical ROI from saved trades and official binary settlements
  */
 export const getKalshiLeaderboardQueryCoverageDefault = `verified`;

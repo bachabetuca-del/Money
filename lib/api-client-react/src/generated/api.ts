@@ -27,11 +27,13 @@ import type {
 import type {
   ApiError,
   DownloadKalshiHistoryParams,
+  ExplorerRoi,
   GameAnalysis,
   GameAnalysisInput,
   GameAnalysisState,
   GetKalshiAnalysisParams,
   GetKalshiExplorerParams,
+  GetKalshiExplorerRoiParams,
   GetKalshiLeaderboardParams,
   HealthStatus,
   KalshiDashboard,
@@ -72,6 +74,114 @@ const withQueryKey = <T extends object, K>(query: T, queryKey: K): T & { queryKe
   }
   return result;
 };
+
+export const getGetKalshiExplorerRoiUrl = (params?: GetKalshiExplorerRoiParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/api/kalshi/explorer/roi?${stringifiedParams}` : `/api/kalshi/explorer/roi`
+}
+
+/**
+ * @summary Historical ROI context for comparable sport, market, side, odds and trade-size groups
+ */
+export const getKalshiExplorerRoi = async (params?: GetKalshiExplorerRoiParams, options?: Parameters<typeof customFetch>[1]): Promise<ExplorerRoi> => {
+
+  return customFetch<ExplorerRoi>(getGetKalshiExplorerRoiUrl(params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetKalshiExplorerRoiQueryKey = (params?: GetKalshiExplorerRoiParams,) => {
+    return [
+    `/api/kalshi/explorer/roi`, ...(params ? [params] : [])
+    ] as const;
+    }
+
+
+export const getGetKalshiExplorerRoiQueryOptions = <TData = Awaited<ReturnType<typeof getKalshiExplorerRoi>>, TError = ErrorType<ApiError>>(params?: GetKalshiExplorerRoiParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getKalshiExplorerRoi>>, TError, TData>>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetKalshiExplorerRoiQueryKey(params);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getKalshiExplorerRoi>>> = ({ signal }) => getKalshiExplorerRoi(params, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getKalshiExplorerRoi>>, TError, TData> & { queryKey: DataTag<QueryKey, TData, TError> }
+}
+
+export type GetKalshiExplorerRoiQueryResult = NonNullable<Awaited<ReturnType<typeof getKalshiExplorerRoi>>>
+export type GetKalshiExplorerRoiQueryError = ErrorType<ApiError>
+
+
+export function useGetKalshiExplorerRoi<TData = Awaited<ReturnType<typeof getKalshiExplorerRoi>>, TError = ErrorType<ApiError>>(
+ params: undefined |  GetKalshiExplorerRoiParams, options: { query:Partial<UseQueryOptions<Awaited<ReturnType<typeof getKalshiExplorerRoi>>, TError, TData>> & Pick<
+        DefinedInitialDataOptions<
+          Awaited<ReturnType<typeof getKalshiExplorerRoi>>,
+          TError,
+          Awaited<ReturnType<typeof getKalshiExplorerRoi>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient
+  ):  DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useGetKalshiExplorerRoi<TData = Awaited<ReturnType<typeof getKalshiExplorerRoi>>, TError = ErrorType<ApiError>>(
+ params?: GetKalshiExplorerRoiParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getKalshiExplorerRoi>>, TError, TData>> & Pick<
+        UndefinedInitialDataOptions<
+          Awaited<ReturnType<typeof getKalshiExplorerRoi>>,
+          TError,
+          Awaited<ReturnType<typeof getKalshiExplorerRoi>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useGetKalshiExplorerRoi<TData = Awaited<ReturnType<typeof getKalshiExplorerRoi>>, TError = ErrorType<ApiError>>(
+ params?: GetKalshiExplorerRoiParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getKalshiExplorerRoi>>, TError, TData>>, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+/**
+ * @summary Historical ROI context for comparable sport, market, side, odds and trade-size groups
+ */
+
+export function useGetKalshiExplorerRoi<TData = Awaited<ReturnType<typeof getKalshiExplorerRoi>>, TError = ErrorType<ApiError>>(
+ params?: GetKalshiExplorerRoiParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getKalshiExplorerRoi>>, TError, TData>>, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient
+ ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
+
+  const queryOptions = getGetKalshiExplorerRoiQueryOptions(params,options)
+
+  const query = useQuery(queryOptions, queryClient) as  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
 
 export const getGetKalshiLeaderboardUrl = (params?: GetKalshiLeaderboardParams,) => {
   const normalizedParams = new URLSearchParams();

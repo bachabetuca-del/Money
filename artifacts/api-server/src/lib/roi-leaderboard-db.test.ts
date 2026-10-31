@@ -2,12 +2,66 @@ import assert from "node:assert/strict";
 import { after, test } from "node:test";
 import { db, pool } from "@workspace/db";
 import { sql, type SQLWrapper } from "drizzle-orm";
-import { GetKalshiLeaderboardResponse, GetKalshiLeaderboardQueryParams, GetKalshiExplorerQueryParams } from "@workspace/api-zod";
+import { GetKalshiLeaderboardResponse, GetKalshiLeaderboardQueryParams, GetKalshiExplorerQueryParams, GetKalshiExplorerRoiQueryParams, GetKalshiExplorerRoiResponse } from "@workspace/api-zod";
 import { getRoiLeaderboard, loadRoiRollups } from "./kalshi-roi-leaderboard";
 import { buildRoiRanking } from "./roi-ranking";
 import { HISTORY_AUDIT_VERSION } from "./kalshi-market-history";
+import { loadRoiReferencePrices } from "./kalshi-roi-reference-prices";
+import { tradeRange } from "./kalshi-trade-bands";
+import { buildExplorerRoi, ROI_COLOR_POLICY } from "./explorer-roi";
 
 after(() => pool.end());
+
+test("ROI color references: latest valid trade per side and band, exact boundaries, read-only", async () => {
+  assert.equal(process.env.BOT_WORKERS_ENABLED, "false");
+  const now = new Date("2026-10-31T12:00:00Z");
+  const values = sql.join([
+    ["a", "T", "yes", "", ".50", "2000", "1000", "2026-10-31T10:00:00Z"],
+    ["b", "T", "yes", "", ".40", "12500", "5000", "2026-10-31T11:00:00Z"],
+    ["c", "T", "no", "", ".25", "8000", "2000", "2026-10-31T11:00:00Z"],
+    ["d", "T", "yes", "", ".60", "10000", "6000", "2026-10-31T11:20:00Z"],
+    ["e", "T", "no", "", ".50", "20000", "10000", "2026-10-31T11:30:00Z"],
+    ["f", "T", "yes", "", ".50", "40000", "20000", "2026-10-31T11:40:00Z"],
+    ["g", "T", "yes", "", ".90", "2000", "1800", "2026-11-01T11:50:00Z"], // future
+    ["h", "T", "yes", "", "1.2", "1000", "1200", "2026-10-31T11:50:00Z"], // invalid price
+    ["i", "T", "yes", "", ".9", "2000", "1900", "2026-10-31T11:50:00Z"], // bad notional
+    ["j", "T", "unknown", "", ".9", "2000", "1800", "2026-10-31T11:50:00Z"],
+    ["k", "IGNORED", "yes", "", ".9", "2000", "1800", "2026-10-31T11:50:00Z"],
+    ["l", "U", "", "ask", ".3", "5000", "1500", "2026-10-31T11:00:00Z"], // legacy NO
+  ].map(([id, ticker, side, book, price, count, notional, time]) =>
+    sql`(${id}::text, ${ticker}::text, ${side}::text, ${book}::text, ${price}::numeric,
+      ${count}::numeric, ${notional}::numeric, ${time}::timestamptz)`), sql`,`);
+  await db.transaction(async tx => {
+    const executor: Pick<typeof db, "execute"> = {
+      execute: <TRow extends Record<string, unknown> = Record<string, unknown>>(query: SQLWrapper | string) =>
+        tx.execute<TRow>(sql`
+          WITH kalshi_alerts AS (
+            SELECT * FROM (VALUES ${values}) v(trade_id, ticker, outcome_side, book_side, price, count, notional, created_time)
+          ) ${query as SQLWrapper}`),
+    };
+    const small = await loadRoiReferencePrices(["T", "U"], tradeRange("small"), now, executor);
+    assert.equal(small.length, 3);
+    assert.equal(small.find(r => r.ticker === "T" && r.side === "yes")?.price, .4);
+    assert.equal(small.find(r => r.ticker === "T" && r.side === "no")?.price, .25);
+    assert.equal(small.find(r => r.ticker === "U")?.side, "no");
+    const medium = await loadRoiReferencePrices(["T"], tradeRange("medium"), now, executor);
+    assert.deepEqual(medium.map(r => [r.side, r.price]), [["yes", .6]]);
+    const large = await loadRoiReferencePrices(["T"], tradeRange("large"), now, executor);
+    assert.deepEqual(large.map(r => [r.side, r.price]), [["no", .5], ["yes", .5]]);
+    const raised = await loadRoiReferencePrices(["T"], tradeRange("large", 15000), now, executor);
+    assert.deepEqual(raised.map(r => r.side), ["yes"]);
+    assert.deepEqual(await loadRoiReferencePrices([], tradeRange("small"), now, executor), []);
+    const output = {
+      band: "small", scope: "active", generatedAt: now.toISOString(), historyAsOf: now.toISOString(),
+      ...ROI_COLOR_POLICY,
+      markets: buildExplorerRoi([{ ticker: "T", sport: "Soccer", marketType: "winner" }], small, [], now),
+    };
+    GetKalshiExplorerRoiResponse.parse(output);
+  }, { accessMode: "read only" });
+  assert.equal(GetKalshiExplorerRoiQueryParams.parse({}).band, "large");
+  assert.equal(GetKalshiExplorerRoiQueryParams.safeParse({ band: "all" }).success, false);
+  assert.equal(GetKalshiExplorerRoiQueryParams.safeParse({ scope: "invalid" }).success, false);
+});
 
 test("read-only development ranking separates directions without changing verified coverage or totals", async () => {
   assert.equal(process.env.BOT_WORKERS_ENABLED, "false", "This read-only check belongs in development.");

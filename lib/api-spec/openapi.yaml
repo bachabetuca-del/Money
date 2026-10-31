@@ -15,6 +15,34 @@ tags:
   - name: kalshi
     description: Kalshi sports trade monitoring and Telegram alerts
 paths:
+  /kalshi/explorer/roi:
+    get:
+      operationId: getKalshiExplorerRoi
+      tags: [kalshi]
+      summary: Historical ROI context for comparable sport, market, side, odds and trade-size groups
+      parameters:
+        - in: query
+          name: band
+          schema: { type: string, enum: [large, medium, small], default: large }
+        - in: query
+          name: scope
+          schema: { type: string, enum: [active, history], default: active }
+      responses:
+        "200":
+          description: Verified historical comparison, not a prediction or the live game's realized ROI
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ExplorerRoi" }
+        "400":
+          description: Invalid filters
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ApiError" }
+        "503":
+          description: ROI context could not be refreshed; the explorer remains available
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ApiError" }
   /kalshi/leaderboard:
     get:
       operationId: getKalshiLeaderboard
@@ -482,6 +510,46 @@ components:
         latestTradeAt: { type: ["string", "null"], format: date-time }
         dataThrough: { type: string, format: date-time }
         text: { type: string }
+    ExplorerRoiSignal:
+      type: object
+      required: [side, level, reason, roiPct, trades, games, price, observedAt, oddsMin, oddsMax]
+      properties:
+        side: { type: string, enum: [yes, no] }
+        level: { type: string, enum: [good, medium, bad, insufficient] }
+        reason:
+          type: [string, "null"]
+          enum: [no_price, no_history, small_sample, unclassified, null]
+        roiPct: { type: [number, "null"] }
+        trades: { type: integer }
+        games: { type: integer }
+        price:
+          type: [number, "null"]
+          description: Last saved execution price of this side within the selected money band; not a live quote
+        observedAt: { type: [string, "null"] }
+        oddsMin: { type: [number, "null"] }
+        oddsMax: { type: [number, "null"] }
+    ExplorerMarketRoi:
+      type: object
+      required: [ticker, signals]
+      properties:
+        ticker: { type: string }
+        signals:
+          type: array
+          items: { $ref: "#/components/schemas/ExplorerRoiSignal" }
+    ExplorerRoi:
+      type: object
+      required: [generatedAt, historyAsOf, band, scope, minimumGames, minimumTrades, greenMinRoiPct, markets]
+      properties:
+        generatedAt: { type: string }
+        historyAsOf: { type: string }
+        band: { type: string, enum: [large, medium, small] }
+        scope: { type: string, enum: [active, history] }
+        minimumGames: { type: integer }
+        minimumTrades: { type: integer }
+        greenMinRoiPct: { type: number }
+        markets:
+          type: array
+          items: { $ref: "#/components/schemas/ExplorerMarketRoi" }
     ExplorerMarket:
       type: object
       required: [ticker, sport, gameKey, gameName, gameDateLabel, betLabel, marketUrl, trades, lastTradeAt, state, gameResult, marketResult]

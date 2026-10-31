@@ -36,3 +36,9 @@ Keep distinct soccer bet conditions separate when repairing market classificatio
 **Why:** Both-teams-to-score, exact score, advancement and period winners have different settlement conditions. Mixing them into moneyline would make ROI comparisons misleading. League names such as “Championship” can also describe ordinary fixtures rather than season futures.
 
 **How to apply:** Prefer explicit market identity over broad title keywords. Reclassify saved observations on read, preserving their amounts and settlements. Truly ambiguous or non-match special events may remain in Other rather than receiving an invented match-bet category.
+
+The user requested green/best, yellow/medium and red/bad ROI indicators in Análisis de mercados. For unfinished games, these describe historical comparable groups, not the current game's realized return or winning probability.
+
+**Why:** An unresolved market has no final ROI. Borrowing a broad sport average, the opposite side's better return, or a different odds/amount band could make an unrelated history appear favorable.
+
+**How to apply:** Keep SÍ/NO separate and require an exact comparison group. Use neutral gray for inadequate evidence or unavailable data, label the visual thresholds explicitly, and show the observed reference price's date rather than presenting it as a live quote. The comparison loads independently so it cannot block live exploration or alter Telegram.

@@ -1,0 +1,31 @@
+.mr-legend { margin: 14px 0; padding: 12px 14px; border: 1px solid #dcded4; border-radius: 10px; background: #f9f8f2; color: #33433f; font-size: 12px; }
+.mr-legend > strong { font-size: 12px; }
+.mr-key, .mr-badges { display: flex; flex-wrap: wrap; gap: 5px; }
+.mr-key { margin-top: 8px; }
+.mr-badges { margin-top: 6px; }
+.mr-badge { display: inline-flex; align-items: center; gap: 5px; padding: 4px 6px; border: 1px solid; border-radius: 5px; font: 600 10px/1.4 var(--app-font-mono, monospace); max-width: 100%; overflow-wrap: anywhere; }
+.mr-badge i { width: 6px; height: 6px; border-radius: 50%; background: currentColor; flex: 0 0 auto; }
+.mr-good { color: #176139; background: #e2f2e5; border-color: #a8d4b1; }
+.mr-medium { color: #735200; background: #fff1bb; border-color: #e2c45e; }
+.mr-bad { color: #9c302e; background: #fbe6e2; border-color: #e7b1a8; }
+.mr-insufficient { color: #53615b; background: #eceee8; border-color: #d0d6cb; }
+.mr-legend details { margin-top: 8px; font-size: 11px; color: #53615b; }
+.mr-legend summary { cursor: pointer; padding: 4px 0; }
+.mr-legend p { margin: 7px 0 0; line-height: 1.55; max-width: 95ch; }
+.mr-detail { margin: 14px 0; padding: 13px; border: 1px solid #d8dfd5; border-radius: 9px; background: #f3f5ee; color: #33433f; }
+.mr-detail h3 { margin: 0 0 8px; font-size: 13px; font-weight: 700; }
+.mr-detail .mr-badge { font-size: 12px; padding: 5px 8px; }
+.mr-detail p { font-size: 11px; line-height: 1.5; color: #53615b; margin: 10px 0 0; }
+.mr-detail .mr-asof { font: 10px/1.5 var(--app-font-mono, monospace); }
+.mr-samples { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(220px, 100%), 1fr)); gap: 10px; margin-top: 12px; font-size: 11px; }
+.mr-samples > div { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+.mr-boundary, .mr-reference { color: #5b675f; font-size: 10px; line-height: 1.5; }
+.mr-reason { font-weight: 600; color: #626a63; }
+.mr-loading { font-size: 11px; color: #657269; margin: 6px 0 12px; }
+.ws-row.market .mr-badges { min-width: 0; }
+@media (max-width: 520px) {
+  .mr-key { gap: 6px; }
+  .mr-key .mr-badge { font-size: 10px; }
+  .ws-row.market { align-items: flex-start; }
+  .ws-row.market > .ws-state { max-width: 63px; overflow: hidden; text-overflow: ellipsis; }
+}

@@ -13,11 +13,12 @@ import {
   YAxis,
   ZAxis,
 } from 'recharts';
-import { getGetKalshiExplorerQueryKey, useGetKalshiExplorer } from '@workspace/api-client-react';
+import { getGetKalshiExplorerQueryKey, useGetKalshiExplorer, useGetKalshiExplorerRoi } from '@workspace/api-client-react';
 import { useLiveExplorer } from '@/hooks/use-live-explorer';
 import { MarketFlow } from '@/components/market-flow';
 import { HistoryExport } from '@/components/history-export';
 import { GameAnalysisPanel } from '@/components/game-analysis-panel';
+import { MarketRoiBadges, MarketRoiDetail, RoiColorLegend, type RoiView } from '@/components/explorer-roi';
 import { setUrlParams } from '@/lib/navigation';
 import { diffFresh, FALLBACK_MS, FRESH_MS, lastExecution, viewSnapshot, type SeenState } from '@/lib/live-model';
 import { MINUTE, RECENT_MS, yesQuote, bubbleRadius, buildBuckets, chartTimeTicks, groupMarkets, type Bucket, type Dir } from '@/lib/explorer-model';
@@ -347,12 +348,21 @@ export function Explorer() {
 
   const [paused, setPaused] = useState(false);
   const [frozen, setFrozen] = useState<{
-    data: KalshiExplorer | undefined; now: number; key: string; market: ExplorerMarket | undefined;
+    data: KalshiExplorer | undefined; now: number; key: string; market: ExplorerMarket | undefined; roi: RoiView;
   } | null>(null);
   const catalogParams = { band, scope, direction, marketType, window: 'all' as const };
   const catalog = useGetKalshiExplorer(catalogParams, { query: {
     refetchInterval: FALLBACK_MS, staleTime: 10_000, refetchOnWindowFocus: false, retry: false,
   } });
+  // ROI loads independently and never blocks a catalog or live chart refresh.
+  const roi = useGetKalshiExplorerRoi({ band, scope }, { query: {
+    enabled: !!catalog.data?.markets.length,
+    refetchInterval: 60_000, staleTime: 30_000, refetchOnWindowFocus: false, retry: false,
+  } });
+  const roiByTicker = useMemo(() => new Map(roi.data?.markets.map(m => [m.ticker, m])), [roi.data]);
+  const roiView = (id: string): RoiView => ({
+    market: roiByTicker.get(id), loading: roi.isPending, error: roi.isError, historyAsOf: roi.data?.historyAsOf,
+  });
   const detailParams = { band, scope, direction, marketType, window: win, ticker, view: 'detail' as const };
   const detailKey = ['/api/kalshi/explorer', detailParams] as const;
   const detail = useGetKalshiExplorer(detailParams, {
@@ -401,6 +411,7 @@ export function Explorer() {
   const markets = catalog.data?.markets;
   const catalogSelected = markets?.find((m) => m.ticker === ticker);
   const selected = paused && frozen?.key === selKey ? frozen.market : catalogSelected;
+  const selectedRoi = paused && frozen?.key === selKey ? frozen.roi : roiView(ticker);
   const grouped = useMemo(() => groupMarkets(markets ?? [], q), [markets, q]);
 
   // Open a real chart immediately; never keep an incompatible band/scope selection.
@@ -454,13 +465,13 @@ export function Explorer() {
       liveFreshIds.current.clear();
       void qc.invalidateQueries({ queryKey: detailKey, exact: true });
     } else {
-      setFrozen({ data: liveData, now: liveNow, key: selKey, market: catalogSelected });
+      setFrozen({ data: liveData, now: liveNow, key: selKey, market: catalogSelected, roi: roiView(ticker) });
       setFresh(new Map());
       setPaused(true);
     }
   };
   useEffect(() => { if (paused && frozen && frozen.key !== selKey) { setPaused(false); setFrozen(null); } }, [selKey]); // eslint-disable-line react-hooks/exhaustive-deps
-  const view = viewSnapshot(paused, frozen, { data: liveData, now: liveNow, key: selKey, market: catalogSelected });
+  const view = viewSnapshot(paused, frozen, { data: liveData, now: liveNow, key: selKey, market: catalogSelected, roi: roiView(ticker) });
   const dData = view.data;
   const now = view.now;
   const trades = useMemo(() => (dData && selected ? dData.trades.filter((t) => t.ticker === ticker) : []), [dData, selected, ticker]);
@@ -495,6 +506,11 @@ export function Explorer() {
         {direction !== 'all' && <span className="ws-filter-note">Solo dirección {direction === 'yes' ? 'YES (SÍ)' : 'NO'} · catálogo, gráficas, flujo, totales y PDF filtrados. Histórico completo e IA sin este filtro.</span>}
       </div>
       <HistoryExport />
+      <RoiColorLegend minimumGames={roi.data?.minimumGames} minimumTrades={roi.data?.minimumTrades} greenMin={roi.data?.greenMinRoiPct} />
+      {roi.isPending && !!markets?.length && <p className="mr-loading" role="status">Cargando colores ROI; puedes seguir explorando los mercados.</p>}
+      {roi.isError && <Notice tone="warn" title="ROI sin actualizar" action={<button className="button secondary" onClick={() => void roi.refetch()} data-testid="button-retry-roi-colors">Reintentar ROI</button>}>
+        No se pudo actualizar el histórico comparable. Los indicadores ROI quedan en gris; los mercados y las gráficas siguen disponibles.
+      </Notice>}
       {scope === 'history' && catalog.data && (
         <Notice tone="warn" title="Historial posiblemente incompleto">
           Solo incluye lo que este monitor importó; no garantiza todo el historial de Kalshi. El estado de importación del mercado aparece junto a su gráfica.
@@ -552,6 +568,7 @@ export function Explorer() {
                           <button key={m.ticker} className={`ws-row market ${m.ticker === ticker ? 'sel' : ''}`} onClick={() => change({ ticker: m.ticker })} aria-current={m.ticker === ticker} data-testid={`button-market-${m.ticker}`}>
                             <span className={`ws-state ${m.state}`}>{STATE_LABEL[m.state]}</span>
                             <span className="name">{m.betLabel}
+                              <MarketRoiBadges view={roiView(m.ticker)} direction={direction} />
                             </span><span className="count">{m.trades}</span>
                           </button>
                         ))}
@@ -583,6 +600,7 @@ export function Explorer() {
                 </div>
                 <h2>{selected.gameName}</h2>
                 <p className="bet">{selected.betLabel}</p>
+                <MarketRoiDetail view={selectedRoi} direction={direction} />
                 {scope === 'history' && <div className="ws-result" data-testid="historical-result">
                   <p><strong>Marcador final</strong><br />{selected.gameResult ??
                     selected.scoreMessage ??

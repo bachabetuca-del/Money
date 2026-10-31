@@ -8,6 +8,7 @@
     "build": "node ./build.mjs",
     "start": "node --enable-source-maps ./dist/index.mjs",
     "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test:roi-colors": "esbuild src/lib/explorer-roi.test.ts --bundle --platform=node --format=esm --packages=external --outfile=.local/roi-colors-test.mjs && node --test .local/roi-colors-test.mjs",
     "check:kalshi-live-data": "esbuild src/lib/kalshi-live-data-probe.ts --bundle --platform=node --format=esm --packages=external --outfile=.local/kalshi-live-data-probe.mjs && node .local/kalshi-live-data-probe.mjs",
     "test:roi-db": "esbuild src/lib/roi-leaderboard-db.test.ts --bundle --platform=node --format=esm --packages=external --alias:@workspace/db=../../lib/db/src/index.ts --alias:@workspace/api-zod=../../lib/api-zod/src/index.ts --outfile=../../lib/db/.local/store-tests/roi-leaderboard-db.mjs && node --test ../../lib/db/.local/store-tests/roi-leaderboard-db.mjs",
     "test:acquisition-store": "esbuild src/lib/kalshi-acquisition-store.test.ts --bundle --platform=node --format=esm --packages=external --alias:@workspace/db=../../lib/db/src/index.ts --outfile=../../lib/db/.local/store-tests/kalshi-acquisition-store.mjs && node --test ../../lib/db/.local/store-tests/kalshi-acquisition-store.mjs",

@@ -249,6 +249,92 @@ export interface GameAnalysisState {
   analysis: GameAnalysis | null;
 }
 
+export type ExplorerRoiSignalSide = typeof ExplorerRoiSignalSide[keyof typeof ExplorerRoiSignalSide];
+
+
+export const ExplorerRoiSignalSide = {
+  yes: 'yes',
+  no: 'no',
+} as const;
+
+export type ExplorerRoiSignalLevel = typeof ExplorerRoiSignalLevel[keyof typeof ExplorerRoiSignalLevel];
+
+
+export const ExplorerRoiSignalLevel = {
+  good: 'good',
+  medium: 'medium',
+  bad: 'bad',
+  insufficient: 'insufficient',
+} as const;
+
+/**
+ * @nullable
+ */
+export type ExplorerRoiSignalReason = typeof ExplorerRoiSignalReason[keyof typeof ExplorerRoiSignalReason] | null;
+
+
+export const ExplorerRoiSignalReason = {
+  no_price: 'no_price',
+  no_history: 'no_history',
+  small_sample: 'small_sample',
+  unclassified: 'unclassified',
+} as const;
+
+export interface ExplorerRoiSignal {
+  side: ExplorerRoiSignalSide;
+  level: ExplorerRoiSignalLevel;
+  /** @nullable */
+  reason: ExplorerRoiSignalReason;
+  /** @nullable */
+  roiPct: number | null;
+  trades: number;
+  games: number;
+  /**
+     * Last saved execution price of this side within the selected money band; not a live quote
+     * @nullable
+     */
+  price: number | null;
+  /** @nullable */
+  observedAt: string | null;
+  /** @nullable */
+  oddsMin: number | null;
+  /** @nullable */
+  oddsMax: number | null;
+}
+
+export interface ExplorerMarketRoi {
+  ticker: string;
+  signals: ExplorerRoiSignal[];
+}
+
+export type ExplorerRoiBand = typeof ExplorerRoiBand[keyof typeof ExplorerRoiBand];
+
+
+export const ExplorerRoiBand = {
+  large: 'large',
+  medium: 'medium',
+  small: 'small',
+} as const;
+
+export type ExplorerRoiScope = typeof ExplorerRoiScope[keyof typeof ExplorerRoiScope];
+
+
+export const ExplorerRoiScope = {
+  active: 'active',
+  history: 'history',
+} as const;
+
+export interface ExplorerRoi {
+  generatedAt: string;
+  historyAsOf: string;
+  band: ExplorerRoiBand;
+  scope: ExplorerRoiScope;
+  minimumGames: number;
+  minimumTrades: number;
+  greenMinRoiPct: number;
+  markets: ExplorerMarketRoi[];
+}
+
 export type ExplorerMarketState = typeof ExplorerMarketState[keyof typeof ExplorerMarketState];
 
 
@@ -438,6 +524,28 @@ export type OwnerRequiredResponse = ApiError;
  * Owner authorization is unavailable or not configured
  */
 export type OwnerUnavailableResponse = ApiError;
+
+export type GetKalshiExplorerRoiParams = {
+band?: GetKalshiExplorerRoiBand;
+scope?: GetKalshiExplorerRoiScope;
+};
+
+export type GetKalshiExplorerRoiBand = typeof GetKalshiExplorerRoiBand[keyof typeof GetKalshiExplorerRoiBand];
+
+
+export const GetKalshiExplorerRoiBand = {
+  large: 'large',
+  medium: 'medium',
+  small: 'small',
+} as const;
+
+export type GetKalshiExplorerRoiScope = typeof GetKalshiExplorerRoiScope[keyof typeof GetKalshiExplorerRoiScope];
+
+
+export const GetKalshiExplorerRoiScope = {
+  active: 'active',
+  history: 'history',
+} as const;
 
 export type GetKalshiLeaderboardParams = {
 coverage?: GetKalshiLeaderboardCoverage;

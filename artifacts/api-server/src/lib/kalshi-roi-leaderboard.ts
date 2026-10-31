@@ -85,13 +85,19 @@ export async function loadRoiRollups(options: Options, threshold: number, now: D
   };
 }
 
-export async function getRoiLeaderboard(options: Options, now = new Date()): Promise<RoiLeaderboard> {
+/** Shared by the ranking and explorer colors; one read-only historical snapshot. */
+export async function getRoiSnapshot(options: Options, now = new Date()) {
   const [settings] = await db.select({ minimum: kalshiMonitorSettingsTable.minimumNotional })
     .from(kalshiMonitorSettingsTable).limit(1);
   const threshold = Math.max(10_000, settings?.minimum ?? 10_000);
   // Presentation grouping/pagination reuse the same short-lived, filter-isolated data.
   const key = JSON.stringify([options.window, options.band, options.direction, threshold, options.coverage ?? "verified"]);
   const snapshot = await snapshots.get(key, () => loadRoiRollups(options, threshold, now));
+  return { snapshot, threshold };
+}
+
+export async function getRoiLeaderboard(options: Options, now = new Date()): Promise<RoiLeaderboard> {
+  const { snapshot, threshold } = await getRoiSnapshot(options, now);
   const asOf = new Date(snapshot.generatedAt), sortBy = options.sortBy ?? "roi";
   const { rows, summary } = buildRoiRanking(snapshot.rows, options.groupBy, options.minGames, {
     sortBy, now: asOf, since: windowStart(options.window, asOf),
