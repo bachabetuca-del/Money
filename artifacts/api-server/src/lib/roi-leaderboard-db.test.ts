@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { after, test } from "node:test";
 import { db, pool } from "@workspace/db";
 import { sql, type SQLWrapper } from "drizzle-orm";
-import { GetKalshiLeaderboardResponse, GetKalshiLeaderboardQueryParams } from "@workspace/api-zod";
+import { GetKalshiLeaderboardResponse, GetKalshiLeaderboardQueryParams, GetKalshiExplorerQueryParams } from "@workspace/api-zod";
 import { getRoiLeaderboard, loadRoiRollups } from "./kalshi-roi-leaderboard";
 import { buildRoiRanking } from "./roi-ranking";
 import { HISTORY_AUDIT_VERSION } from "./kalshi-market-history";
@@ -16,6 +16,10 @@ test("read-only development ranking separates directions without changing verifi
   const now = new Date();
   {
     assert.equal(GetKalshiLeaderboardQueryParams.parse({}).groupBy, "segment");
+    for (const marketType of ["btts", "correctScore", "qualification", "periodWinner", "corners"]) {
+      assert.equal(GetKalshiExplorerQueryParams.parse({ marketType }).marketType, marketType);
+    }
+    assert.equal(GetKalshiExplorerQueryParams.safeParse({ marketType: "fabricated-category" }).success, false);
     assert.equal(GetKalshiLeaderboardQueryParams.parse({}).sortBy, "roi");
     assert.equal(GetKalshiLeaderboardQueryParams.parse({ groupBy: "amount", sortBy: "winRate" }).groupBy, "amount");
     assert.equal(GetKalshiLeaderboardQueryParams.safeParse({ sortBy: "guaranteedProfit" }).success, false);

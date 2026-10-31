@@ -167,7 +167,7 @@ paths:
           description: Classify saved markets using their series identifier and original titles; ambiguous markets remain in other.
           schema:
             type: string
-            enum: [all, winner, spread, total, props, futures, other]
+            enum: [all, winner, periodWinner, spread, total, btts, correctScore, qualification, corners, props, futures, other]
             default: all
         - in: query
           name: view

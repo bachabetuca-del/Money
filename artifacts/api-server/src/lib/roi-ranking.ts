@@ -10,6 +10,8 @@ export type RoiGroup = RoiLeaderboard["groupBy"];
 export type RoiSort = RoiLeaderboard["sortBy"];
 export const ROI_TYPE_LABELS: Record<MarketType, string> = {
   winner: "Ganador / Moneyline", spread: "Hándicap / Spread", total: "Totales",
+  periodWinner: "Ganador por período", btts: "Ambos equipos marcan", correctScore: "Marcador exacto",
+  qualification: "Clasificación / Avance", corners: "Saques de esquina",
   props: "Estadísticas de jugadores", futures: "Campeonatos / Futuros", other: "Otros / Sin clasificar",
 };
 

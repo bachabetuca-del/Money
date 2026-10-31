@@ -30,3 +30,9 @@ The user wants to compare historical accuracy by observed transaction size, alon
 **Why:** The user asked whether the combined ranking identified the odds that win most consistently, although it ranks historical return. A profitable aggregate can have a low hit rate or depend on a small number of games.
 
 **How to apply:** Use execution-week cohorts, Monday–Sunday in New York, rather than moving past observations into their later settlement weeks. Empty weeks have unknown returns, not zero returns. Show under-minimum monetary subgroups but do not label them as leaders. Calendar-week results remain historical observations, not forward validation or proof of future profitability.
+
+Keep distinct soccer bet conditions separate when repairing market classification; do not relabel every unrecognized market as a match winner.
+
+**Why:** Both-teams-to-score, exact score, advancement and period winners have different settlement conditions. Mixing them into moneyline would make ROI comparisons misleading. League names such as “Championship” can also describe ordinary fixtures rather than season futures.
+
+**How to apply:** Prefer explicit market identity over broad title keywords. Reclassify saved observations on read, preserving their amounts and settlements. Truly ambiguous or non-match special events may remain in Other rather than receiving an invented match-bet category.

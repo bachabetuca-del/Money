@@ -7,6 +7,8 @@ const SPORTS: Record<string, string> = {
 
 export const ROI_MARKET_NAMES: Record<string, string> = {
   winner: 'Ganador', spread: 'Hándicap', total: 'Totales', props: 'Estadísticas de jugadores',
+  periodWinner: 'Ganador por período', btts: 'Ambos equipos marcan', correctScore: 'Marcador exacto',
+  qualification: 'Clasificación / Avance', corners: 'Saques de esquina',
   futures: 'Campeonatos / Futuros', other: 'Otros / Sin clasificar',
 };
 

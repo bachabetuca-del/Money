@@ -47,6 +47,20 @@ test('winRate sort moves the sorted marker to Aciertos', () => {
   assert.match(html, /porcentaje de aciertos/);
 });
 
+test('soccer categories render readable names instead of the other bucket', () => {
+  for (const [marketType, label] of [
+    ['btts', 'Ambos equipos marcan'], ['correctScore', 'Marcador exacto'],
+    ['qualification', 'Clasificación / Avance'], ['periodWinner', 'Ganador por período'],
+    ['corners', 'Saques de esquina'], ['props', 'Estadísticas de jugadores'],
+    ['futures', 'Campeonatos / Futuros'],
+  ]) {
+    const html = renderToStaticMarkup(<RoiCombinedTable rows={[{ ...row, sport: 'Soccer', marketType }]} />);
+    assert.ok(html.includes(label), marketType);
+    assert.ok(html.includes('Fútbol'));
+    assert.doesNotMatch(html, /Otros \/ Sin clasificar/);
+  }
+});
+
 test('negative ROI, YES, sample caveats and unknown odds remain explicit', () => {
   const html = renderToStaticMarkup(<RoiCombinedTable rows={[{
     ...row, side: 'yes', wins: 0, losses: 41, roiPct: -100, winRatePct: 0, sampleWarning: true, games: 1, oddsMin: null, oddsMax: null,

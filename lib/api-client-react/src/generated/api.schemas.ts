@@ -597,8 +597,13 @@ export type GetKalshiExplorerMarketType = typeof GetKalshiExplorerMarketType[key
 export const GetKalshiExplorerMarketType = {
   all: 'all',
   winner: 'winner',
+  periodWinner: 'periodWinner',
   spread: 'spread',
   total: 'total',
+  btts: 'btts',
+  correctScore: 'correctScore',
+  qualification: 'qualification',
+  corners: 'corners',
   props: 'props',
   futures: 'futures',
   other: 'other',

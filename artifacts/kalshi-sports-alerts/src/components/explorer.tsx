@@ -34,7 +34,10 @@ import type {
 const TZ = 'America/New_York';
 const MARKET_TYPES: [GetKalshiExplorerMarketType, string][] = [
   ['all', 'Todos los tipos'], ['winner', 'Ganador / Moneyline'],
+  ['periodWinner', 'Ganador por período'],
   ['spread', 'Hándicap / Spread'], ['total', 'Totales · Más / Menos'],
+  ['btts', 'Ambos equipos marcan'], ['correctScore', 'Marcador exacto'],
+  ['qualification', 'Clasificación / Avance'], ['corners', 'Saques de esquina'],
   ['props', 'Estadísticas de jugadores'], ['futures', 'Campeonatos / Futuros'],
   ['other', 'Otros / Sin clasificar'],
 ];

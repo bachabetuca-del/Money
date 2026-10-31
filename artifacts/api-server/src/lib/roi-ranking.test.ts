@@ -93,6 +93,25 @@ test("no settled data has null ROI, including recent; errors and pending are vis
   assert.equal(settled.rows[0].recentRoiPct, null);
 });
 
+test("soccer market reclassification preserves execution returns, sides and game counts", () => {
+  const input = [
+    row({ ticker: "KXEPLBTTS-26OCT30AB-YES", marketTitle: "Both Teams To Score", sport: "Soccer", profit: 100 }),
+    row({ ticker: "KXEPLBTTS-26OCT30AB-NO", marketTitle: "Both Teams To Score", sport: "Soccer", side: "no", wins: 0, profit: -100 }),
+    row({ ticker: "KXLALIGASCORE-26OCT30AB-00", marketTitle: "Final score Draw 0-0?", sport: "Soccer", profit: 400 }),
+    row({ ticker: "KXEFLCUPADVANCE-26OCT30AB-A", marketTitle: "A To Advance", sport: "Soccer", profit: 100 }),
+    row({ ticker: "KXSERIEA1H-26OCT30AB-A", marketTitle: "A wins 1st Half", sport: "Soccer", profit: 100 }),
+    row({ ticker: "KXEPLCORNERS-26OCT30AB-10", marketTitle: "10+ total corners", sport: "Soccer", profit: 100 }),
+  ];
+  const { rows, summary } = buildRoiRanking(input, "segment", 1, { now });
+  assert.deepEqual(new Set(rows.map(r => r.marketType)), new Set(["btts", "correctScore", "qualification", "periodWinner", "corners"]));
+  assert.equal(rows.length, 6, "YES and NO remain separate within the new market categories");
+  assert.equal(rows.reduce((sum, r) => sum + r.trades, 0), 6);
+  assert.equal(rows.reduce((sum, r) => sum + r.profit, 0), 700);
+  assert.equal(summary.games, 1);
+  assert.equal(summary.roiPct, 116.6667);
+  assert.deepEqual(summary, buildRoiRanking(input, "sport", 1, { now }).summary);
+});
+
 test("accuracy and ROI rank different money bands without changing the underlying results", () => {
   const input = [
     row({ ticker: "SMALL-WIN", gameId: "S1", moneyBand: "small", trades: 8, wins: 8, profit: 200 }),

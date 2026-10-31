@@ -61,8 +61,43 @@ test("market types classify series and retain ambiguous markets as other", () =>
   assert.equal(classify("UNKNOWN", "Over 2.5 goals"), "total");
   assert.equal(classify("UNKNOWN", "Player to record 10 assists"), "props");
   assert.equal(classify("UNKNOWN", "Real Madrid to win"), "winner");
-  assert.equal(classify("UNKNOWN", "Will both teams score?"), "other");
+  assert.equal(classify("UNKNOWN", "Will both teams score?"), "btts");
+  assert.equal(classify("UNKNOWN", "Will both teams receive red cards?"), "other");
   assert.equal(classify("UNKNOWN"), "other");
+});
+
+test("saved soccer series keep distinct bet types instead of sharing the unclassified ROI bucket", () => {
+  const classify = (ticker: string, marketTitle: string | null = null, eventTitle: string | null = null) =>
+    marketType({ ticker, marketTitle, eventTitle, sport: "Soccer" });
+  for (const [series, expected] of [
+    ["KXLALIGABTTS", "btts"], ["KXSERIEABTTS", "btts"], ["KXMLSBTTS", "btts"],
+    ["KXLALIGASCORE", "correctScore"], ["KXLIGUE1SCORE", "correctScore"],
+    ["KXEFLCUPADVANCE", "qualification"], ["KXSERIEA1H", "periodWinner"],
+    ["KXLIGUE12H", "periodWinner"], ["KXLALIGATCORNERS", "corners"], ["KXEPLCORNERS", "corners"],
+    ["KXLALIGAGOAL", "props"], ["KXBALLONDOR", "futures"], ["KXBALLONDORRANK", "futures"],
+    ["KXBALLONDORAWARD", "futures"],
+  ]) assert.equal(classify(`${series}-26OCT30MATCH-YES`), expected, series);
+  assert.equal(classify("KXUCL-27", "Will Atletico win the Champions League?", "Champions League Winner"), "futures");
+  assert.equal(classify("KXEPLTOP-27", null, "EPL Top 4 Finishers"), "futures");
+  assert.equal(classify("KXUCLLEADER-27", null, "Champions League Golden Boot"), "futures");
+  assert.equal(classify("UNKNOWN", "Ambos equipos marcan"), "btts");
+  assert.equal(classify("UNKNOWN", "Final score Draw 0-0?"), "correctScore");
+  assert.equal(classify("UNKNOWN", "Aston Villa To Advance"), "qualification");
+  assert.equal(classify("UNKNOWN", "Tie 1st Half"), "periodWinner");
+  assert.equal(classify("UNKNOWN", "Atletico: 7+ corners"), "corners");
+  assert.equal(classify("UNKNOWN", "Alexander Isak: 1+ goals", "Newcastle vs Chelsea: Goalscorer"), "props");
+  assert.equal(classify("KXMANAGERSOUT-27", "Will a manager leave?"), "other", "Do not invent a match-bet type");
+  assert.equal(classify("KXUNKNOWNFIRSTSCORE-27"), "other", "First scorer is not an exact final score");
+});
+
+test("Championship league fixtures are not mistaken for championship futures", () => {
+  for (const [suffix, expected] of [
+    ["GAME", "winner"], ["1H", "periodWinner"], ["SPREAD", "spread"],
+    ["TOTAL", "total"], ["BTTS", "btts"], ["SCORE", "correctScore"], ["ADVANCE", "qualification"],
+  ]) assert.equal(marketType({
+    ticker: `KXEFLCHAMPIONSHIP${suffix}-26OCT30MATCH-YES`, sport: "Soccer",
+    eventTitle: "English Championship: Blackburn vs Wrexham", marketTitle: "Blackburn wins",
+  }), expected);
 });
 
 test("explorer SQL preserves canonical outcome precedence and parameterizes direction", () => {
