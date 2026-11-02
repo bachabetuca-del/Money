@@ -3,7 +3,7 @@ name: Telegram push notifications
 description: Push-alert eligibility and the low-clutter exception to the single-message dashboard.
 ---
 
-Send push-enabled short notifications only for newly observed individual public sports trades strictly over $10,000. Exactly $10,000 remains eligible for the upper dashboard section but is silent for push alerts. Smaller trades, startup snapshots, historical imports, and graph/menu updates must not trigger push notifications. The selected dashboard section does not affect alert eligibility.
+Send push-enabled short notifications only for newly observed individual public sports trades strictly over $10,000 that also meet the historical ROI rule below. Exactly $10,000 remains eligible for the upper dashboard section but is silent for push alerts. Smaller trades, startup snapshots, historical imports, and graph/menu updates must not trigger push notifications. The selected dashboard section does not affect alert eligibility.
 
 **Why:** After the single-message dashboard was introduced, the user noticed notifications stopped and asked to restore notifications only for bets above $10k. Telegram edits do not generate new-message notifications, so updating the graph alone cannot meet that request.
 
@@ -14,6 +14,12 @@ Keep only the latest notification. Confirm and save delivery of a new notice bef
 **Why:** The user explicitly chose “Keep only the latest notification (recommended)” to restore phone alerts without restoring chat clutter.
 
 **How to apply:** Track notification delivery separately from graph publication and trade ingestion. A trade appearing in history or a graph does not prove a notification was sent. Preserve delivery retries and notification message identities through restarts; retry old-notice cleanup separately without resending confirmed deliveries. Telegram/phone mute settings remain outside the bot's control.
+
+The user wants Telegram notifications “de +7.0 ROI en adelante”: require comparable historical ROI of at least +7.0%, inclusive, in addition to the existing fresh-trade and amount conditions.
+
+**Why:** The user asked to restrict push notifications by historical performance, not to remove lower-ROI executions from charts or saved history.
+
+**How to apply:** Match the execution's own sport, bet type, YES/NO side and odds within the $10k+ cohort. Require the same verified-history sample minimum as the website comparison. Compare before display rounding; the website's green color threshold is not the alert cutoff. Missing or inadequate evidence is silent; a lookup failure must not bypass the filter. Show ROI and sample size in the notice without implying guaranteed returns. Do not replay filtered trades later just because their group's ROI improved.
 
 Use “a favor / en contra” as the public direction of an operation, not as a confirmed sale or closed position.
 

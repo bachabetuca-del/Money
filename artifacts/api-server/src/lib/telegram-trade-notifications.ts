@@ -1,9 +1,10 @@
 import { escapeHtml, betLabelEs, type MarketCardTrade } from "./telegram-market-card";
 import { directionLabel, directionMeaning, publicDirection, DIRECTION_NOTE } from "./telegram-trade-direction";
+import { qualifiesForNotificationRoi, type NotificationRoi } from "./telegram-notification-roi";
 
 export const NOTIFICATION_THRESHOLD = 10_000;
 export type NotificationTrade = MarketCardTrade & { tradeId: string; ticker: string; marketUrl: string };
-export type NotificationJob = NotificationTrade & { chatId: string; attempts: number };
+export type NotificationJob = NotificationTrade & { sport: string; chatId: string; attempts: number };
 type CleanupJob = { tradeId: string; messageId: number };
 
 /** Startup snapshots and historical imports must never become fresh alerts. */
@@ -27,10 +28,11 @@ export interface NotificationStore {
 export interface NotificationApi {
   request<T>(method: string, body: Record<string, unknown>): Promise<{ result?: T }>;
   context(ticker: string): Promise<{ eventTitle: string; marketTitle: string }>;
+  roi(trade: NotificationJob): Promise<NotificationRoi | null>;
   active?(ticker: string): Promise<boolean>;
 }
 
-export function notificationText(trade: NotificationTrade) {
+export function notificationText(trade: NotificationTrade, roi?: NotificationRoi) {
   const amount = trade.notional.toLocaleString("en-US", { style: "currency", currency: "USD" });
   const direction = publicDirection(trade.outcomeSide, undefined, trade.bookSide);
   const side = directionLabel(direction);
@@ -44,6 +46,11 @@ export function notificationText(trade: NotificationTrade) {
     `${side}${direction === "unknown" ? " · " : " «"}${escapeHtml(betLabelEs(trade.marketTitle ?? "Apuesta no disponible"))}${direction === "unknown" ? "" : "»"}`,
     direction === "unknown" ? "" : `<b>${directionMeaning(direction)}</b>`,
     `${contracts} contratos a ${price}¢`,
+    ...(roi ? [
+      `<b>ROI histórico comparable (${direction === "yes" ? "SÍ" : "NO"}): +${roi.roiPct.toLocaleString("es-ES", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}%</b>`,
+      `${roi.games.toLocaleString("es-ES")} partidos · ${roi.trades.toLocaleString("es-ES")} operaciones verificadas`,
+      "<i>Simulación antes de comisiones; no garantiza ganancias.</i>",
+    ] : []),
     time,
     `<i>${DIRECTION_NOTE}</i>`,
   ].filter(Boolean).join("\n");
@@ -55,7 +62,7 @@ export class TelegramTradeNotifications {
   constructor(
     private store: NotificationStore, private api: NotificationApi,
     private now: () => Date = () => new Date(),
-    private log: (event: "sent" | "failed" | "cleanup-failed", detail: string) => void = () => undefined,
+    private log: (event: "sent" | "filtered" | "failed" | "cleanup-failed", detail: string) => void = () => undefined,
   ) {}
 
   async tick(settings: { enabled: boolean; chatId: string | null }) {
@@ -63,21 +70,31 @@ export class TelegramTradeNotifications {
     this.busy = true;
     const chatId = settings.chatId;
     try {
-      const job = await this.store.next(chatId, this.now());
-      if (job) {
+      // Retire a bounded batch of filtered jobs, so they cannot block a qualifying
+      // execution behind them. Still send at most one notification per tick.
+      for (let checked = 0; checked < 10; checked++) {
+        const job = await this.store.next(chatId, this.now());
+        if (!job) break;
         try {
           if (!(job.notional > NOTIFICATION_THRESHOLD)) throw new Error("Non-qualifying trade in notification queue.");
           if (this.api.active && !await this.api.active(job.ticker)) {
             await this.store.skipped(job, this.now());
-          } else {
+            continue;
+          }
           const context = await this.api.context(job.ticker);
           if (!context.eventTitle || !context.marketTitle ||
             context.eventTitle.includes(job.ticker) || context.marketTitle.includes(job.ticker)) {
             throw new Error("Readable game and bet details are not available yet.");
           }
+          const roi = await this.api.roi({ ...job, ...context });
+          if (!qualifiesForNotificationRoi(roi)) {
+            await this.store.skipped(job, this.now());
+            this.log("filtered", job.tradeId);
+            continue;
+          }
           const result = await this.api.request<{ message_id: number }>("sendMessage", {
             chat_id: chatId,
-            text: notificationText({ ...job, ...context }),
+            text: notificationText({ ...job, ...context }, roi),
             parse_mode: "HTML",
             disable_notification: false,
             link_preview_options: { is_disabled: true },
@@ -86,13 +103,14 @@ export class TelegramTradeNotifications {
           if (!result.result?.message_id) throw new Error("Telegram did not confirm the notification message.");
           await this.store.sent(job, result.result.message_id, this.now());
           this.log("sent", job.tradeId);
-          }
+          break;
         } catch (error) {
           const message = error instanceof Error ? error.message : "Notification delivery failed.";
           const requestedDelay = Number(message.match(/retry after (\d+)/i)?.[1] ?? 0) * 1000;
           const delay = Math.max(requestedDelay, 15_000 * 2 ** Math.min(job.attempts, 5));
           await this.store.failed(chatId, job.tradeId, message, new Date(this.now().getTime() + delay));
           this.log("failed", message);
+          break;
         }
       }
       const keep = await this.store.latestMessageId(chatId);

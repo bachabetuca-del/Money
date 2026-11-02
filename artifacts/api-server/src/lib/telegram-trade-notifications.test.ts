@@ -4,12 +4,14 @@ import {
   liveNotificationTrades, notificationText, TelegramTradeNotifications,
   type NotificationApi, type NotificationJob, type NotificationStore,
 } from "./telegram-trade-notifications";
+import { buildNotificationRoiLookup, type NotificationRoi } from "./telegram-notification-roi";
+import type { RoiRollup } from "./roi-ranking";
 
 const clock = new Date("2026-10-22T21:00:00Z");
 const settings = { enabled: true, chatId: "notification-test" };
 const sample = (tradeId = "trade-1", notional = 15000): NotificationJob => ({
   tradeId, chatId: settings.chatId, attempts: 0,
-  ticker: "KXNFLGAME-TEST-CHI", eventTitle: "New England vs Chicago",
+  ticker: "KXNFLGAME-TEST-CHI", sport: "Football", eventTitle: "New England vs Chicago",
   marketTitle: "Chicago wins", marketUrl: "https://kalshi.com/markets/kxnflgame/example",
   notional, count: notional / 0.6, price: 0.6, outcomeSide: "yes",
   createdTime: clock,
@@ -58,6 +60,14 @@ class FakeNotificationsApi implements NotificationApi {
   failSend: string | null = null;
   failDelete = false;
   failContext = false;
+  failRoi = false;
+  roiResult: NotificationRoi | null = { roiPct: 7, games: 10, trades: 30 };
+  roiTrades: NotificationJob[] = [];
+  async roi(trade: NotificationJob) {
+    this.roiTrades.push(trade);
+    if (this.failRoi) throw new Error("Historical ROI temporarily unavailable.");
+    return this.roiResult;
+  }
   async context() {
     if (this.failContext) throw new Error("Market metadata temporarily unavailable.");
     return { eventTitle: "New England & Chicago", marketTitle: "Chicago wins" };
@@ -105,6 +115,9 @@ test("a new qualifying trade sends a push-enabled text alert, not another graph"
   assert.match(String(body.text), /\$15,000\.00/);
   assert.match(String(body.text), /New England &amp; Chicago/);
   assert.match(String(body.text), /A favor de «Chicago gana»/);
+  assert.match(String(body.text), /ROI histórico comparable \(SÍ\): \+7,00%/);
+  assert.match(String(body.text), /10 partidos · 30 operaciones verificadas/);
+  assert.match(String(body.text), /antes de comisiones; no garantiza ganancias/);
   assert.doesNotMatch(String(body.text), /KXNFLGAME/);
   assert.deepEqual(body.link_preview_options, { is_disabled: true });
   assert.match(JSON.stringify(body.reply_markup), /Abrir en Kalshi/);
@@ -215,6 +228,7 @@ test("a queued trade from a now-finished game is retired without notification or
   store.add(sample());
   const worker = new TelegramTradeNotifications(store, {
     request: api.request.bind(api), context: api.context.bind(api), active: async () => false,
+    roi: api.roi.bind(api),
   }, now);
   await worker.tick(settings);
   await worker.tick(settings);
@@ -229,4 +243,100 @@ test("notification wording escapes names and distinguishes against/unknown direc
   assert.match(notificationText(row), /En contra de «Chicago gana»/);
   assert.match(notificationText({ ...row, outcomeSide: "unknown" }), /Dirección no disponible/);
   assert.match(notificationText(row), /no identifica al operador ni confirma una venta o cierre/);
+});
+
+test("ROI +7% is inclusive; lower or unavailable ROI and insufficient samples never notify", async () => {
+  const base = { games: 10, trades: 30 };
+  for (const [roi, allowed] of [
+    [{ ...base, roiPct: 6.99 }, false],
+    [{ ...base, roiPct: 6.99999999 }, false],
+    [{ ...base, roiPct: 7 }, true],
+    [{ ...base, roiPct: 7.01 }, true],
+    [{ ...base, roiPct: -10 }, false],
+    [{ ...base, roiPct: 0 }, false],
+    [{ ...base, roiPct: NaN }, false],
+    [{ ...base, roiPct: Infinity }, false],
+    [{ ...base, roiPct: 80, games: 9 }, false],
+    [{ ...base, roiPct: 80, trades: 29 }, false],
+    [null, false],
+  ] as const) {
+    const { store, api, worker } = setup();
+    api.roiResult = roi;
+    store.add(sample());
+    await worker.tick(settings);
+    assert.equal(api.calls.some(call => call.method === "sendMessage"), allowed, JSON.stringify(roi));
+    assert.equal(Boolean(store.row(settings.chatId, "trade-1").skippedAt), !allowed);
+  }
+});
+
+test("filtered trades keep the last notice and are not replayed when ROI later improves or the worker restarts", async () => {
+  const { store, api, worker, now } = setup();
+  store.add(sample());
+  await worker.tick(settings);
+  api.roiResult = { roiPct: 6.9, trades: 30, games: 10 };
+  store.add(sample("filtered"));
+  await worker.tick(settings);
+  api.roiResult = { roiPct: 20, trades: 30, games: 10 };
+  await new TelegramTradeNotifications(store, api, now).tick(settings);
+  assert.deepEqual(api.calls.map(call => call.method), ["sendMessage"]);
+  assert.equal(store.row(settings.chatId, "trade-1").removedAt, undefined);
+  assert.ok(store.row(settings.chatId, "filtered").skippedAt);
+  assert.equal(store.rows.size, 2, "Filtering must not delete saved trades or the previous notice");
+});
+
+test("ROI lookup errors fail closed and retry without removing the last notice", async () => {
+  const { store, api, worker, advance } = setup();
+  store.add(sample());
+  await worker.tick(settings);
+  store.add(sample("retry"));
+  api.failRoi = true;
+  await worker.tick(settings);
+  assert.deepEqual(api.calls.map(call => call.method), ["sendMessage"]);
+  assert.equal(store.row(settings.chatId, "retry").skippedAt, undefined);
+  assert.equal(store.row(settings.chatId, "retry").sentAt, undefined);
+  assert.equal(store.row(settings.chatId, "trade-1").removedAt, undefined);
+  assert.match(store.row(settings.chatId, "retry").error!, /ROI/);
+  api.failRoi = false;
+  advance(15000);
+  await worker.tick(settings);
+  assert.deepEqual(api.calls.map(call => call.method), ["sendMessage", "sendMessage", "deleteMessage"]);
+});
+
+test("checks the actual NO execution and enriched market, never the opposite side's better ROI", async () => {
+  const { store, api, worker } = setup();
+  const history: RoiRollup[] = Array.from({ length: 10 }, (_, i) => ({
+    ticker: `KXNFLGAME-HIST${i}-CHI`, sport: "Football", eventTitle: "A vs B", marketTitle: "A wins",
+    gameId: `game-${i}`, marketUrl: "", bucket: 6, side: "yes", moneyBand: "large",
+    weekStart: "2026-10-19", category: "settled", historyVerified: true, trades: 3, wins: 2,
+    profit: 60, recentProfit: 60, recentTrades: 3,
+    firstAt: clock.toISOString(), lastAt: clock.toISOString(), checkedAt: clock.toISOString(), error: false,
+  }));
+  const lookup = buildNotificationRoiLookup(history);
+  api.roi = async trade => { api.roiTrades.push(trade); return lookup(trade); };
+  store.add({ ...sample("no"), outcomeSide: "no", price: .4, count: 37500 });
+  store.add(sample("yes"));
+  await worker.tick(settings);
+  assert.ok(store.row(settings.chatId, "no").skippedAt);
+  assert.ok(store.row(settings.chatId, "yes").sentAt, "Filtered jobs do not block eligible jobs behind them");
+  assert.equal(api.calls.filter(call => call.method === "sendMessage").length, 1);
+  assert.equal(api.roiTrades[0].price, .4);
+  assert.equal(api.roiTrades[0].outcomeSide, "no");
+  assert.equal(api.roiTrades[0].eventTitle, "New England & Chicago");
+  assert.match(String(api.calls[0].body.text), /ROI histórico comparable \(SÍ\): \+20,00%/);
+});
+
+test("filter draining is bounded and still sends at most one notice per tick", async () => {
+  const { store, api, worker } = setup();
+  api.roiResult = null;
+  for (let i = 0; i < 12; i++) store.add(sample(`filtered-${i}`));
+  await worker.tick(settings);
+  assert.equal(api.roiTrades.length, 10);
+  assert.equal(api.calls.length, 0);
+  await worker.tick(settings);
+  assert.equal(api.roiTrades.length, 12);
+  api.roiResult = { roiPct: 7, games: 10, trades: 30 };
+  store.add(sample("eligible-1"));
+  store.add(sample("eligible-2"));
+  await worker.tick(settings);
+  assert.equal(api.calls.filter(call => call.method === "sendMessage").length, 1);
 });

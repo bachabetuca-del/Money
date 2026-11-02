@@ -13,6 +13,7 @@ import { shouldCaptureTrade } from "./kalshi-trade-bands";
 import { MarketHistory, type HistoryJob } from "./kalshi-market-history";
 import { marketHistoryStore } from "./kalshi-market-history-store";
 import { liveNotificationTrades, TelegramTradeNotifications } from "./telegram-trade-notifications";
+import { getTradeNotificationRoi } from "./kalshi-notification-roi";
 import { enqueueLiveNotifications, tradeNotificationStore } from "./telegram-trade-notification-store";
 import { GameStatusMonitor } from "./kalshi-game-status";
 import { KalshiGameStatusSource, parseLiveDataBatch } from "./kalshi-game-status-source";
@@ -191,8 +192,10 @@ const telegramDashboard = new TelegramDashboard(telegramDashboardStore, {
 });
 const tradeNotifications = new TelegramTradeNotifications(tradeNotificationStore, {
   request: telegramRequest, context: getTradeContext, active: canMonitorMarket,
+  roi: getTradeNotificationRoi,
 }, () => new Date(), (event, detail) => {
   if (event === "sent") logger.info({ tradeId: detail }, "Telegram trade notification delivered");
+  else if (event === "filtered") logger.debug({ tradeId: detail }, "Telegram notice skipped: historical ROI or sample below minimum");
   else logger.warn({ error: detail }, event === "failed" ? "Telegram notification will retry" : "Previous notification cleanup will retry");
 });
 

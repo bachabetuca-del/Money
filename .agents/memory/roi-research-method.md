@@ -41,4 +41,4 @@ The user requested green/best, yellow/medium and red/bad ROI indicators in Anál
 
 **Why:** An unresolved market has no final ROI. Borrowing a broad sport average, the opposite side's better return, or a different odds/amount band could make an unrelated history appear favorable.
 
-**How to apply:** Keep SÍ/NO separate and require an exact comparison group. Use neutral gray for inadequate evidence or unavailable data, label the visual thresholds explicitly, and show the observed reference price's date rather than presenting it as a live quote. The comparison loads independently so it cannot block live exploration or alter Telegram.
+**How to apply:** Keep SÍ/NO separate and require an exact comparison group. Use neutral gray for inadequate evidence or unavailable data, label the visual thresholds explicitly, and show the observed reference price's date rather than presenting it as a live quote. Website comparisons load independently so they cannot block live exploration. The user separately requested a Telegram ROI filter; follow the notification rules without changing the website's color thresholds.

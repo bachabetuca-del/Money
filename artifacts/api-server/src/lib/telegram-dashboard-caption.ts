@@ -1,5 +1,6 @@
 import type { TradeRange } from "./kalshi-trade-bands";
 import { escapeHtml, marketCardCaption, type MarketCardTrade } from "./telegram-market-card";
+import { NOTIFICATION_MIN_ROI_PCT } from "./telegram-notification-roi";
 
 export function spanishRange(range: TradeRange) {
   const amount = (value: number) => `$${value.toLocaleString("en-US")}`;
@@ -64,6 +65,6 @@ export function dashboardChartCaption(options: CaptionOptions) {
     lines.push("Recientes: ejecutadas en los últimos 15 minutos.");
     lines.push(enabled ? "Se actualiza aquí cada 15 segundos." : "Seguimiento pausado; se muestran datos guardados.");
   }
-  lines.push("Avisos: operaciones nuevas > $10,000; se conserva solo el último.");
+  lines.push(`Avisos: nuevas > $10,000 y ROI histórico ≥ +${NOTIFICATION_MIN_ROI_PCT.toFixed(1).replace(".", ",")}%; solo el último.`);
   return lines.join("\n");
 }
