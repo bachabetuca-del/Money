@@ -2,9 +2,14 @@ import { escapeHtml, betLabelEs, type MarketCardTrade } from "./telegram-market-
 import { directionLabel, directionMeaning, publicDirection, DIRECTION_NOTE } from "./telegram-trade-direction";
 import { notificationRoiBasis, qualifiesForNotificationRoi, type NotificationRoi, type RoiBasis } from "./telegram-notification-roi";
 import { shouldCaptureTrade } from "./kalshi-trade-bands";
+import type { SignalEvidence } from "@workspace/api-zod";
+import { frozenNotification } from "./signal-evaluation";
 
 export type NotificationTrade = MarketCardTrade & { tradeId: string; ticker: string; marketUrl: string };
-export type NotificationJob = NotificationTrade & { sport: string; chatId: string; attempts: number };
+export type NotificationJob = NotificationTrade & {
+  sport: string; chatId: string; attempts: number; queuedAt?: Date;
+  evaluationId?: number | null; evidence?: SignalEvidence;
+};
 type CleanupJob = { tradeId: string; messageId: number };
 
 /** Startup snapshots and historical imports must never become fresh alerts. */
@@ -18,6 +23,7 @@ export function liveNotificationTrades<T extends { notional: number; createdTime
 
 export interface NotificationStore {
   next(chatId: string, now: Date): Promise<NotificationJob | undefined>;
+  capture(job: NotificationJob, roi: NotificationRoi, now: Date): Promise<SignalEvidence | null>;
   sent(job: NotificationJob, messageId: number, now: Date): Promise<void>;
   skipped(job: NotificationJob, now: Date): Promise<void>;
   failed(chatId: string, tradeId: string, error: string, retryAt: Date): Promise<void>;
@@ -81,29 +87,44 @@ export class TelegramTradeNotifications {
         const job = await this.store.next(chatId, this.now());
         if (!job) break;
         try {
-          if (!shouldCaptureTrade(job.notional)) throw new Error("Non-qualifying trade in notification queue.");
-          if (this.api.active && !await this.api.active(job.ticker)) {
+          let frozen = job.evidence ? frozenNotification(job.evidence, job) : null;
+          let trade = frozen?.trade ?? job;
+          if (!shouldCaptureTrade(trade.notional)) throw new Error("Non-qualifying trade in notification queue.");
+          if (this.api.active && !await this.api.active(trade.ticker)) {
             await this.store.skipped(job, this.now());
             continue;
           }
-          const context = await this.api.context(job.ticker);
-          if (!context.eventTitle || !context.marketTitle ||
-            context.eventTitle.includes(job.ticker) || context.marketTitle.includes(job.ticker)) {
-            throw new Error("Readable game and bet details are not available yet.");
-          }
-          const roi = await this.api.roi({ ...job, ...context }, basis);
-          if (!qualifiesForNotificationRoi(roi) || roi.basis !== basis) {
-            await this.store.skipped(job, this.now());
-            this.log("filtered", job.tradeId);
-            continue;
+          let roi = frozen?.roi;
+          if (!frozen) {
+            const context = await this.api.context(trade.ticker);
+            if (!context.eventTitle || !context.marketTitle ||
+              context.eventTitle.includes(trade.ticker) || context.marketTitle.includes(trade.ticker)) {
+              throw new Error("Readable game and bet details are not available yet.");
+            }
+            trade = { ...trade, ...context };
+            const currentRoi = await this.api.roi(trade, basis);
+            if (!qualifiesForNotificationRoi(currentRoi) || currentRoi.basis !== basis) {
+              await this.store.skipped(job, this.now());
+              this.log("filtered", job.tradeId);
+              continue;
+            }
+            roi = currentRoi;
+            if (job.evaluationId != null) {
+              const evidence = await this.store.capture(trade, roi, this.now());
+              // A final settlement or stale eligibility found before capture
+              // cannot be turned into a forward signal or delivered as one.
+              if (!evidence) { await this.store.skipped(job, this.now()); continue; }
+              frozen = frozenNotification(evidence, job);
+              trade = frozen.trade; roi = frozen.roi;
+            }
           }
           const result = await this.api.request<{ message_id: number }>("sendMessage", {
             chat_id: chatId,
-            text: notificationText({ ...job, ...context }, roi),
+            text: notificationText(trade, roi),
             parse_mode: "HTML",
             disable_notification: false,
             link_preview_options: { is_disabled: true },
-            reply_markup: { inline_keyboard: [[{ text: "Abrir en Kalshi", url: job.marketUrl }]] },
+            reply_markup: { inline_keyboard: [[{ text: "Abrir en Kalshi", url: trade.marketUrl }]] },
           });
           if (!result.result?.message_id) throw new Error("Telegram did not confirm the notification message.");
           await this.store.sent(job, result.result.message_id, this.now());

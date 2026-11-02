@@ -15,6 +15,31 @@ tags:
   - name: kalshi
     description: Kalshi sports trade monitoring and Telegram alerts
 paths:
+  /kalshi/signals:
+    get:
+      operationId: getKalshiSignals
+      tags: [kalshi]
+      summary: Forward-only evaluation of frozen new alert evidence and later official settlements
+      parameters:
+        - in: query
+          name: page
+          schema: { type: integer, minimum: 1, maximum: 100000, default: 1 }
+      responses:
+        "200":
+          description: Read-only simulated outcomes; never imports history or activates workers
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/SignalEvaluation" }
+        "400":
+          description: Invalid page
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ApiError" }
+        "503":
+          description: Evaluation temporarily unavailable; evidence remains saved
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ApiError" }
   /kalshi/explorer/roi:
     get:
       operationId: getKalshiExplorerRoi
@@ -360,6 +385,131 @@ components:
           schema:
             $ref: "#/components/schemas/ApiError"
   schemas:
+    SignalRule:
+      type: object
+      required: [version, basis, minimumRoiPct, minimumGames, minimumTrades, coverage, window, sport, marketType, side, moneyBand, amountMin, amountMax, amountMinInclusive, amountMaxInclusive, oddsMin, oddsMax, stakeUsd]
+      description: Immutable selection rule, including exact boundaries, at the first eligible delivery attempt.
+      properties:
+        version: { type: string }
+        basis: { $ref: "#/components/schemas/RoiBasis" }
+        minimumRoiPct: { type: number }
+        minimumGames: { type: integer }
+        minimumTrades: { type: integer }
+        coverage: { type: string, enum: [verified] }
+        window: { type: string, enum: [all] }
+        sport: { type: string }
+        marketType: { type: string }
+        side: { type: string, enum: [yes, no] }
+        moneyBand: { type: string, enum: [small, medium, large] }
+        amountMin: { type: number }
+        amountMax: { type: [number, "null"] }
+        amountMinInclusive: { type: boolean }
+        amountMaxInclusive: { type: boolean }
+        oddsMin: { type: number }
+        oddsMax: { type: number }
+        stakeUsd: { type: number, exclusiveMinimum: 0 }
+    SignalEvidence:
+      type: object
+      required: [tradeId, ticker, gameId, gameIdentity, eventTitle, marketTitle, marketUrl, observedAt, queuedAt, capturedAt, price, notional, contracts, rule, historyAsOf, historicalRoiPct, historicalGrossRoiPct, historicalNetRoiPct, historicalGames, historicalTrades, feeModel, feeAssumptions, feeType, feeMultiplier, entryFeeUsd]
+      description: Frozen before sending. ISO timestamp strings are persisted verbatim, not recomputed from current history, trade corrections or fee catalogs.
+      properties:
+        tradeId: { type: string }
+        ticker: { type: string }
+        gameId: { type: string }
+        gameIdentity: { type: string, enum: [milestone, event, ticker] }
+        eventTitle: { type: string }
+        marketTitle: { type: string }
+        marketUrl: { type: string }
+        observedAt: { type: string }
+        queuedAt: { type: string }
+        capturedAt: { type: string }
+        price: { type: number, exclusiveMinimum: 0, maximum: 1 }
+        notional: { type: number, minimum: 1000 }
+        contracts: { type: number, exclusiveMinimum: 0 }
+        rule: { $ref: "#/components/schemas/SignalRule" }
+        historyAsOf: { type: string }
+        historicalRoiPct: { type: number }
+        historicalGrossRoiPct: { type: number }
+        historicalNetRoiPct: { type: [number, "null"] }
+        historicalGames: { type: integer, minimum: 1 }
+        historicalTrades: { type: integer, minimum: 1 }
+        feeModel: { $ref: "#/components/schemas/RoiFeeModel" }
+        feeAssumptions: { type: string }
+        feeType: { type: [string, "null"] }
+        feeMultiplier: { type: [number, "null"] }
+        entryFeeUsd: { type: [number, "null"], minimum: 0 }
+    SignalOutcome:
+      type: object
+      required: [evidence, delivery, sentAt, attempts, status, exclusionReason, officialResult, settlementCheckedAt, settlementError, grossProfit, grossRoiPct, netProfit, netRoiPct]
+      properties:
+        evidence: { $ref: "#/components/schemas/SignalEvidence" }
+        delivery: { type: string, enum: [sent, pending, skipped] }
+        sentAt: { type: [string, "null"] }
+        attempts: { type: integer }
+        status: { type: string, enum: [not_sent, pending, settled, excluded] }
+        exclusionReason: { type: [string, "null"], enum: [settled_before_alert, unsupported_settlement, null] }
+        officialResult: { type: [string, "null"] }
+        settlementCheckedAt: { type: [string, "null"] }
+        settlementError: { type: [string, "null"] }
+        grossProfit: { type: [number, "null"] }
+        grossRoiPct: { type: [number, "null"] }
+        netProfit: { type: [number, "null"] }
+        netRoiPct: { type: [number, "null"] }
+    SignalPerformance:
+      type: object
+      required: [registered, delivered, awaitingDelivery, skipped, settled, pending, excluded, games, settledGames, wins, losses, grossProfit, grossRoiPct, invested, netProfit, netRoiPct, netOutlay, feeCovered, feeMissing]
+      description: Only confirmed deliveries followed by official final binary settlement enter returns. Net uses exactly the same observations as gross or remains unknown.
+      properties:
+        registered: { type: integer }
+        delivered: { type: integer }
+        awaitingDelivery: { type: integer }
+        skipped: { type: integer }
+        settled: { type: integer }
+        pending: { type: integer }
+        excluded: { type: integer }
+        games: { type: integer }
+        settledGames: { type: integer }
+        wins: { type: integer }
+        losses: { type: integer }
+        grossProfit: { type: [number, "null"] }
+        grossRoiPct: { type: [number, "null"] }
+        invested: { type: number }
+        netProfit: { type: [number, "null"] }
+        netRoiPct: { type: [number, "null"] }
+        netOutlay: { type: [number, "null"] }
+        feeCovered: { type: integer }
+        feeMissing: { type: integer }
+    SignalCohort:
+      type: object
+      required: [ruleVersion, basis, feeModelVersion, performance]
+      properties:
+        ruleVersion: { type: string }
+        basis: { $ref: "#/components/schemas/RoiBasis" }
+        feeModelVersion: { type: string }
+        performance: { $ref: "#/components/schemas/SignalPerformance" }
+    SignalEvaluation:
+      type: object
+      required: [generatedAt, activatedAt, recording, firstSignalAt, lastSignalAt, lastSettlementCheckAt, summary, cohorts, limitations, rows, page, pageSize, totalPages]
+      properties:
+        generatedAt: { type: string }
+        activatedAt: { type: [string, "null"] }
+        recording: { type: string, enum: [not_started, active, paused] }
+        firstSignalAt: { type: [string, "null"] }
+        lastSignalAt: { type: [string, "null"] }
+        lastSettlementCheckAt: { type: [string, "null"] }
+        summary: { $ref: "#/components/schemas/SignalPerformance" }
+        cohorts:
+          type: array
+          items: { $ref: "#/components/schemas/SignalCohort" }
+        limitations:
+          type: array
+          items: { type: string }
+        rows:
+          type: array
+          items: { $ref: "#/components/schemas/SignalOutcome" }
+        page: { type: integer }
+        pageSize: { type: integer }
+        totalPages: { type: integer }
     RoiBasis:
       type: string
       enum: [gross, net]

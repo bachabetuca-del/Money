@@ -5,6 +5,37 @@
  * API specification
  * OpenAPI spec version: 0.1.0
  */
+export type SignalRuleCoverage = typeof SignalRuleCoverage[keyof typeof SignalRuleCoverage];
+
+
+export const SignalRuleCoverage = {
+  verified: 'verified',
+} as const;
+
+export type SignalRuleWindow = typeof SignalRuleWindow[keyof typeof SignalRuleWindow];
+
+
+export const SignalRuleWindow = {
+  all: 'all',
+} as const;
+
+export type SignalRuleSide = typeof SignalRuleSide[keyof typeof SignalRuleSide];
+
+
+export const SignalRuleSide = {
+  yes: 'yes',
+  no: 'no',
+} as const;
+
+export type SignalRuleMoneyBand = typeof SignalRuleMoneyBand[keyof typeof SignalRuleMoneyBand];
+
+
+export const SignalRuleMoneyBand = {
+  small: 'small',
+  medium: 'medium',
+  large: 'large',
+} as const;
+
 /**
  * Explicit Telegram filter basis. Existing settings remain gross; an omitted update never changes the saved choice.
  */
@@ -17,22 +48,39 @@ export const RoiBasis = {
 } as const;
 
 /**
- * Same observations and $100 entry notional as gross ROI. Net return divides profit minus estimated entry fees by notional plus fees. All financial values are null unless every observation has a supported, fresh fee rule; missing costs are never zero.
+ * Immutable selection rule, including exact boundaries, at the first eligible delivery attempt.
  */
-export interface RoiNetEstimate {
+export interface SignalRule {
+  version: string;
+  basis: RoiBasis;
+  minimumRoiPct: number;
+  minimumGames: number;
+  minimumTrades: number;
+  coverage: SignalRuleCoverage;
+  window: SignalRuleWindow;
+  sport: string;
+  marketType: string;
+  side: SignalRuleSide;
+  moneyBand: SignalRuleMoneyBand;
+  amountMin: number;
   /** @nullable */
-  roiPct: number | null;
-  /** @nullable */
-  profit: number | null;
-  /** @nullable */
-  fees: number | null;
-  /** @nullable */
-  cashOutlay: number | null;
-  /** @minimum 0 */
-  coveredTrades: number;
-  /** @minimum 0 */
-  missingTrades: number;
+  amountMax: number | null;
+  amountMinInclusive: boolean;
+  amountMaxInclusive: boolean;
+  oddsMin: number;
+  oddsMax: number;
+  /** @exclusiveMinimum 0 */
+  stakeUsd: number;
 }
+
+export type SignalEvidenceGameIdentity = typeof SignalEvidenceGameIdentity[keyof typeof SignalEvidenceGameIdentity];
+
+
+export const SignalEvidenceGameIdentity = {
+  milestone: 'milestone',
+  event: 'event',
+  ticker: 'ticker',
+} as const;
 
 export type RoiFeeModelStatus = typeof RoiFeeModelStatus[keyof typeof RoiFeeModelStatus];
 
@@ -55,6 +103,191 @@ export interface RoiFeeModel {
   validUntil: string | null;
   status: RoiFeeModelStatus;
   sources: string[];
+}
+
+/**
+ * Frozen before sending. ISO timestamp strings are persisted verbatim, not recomputed from current history, trade corrections or fee catalogs.
+ */
+export interface SignalEvidence {
+  tradeId: string;
+  ticker: string;
+  gameId: string;
+  gameIdentity: SignalEvidenceGameIdentity;
+  eventTitle: string;
+  marketTitle: string;
+  marketUrl: string;
+  observedAt: string;
+  queuedAt: string;
+  capturedAt: string;
+  /**
+     * @maximum 1
+     * @exclusiveMinimum 0
+     */
+  price: number;
+  /** @minimum 1000 */
+  notional: number;
+  /** @exclusiveMinimum 0 */
+  contracts: number;
+  rule: SignalRule;
+  historyAsOf: string;
+  historicalRoiPct: number;
+  historicalGrossRoiPct: number;
+  /** @nullable */
+  historicalNetRoiPct: number | null;
+  /** @minimum 1 */
+  historicalGames: number;
+  /** @minimum 1 */
+  historicalTrades: number;
+  feeModel: RoiFeeModel;
+  feeAssumptions: string;
+  /** @nullable */
+  feeType: string | null;
+  /** @nullable */
+  feeMultiplier: number | null;
+  /**
+     * @minimum 0
+     * @nullable
+     */
+  entryFeeUsd: number | null;
+}
+
+export type SignalOutcomeDelivery = typeof SignalOutcomeDelivery[keyof typeof SignalOutcomeDelivery];
+
+
+export const SignalOutcomeDelivery = {
+  sent: 'sent',
+  pending: 'pending',
+  skipped: 'skipped',
+} as const;
+
+export type SignalOutcomeStatus = typeof SignalOutcomeStatus[keyof typeof SignalOutcomeStatus];
+
+
+export const SignalOutcomeStatus = {
+  not_sent: 'not_sent',
+  pending: 'pending',
+  settled: 'settled',
+  excluded: 'excluded',
+} as const;
+
+/**
+ * @nullable
+ */
+export type SignalOutcomeExclusionReason = typeof SignalOutcomeExclusionReason[keyof typeof SignalOutcomeExclusionReason] | null;
+
+
+export const SignalOutcomeExclusionReason = {
+  settled_before_alert: 'settled_before_alert',
+  unsupported_settlement: 'unsupported_settlement',
+} as const;
+
+export interface SignalOutcome {
+  evidence: SignalEvidence;
+  delivery: SignalOutcomeDelivery;
+  /** @nullable */
+  sentAt: string | null;
+  attempts: number;
+  status: SignalOutcomeStatus;
+  /** @nullable */
+  exclusionReason: SignalOutcomeExclusionReason;
+  /** @nullable */
+  officialResult: string | null;
+  /** @nullable */
+  settlementCheckedAt: string | null;
+  /** @nullable */
+  settlementError: string | null;
+  /** @nullable */
+  grossProfit: number | null;
+  /** @nullable */
+  grossRoiPct: number | null;
+  /** @nullable */
+  netProfit: number | null;
+  /** @nullable */
+  netRoiPct: number | null;
+}
+
+/**
+ * Only confirmed deliveries followed by official final binary settlement enter returns. Net uses exactly the same observations as gross or remains unknown.
+ */
+export interface SignalPerformance {
+  registered: number;
+  delivered: number;
+  awaitingDelivery: number;
+  skipped: number;
+  settled: number;
+  pending: number;
+  excluded: number;
+  games: number;
+  settledGames: number;
+  wins: number;
+  losses: number;
+  /** @nullable */
+  grossProfit: number | null;
+  /** @nullable */
+  grossRoiPct: number | null;
+  invested: number;
+  /** @nullable */
+  netProfit: number | null;
+  /** @nullable */
+  netRoiPct: number | null;
+  /** @nullable */
+  netOutlay: number | null;
+  feeCovered: number;
+  feeMissing: number;
+}
+
+export interface SignalCohort {
+  ruleVersion: string;
+  basis: RoiBasis;
+  feeModelVersion: string;
+  performance: SignalPerformance;
+}
+
+export type SignalEvaluationRecording = typeof SignalEvaluationRecording[keyof typeof SignalEvaluationRecording];
+
+
+export const SignalEvaluationRecording = {
+  not_started: 'not_started',
+  active: 'active',
+  paused: 'paused',
+} as const;
+
+export interface SignalEvaluation {
+  generatedAt: string;
+  /** @nullable */
+  activatedAt: string | null;
+  recording: SignalEvaluationRecording;
+  /** @nullable */
+  firstSignalAt: string | null;
+  /** @nullable */
+  lastSignalAt: string | null;
+  /** @nullable */
+  lastSettlementCheckAt: string | null;
+  summary: SignalPerformance;
+  cohorts: SignalCohort[];
+  limitations: string[];
+  rows: SignalOutcome[];
+  page: number;
+  pageSize: number;
+  totalPages: number;
+}
+
+/**
+ * Same observations and $100 entry notional as gross ROI. Net return divides profit minus estimated entry fees by notional plus fees. All financial values are null unless every observation has a supported, fresh fee rule; missing costs are never zero.
+ */
+export interface RoiNetEstimate {
+  /** @nullable */
+  roiPct: number | null;
+  /** @nullable */
+  profit: number | null;
+  /** @nullable */
+  fees: number | null;
+  /** @nullable */
+  cashOutlay: number | null;
+  /** @minimum 0 */
+  coveredTrades: number;
+  /** @minimum 0 */
+  missingTrades: number;
 }
 
 export type RoiLeaderboardCoverage = typeof RoiLeaderboardCoverage[keyof typeof RoiLeaderboardCoverage];
@@ -588,6 +821,14 @@ export type OwnerRequiredResponse = ApiError;
  * Owner authorization is unavailable or not configured
  */
 export type OwnerUnavailableResponse = ApiError;
+
+export type GetKalshiSignalsParams = {
+/**
+ * @minimum 1
+ * @maximum 100000
+ */
+page?: number;
+};
 
 export type GetKalshiExplorerRoiParams = {
 band?: GetKalshiExplorerRoiBand;

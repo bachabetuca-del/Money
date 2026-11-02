@@ -123,7 +123,7 @@ export async function getRoiSnapshot(options: Options, now = new Date()) {
   const key = JSON.stringify([options.window, options.band, options.direction, threshold, options.coverage ?? "verified",
     FEE_MODEL_VERSION, fees?.asOf, fees?.validUntil, feeSnapshotIsCurrent(fees, now)]);
   const snapshot = await snapshots.get(key, () => loadRoiRollups(options, threshold, now, db, fees));
-  return { snapshot, threshold };
+  return { snapshot, threshold, fees };
 }
 
 export async function getRoiLeaderboard(options: Options, now = new Date()): Promise<RoiLeaderboard> {

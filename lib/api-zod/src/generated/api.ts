@@ -9,6 +9,161 @@ import * as zod from 'zod';
 
 
 /**
+ * @summary Forward-only evaluation of frozen new alert evidence and later official settlements
+ */
+export const getKalshiSignalsQueryPageDefault = 1;
+export const getKalshiSignalsQueryPageMax = 100000;
+
+
+
+export const GetKalshiSignalsQueryParams = zod.object({
+  "page": zod.coerce.number().int().min(1).max(getKalshiSignalsQueryPageMax).default(getKalshiSignalsQueryPageDefault)
+})
+
+export const getKalshiSignalsResponseRowsItemEvidencePriceExclusiveMin = 0;
+export const getKalshiSignalsResponseRowsItemEvidencePriceMax = 1;
+
+export const getKalshiSignalsResponseRowsItemEvidenceNotionalMin = 1000;
+
+export const getKalshiSignalsResponseRowsItemEvidenceContractsExclusiveMin = 0;
+
+export const getKalshiSignalsResponseRowsItemEvidenceRuleStakeUsdExclusiveMin = 0;
+
+
+
+export const getKalshiSignalsResponseRowsItemEvidenceEntryFeeUsdMin = 0;
+
+
+
+export const GetKalshiSignalsResponse = zod.object({
+  "generatedAt": zod.string(),
+  "activatedAt": zod.string().nullable(),
+  "recording": zod.enum(['not_started', 'active', 'paused']),
+  "firstSignalAt": zod.string().nullable(),
+  "lastSignalAt": zod.string().nullable(),
+  "lastSettlementCheckAt": zod.string().nullable(),
+  "summary": zod.object({
+  "registered": zod.number().int(),
+  "delivered": zod.number().int(),
+  "awaitingDelivery": zod.number().int(),
+  "skipped": zod.number().int(),
+  "settled": zod.number().int(),
+  "pending": zod.number().int(),
+  "excluded": zod.number().int(),
+  "games": zod.number().int(),
+  "settledGames": zod.number().int(),
+  "wins": zod.number().int(),
+  "losses": zod.number().int(),
+  "grossProfit": zod.number().nullable(),
+  "grossRoiPct": zod.number().nullable(),
+  "invested": zod.number(),
+  "netProfit": zod.number().nullable(),
+  "netRoiPct": zod.number().nullable(),
+  "netOutlay": zod.number().nullable(),
+  "feeCovered": zod.number().int(),
+  "feeMissing": zod.number().int()
+}).describe('Only confirmed deliveries followed by official final binary settlement enter returns. Net uses exactly the same observations as gross or remains unknown.'),
+  "cohorts": zod.array(zod.object({
+  "ruleVersion": zod.string(),
+  "basis": zod.enum(['gross', 'net']).describe('Explicit Telegram filter basis. Existing settings remain gross; an omitted update never changes the saved choice.'),
+  "feeModelVersion": zod.string(),
+  "performance": zod.object({
+  "registered": zod.number().int(),
+  "delivered": zod.number().int(),
+  "awaitingDelivery": zod.number().int(),
+  "skipped": zod.number().int(),
+  "settled": zod.number().int(),
+  "pending": zod.number().int(),
+  "excluded": zod.number().int(),
+  "games": zod.number().int(),
+  "settledGames": zod.number().int(),
+  "wins": zod.number().int(),
+  "losses": zod.number().int(),
+  "grossProfit": zod.number().nullable(),
+  "grossRoiPct": zod.number().nullable(),
+  "invested": zod.number(),
+  "netProfit": zod.number().nullable(),
+  "netRoiPct": zod.number().nullable(),
+  "netOutlay": zod.number().nullable(),
+  "feeCovered": zod.number().int(),
+  "feeMissing": zod.number().int()
+}).describe('Only confirmed deliveries followed by official final binary settlement enter returns. Net uses exactly the same observations as gross or remains unknown.')
+})),
+  "limitations": zod.array(zod.string()),
+  "rows": zod.array(zod.object({
+  "evidence": zod.object({
+  "tradeId": zod.string(),
+  "ticker": zod.string(),
+  "gameId": zod.string(),
+  "gameIdentity": zod.enum(['milestone', 'event', 'ticker']),
+  "eventTitle": zod.string(),
+  "marketTitle": zod.string(),
+  "marketUrl": zod.string(),
+  "observedAt": zod.string(),
+  "queuedAt": zod.string(),
+  "capturedAt": zod.string(),
+  "price": zod.number().gt(getKalshiSignalsResponseRowsItemEvidencePriceExclusiveMin).max(getKalshiSignalsResponseRowsItemEvidencePriceMax),
+  "notional": zod.number().min(getKalshiSignalsResponseRowsItemEvidenceNotionalMin),
+  "contracts": zod.number().gt(getKalshiSignalsResponseRowsItemEvidenceContractsExclusiveMin),
+  "rule": zod.object({
+  "version": zod.string(),
+  "basis": zod.enum(['gross', 'net']).describe('Explicit Telegram filter basis. Existing settings remain gross; an omitted update never changes the saved choice.'),
+  "minimumRoiPct": zod.number(),
+  "minimumGames": zod.number().int(),
+  "minimumTrades": zod.number().int(),
+  "coverage": zod.enum(['verified']),
+  "window": zod.enum(['all']),
+  "sport": zod.string(),
+  "marketType": zod.string(),
+  "side": zod.enum(['yes', 'no']),
+  "moneyBand": zod.enum(['small', 'medium', 'large']),
+  "amountMin": zod.number(),
+  "amountMax": zod.number().nullable(),
+  "amountMinInclusive": zod.boolean(),
+  "amountMaxInclusive": zod.boolean(),
+  "oddsMin": zod.number(),
+  "oddsMax": zod.number(),
+  "stakeUsd": zod.number().gt(getKalshiSignalsResponseRowsItemEvidenceRuleStakeUsdExclusiveMin)
+}).describe('Immutable selection rule, including exact boundaries, at the first eligible delivery attempt.'),
+  "historyAsOf": zod.string(),
+  "historicalRoiPct": zod.number(),
+  "historicalGrossRoiPct": zod.number(),
+  "historicalNetRoiPct": zod.number().nullable(),
+  "historicalGames": zod.number().int().min(1),
+  "historicalTrades": zod.number().int().min(1),
+  "feeModel": zod.object({
+  "version": zod.string(),
+  "documentationReviewedOn": zod.string(),
+  "scheduleAsOf": zod.string().nullable(),
+  "validUntil": zod.string().nullable(),
+  "status": zod.enum(['current', 'stale', 'unavailable']),
+  "sources": zod.array(zod.string())
+}).describe('Current published fee schedules applied to historical observations, not a reconstruction of fees paid at the time. One hypothetical taker entry, direct-member rounding to $0.0001, held to binary settlement; no exit fee, slippage, funding, taxes, FCM fees or rebates. Theoretical quantity $100/price preserves the existing equal-stake comparison and is not an executable order.'),
+  "feeAssumptions": zod.string(),
+  "feeType": zod.string().nullable(),
+  "feeMultiplier": zod.number().nullable(),
+  "entryFeeUsd": zod.number().min(getKalshiSignalsResponseRowsItemEvidenceEntryFeeUsdMin).nullable()
+}).describe('Frozen before sending. ISO timestamp strings are persisted verbatim, not recomputed from current history, trade corrections or fee catalogs.'),
+  "delivery": zod.enum(['sent', 'pending', 'skipped']),
+  "sentAt": zod.string().nullable(),
+  "attempts": zod.number().int(),
+  "status": zod.enum(['not_sent', 'pending', 'settled', 'excluded']),
+  "exclusionReason": zod.union([zod.literal('settled_before_alert'),zod.literal('unsupported_settlement'),zod.literal(null)]).nullable(),
+  "officialResult": zod.string().nullable(),
+  "settlementCheckedAt": zod.string().nullable(),
+  "settlementError": zod.string().nullable(),
+  "grossProfit": zod.number().nullable(),
+  "grossRoiPct": zod.number().nullable(),
+  "netProfit": zod.number().nullable(),
+  "netRoiPct": zod.number().nullable()
+})),
+  "page": zod.number().int(),
+  "pageSize": zod.number().int(),
+  "totalPages": zod.number().int()
+})
+
+
+/**
  * @summary Historical ROI context for comparable sport, market, side, odds and trade-size groups
  */
 export const getKalshiExplorerRoiQueryBandDefault = `large`;

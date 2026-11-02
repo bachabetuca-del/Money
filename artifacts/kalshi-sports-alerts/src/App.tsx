@@ -48,6 +48,7 @@ import { NotificationRoiChoice } from '@/components/notification-roi-choice';
 const queryClient = new QueryClient();
 const Explorer = lazy(() => import('@/components/explorer').then(m => ({ default: m.Explorer })));
 const RoiLeaderboard = lazy(() => import('@/components/roi-leaderboard').then(m => ({ default: m.RoiLeaderboard })));
+const SignalEvaluation = lazy(() => import('@/components/signal-evaluation').then(m => ({ default: m.SignalEvaluation })));
 const MAX_NOTIONAL = 999_999_999_999.99;
 
 function money(value: number) {
@@ -121,8 +122,8 @@ function Home() {
   const [testMessage, setTestMessage] = useState('');
   const [testError, setTestError] = useState(false);
   const [savedMessage, setSavedMessage] = useState('');
-  const [tab, setTab] = useState<'analysis' | 'settings' | 'leaderboard'>(() => { const t = new URLSearchParams(window.location.search).get('tab'); return t === 'settings' || t === 'leaderboard' ? t : 'analysis'; });
-  function pickTab(next: 'analysis' | 'settings' | 'leaderboard') { setTab(next); setUrlParams({ tab: next === 'analysis' ? null : next }); }
+  const [tab, setTab] = useState<'analysis' | 'settings' | 'leaderboard' | 'signals'>(() => { const t = new URLSearchParams(window.location.search).get('tab'); return t === 'settings' || t === 'leaderboard' || t === 'signals' ? t : 'analysis'; });
+  function pickTab(next: 'analysis' | 'settings' | 'leaderboard' | 'signals') { setTab(next); setUrlParams({ tab: next === 'analysis' ? null : next }); }
 
   useEffect(() => {
     if (!dashboard || dirty || saveSettings.isPending) return;
@@ -272,11 +273,13 @@ function Home() {
               <button className={tab === 'analysis' ? 'on' : ''} onClick={() => pickTab('analysis')} data-testid="tab-analysis">Análisis de mercados</button>
               <button className={tab === 'settings' ? 'on' : ''} onClick={() => pickTab('settings')} data-testid="tab-settings">Ajustes y Telegram</button>
               <button className={tab === 'leaderboard' ? 'on' : ''} onClick={() => pickTab('leaderboard')} data-testid="tab-leaderboard">Ranking ROI</button>
+              <button className={tab === 'signals' ? 'on' : ''} onClick={() => pickTab('signals')} data-testid="tab-signals">Señales</button>
             </nav>
 
             <Suspense fallback={<div className="ws-empty" role="status"><LoaderCircle className="spin" size={20} /><p>Cargando sección…</p></div>}>
               {tab === 'analysis' && <Explorer />}
               {tab === 'leaderboard' && <RoiLeaderboard />}
+              {tab === 'signals' && <SignalEvaluation />}
             </Suspense>
 
             {tab === 'settings' && <div className="main-grid">

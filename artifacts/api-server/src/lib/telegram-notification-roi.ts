@@ -4,13 +4,17 @@ import { oddsBucket, ROI_STAKE, type RoiRollup } from "./roi-ranking";
 import { publicDirection } from "./telegram-trade-direction";
 import { inTradeRange, tradeRange } from "./kalshi-trade-bands";
 import { ROI_MONEY_BANDS, rawNetRoiPct, validatedFees } from "./roi-performance";
-import type { RoiBasis } from "@workspace/api-zod";
+import type { RoiBasis, SignalEvidence } from "@workspace/api-zod";
 export type { RoiBasis } from "@workspace/api-zod";
 
 export const NOTIFICATION_MIN_ROI_PCT = 7;
 export type NotificationRoi = {
   roiPct: number; games: number; trades: number;
   basis: RoiBasis; grossRoiPct: number; netRoiPct: number | null;
+  /** Only the production lookup supplies this provenance; plain historical
+   * lookup tests/legacy jobs can still use the comparable ROI alone. */
+  evidence?: Pick<SignalEvidence, "historyAsOf" | "gameId" | "gameIdentity" |
+    "feeModel" | "feeAssumptions" | "feeType" | "feeMultiplier" | "entryFeeUsd">;
 };
 export function notificationRoiBasis(value: unknown): RoiBasis {
   if (value === undefined || value === null) return "gross";

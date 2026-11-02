@@ -35,6 +35,7 @@ import type {
   GetKalshiExplorerParams,
   GetKalshiExplorerRoiParams,
   GetKalshiLeaderboardParams,
+  GetKalshiSignalsParams,
   HealthStatus,
   KalshiDashboard,
   KalshiExplorer,
@@ -43,6 +44,7 @@ import type {
   OwnerUnavailableResponse,
   RoiLeaderboard,
   SignInRequiredResponse,
+  SignalEvaluation,
   TelegramChatLookup,
   TelegramTestInput,
   TelegramTestResult
@@ -74,6 +76,114 @@ const withQueryKey = <T extends object, K>(query: T, queryKey: K): T & { queryKe
   }
   return result;
 };
+
+export const getGetKalshiSignalsUrl = (params?: GetKalshiSignalsParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/api/kalshi/signals?${stringifiedParams}` : `/api/kalshi/signals`
+}
+
+/**
+ * @summary Forward-only evaluation of frozen new alert evidence and later official settlements
+ */
+export const getKalshiSignals = async (params?: GetKalshiSignalsParams, options?: Parameters<typeof customFetch>[1]): Promise<SignalEvaluation> => {
+
+  return customFetch<SignalEvaluation>(getGetKalshiSignalsUrl(params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetKalshiSignalsQueryKey = (params?: GetKalshiSignalsParams,) => {
+    return [
+    `/api/kalshi/signals`, ...(params ? [params] : [])
+    ] as const;
+    }
+
+
+export const getGetKalshiSignalsQueryOptions = <TData = Awaited<ReturnType<typeof getKalshiSignals>>, TError = ErrorType<ApiError>>(params?: GetKalshiSignalsParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getKalshiSignals>>, TError, TData>>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetKalshiSignalsQueryKey(params);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getKalshiSignals>>> = ({ signal }) => getKalshiSignals(params, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getKalshiSignals>>, TError, TData> & { queryKey: DataTag<QueryKey, TData, TError> }
+}
+
+export type GetKalshiSignalsQueryResult = NonNullable<Awaited<ReturnType<typeof getKalshiSignals>>>
+export type GetKalshiSignalsQueryError = ErrorType<ApiError>
+
+
+export function useGetKalshiSignals<TData = Awaited<ReturnType<typeof getKalshiSignals>>, TError = ErrorType<ApiError>>(
+ params: undefined |  GetKalshiSignalsParams, options: { query:Partial<UseQueryOptions<Awaited<ReturnType<typeof getKalshiSignals>>, TError, TData>> & Pick<
+        DefinedInitialDataOptions<
+          Awaited<ReturnType<typeof getKalshiSignals>>,
+          TError,
+          Awaited<ReturnType<typeof getKalshiSignals>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient
+  ):  DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useGetKalshiSignals<TData = Awaited<ReturnType<typeof getKalshiSignals>>, TError = ErrorType<ApiError>>(
+ params?: GetKalshiSignalsParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getKalshiSignals>>, TError, TData>> & Pick<
+        UndefinedInitialDataOptions<
+          Awaited<ReturnType<typeof getKalshiSignals>>,
+          TError,
+          Awaited<ReturnType<typeof getKalshiSignals>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useGetKalshiSignals<TData = Awaited<ReturnType<typeof getKalshiSignals>>, TError = ErrorType<ApiError>>(
+ params?: GetKalshiSignalsParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getKalshiSignals>>, TError, TData>>, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+/**
+ * @summary Forward-only evaluation of frozen new alert evidence and later official settlements
+ */
+
+export function useGetKalshiSignals<TData = Awaited<ReturnType<typeof getKalshiSignals>>, TError = ErrorType<ApiError>>(
+ params?: GetKalshiSignalsParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getKalshiSignals>>, TError, TData>>, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient
+ ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
+
+  const queryOptions = getGetKalshiSignalsQueryOptions(params,options)
+
+  const query = useQuery(queryOptions, queryClient) as  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
 
 export const getGetKalshiExplorerRoiUrl = (params?: GetKalshiExplorerRoiParams,) => {
   const normalizedParams = new URLSearchParams();

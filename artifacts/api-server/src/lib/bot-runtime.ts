@@ -2,6 +2,7 @@ import { pool, db, kalshiMonitorSettingsTable } from "@workspace/db";
 import { logger } from "./logger";
 import { ownerChatId } from "./owner-policy";
 import { startKalshiMonitor } from "./kalshi-monitor";
+import { activateSignalEvaluation } from "./kalshi-signal-store";
 
 export function checkRuntimeConfiguration() {
   const required = ["OWNER_EMAIL", "CLERK_SECRET_KEY", "CLERK_PUBLISHABLE_KEY",
@@ -39,6 +40,9 @@ export async function startBotRuntime() {
   await db.insert(kalshiMonitorSettingsTable).values({
     id: 1, enabled: true, minimumNotional: 10_000, chatId: ownerChatId(),
   }).onConflictDoNothing();
+  // Durable cutoff begins only after this environment is enabled and owns the
+  // existing production lock. Restarts never move it; development never creates it.
+  await activateSignalEvaluation();
   startKalshiMonitor();
 }
 

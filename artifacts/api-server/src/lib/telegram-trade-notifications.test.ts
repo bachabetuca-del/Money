@@ -7,6 +7,8 @@ import {
 import { buildNotificationRoiLookup, type NotificationRoi, type RoiBasis } from "./telegram-notification-roi";
 import type { RoiRollup } from "./roi-ranking";
 import { shouldCaptureTrade } from "./kalshi-trade-bands";
+import { buildSignalEvidence, SIGNAL_FEE_ASSUMPTIONS } from "./signal-evaluation";
+import { feeModel } from "./kalshi-fees";
 
 const clock = new Date("2026-10-22T21:00:00Z");
 const settings = { enabled: true, chatId: "notification-test" };
@@ -25,6 +27,7 @@ type Row = NotificationJob & {
 
 class MemoryNotifications implements NotificationStore {
   rows = new Map<string, Row>();
+  failCapture = false;
   add(job: NotificationJob) {
     const key = `${job.chatId}:${job.tradeId}`;
     if (!this.rows.has(key)) this.rows.set(key, { ...job, retryAt: clock });
@@ -32,9 +35,15 @@ class MemoryNotifications implements NotificationStore {
   row(chatId: string, tradeId: string) { return this.rows.get(`${chatId}:${tradeId}`)!; }
   async next(chatId: string, now: Date) {
     const row = [...this.rows.values()].filter(item => item.chatId === chatId &&
-      !item.sentAt && !item.skippedAt && item.retryAt <= now && shouldCaptureTrade(item.notional))
+      !item.sentAt && !item.skippedAt && item.retryAt <= now && (item.evidence || shouldCaptureTrade(item.notional)))
       .sort((a, b) => a.createdTime.getTime() - b.createdTime.getTime())[0];
     return row ? { ...row } : undefined;
+  }
+  async capture(job: NotificationJob, roi: NotificationRoi, now: Date) {
+    if (this.failCapture) throw new Error("Evidence database unavailable.");
+    const row = this.row(job.chatId, job.tradeId);
+    row.evidence ??= buildSignalEvidence(job, roi, now);
+    return row.evidence;
   }
   async sent(job: NotificationJob, messageId: number, now: Date) {
     Object.assign(this.row(job.chatId, job.tradeId), { sentAt: now, messageId, error: undefined, retryAt: now });
@@ -389,4 +398,77 @@ test("selected basis reaches the worker, cannot silently revert, and filtered tr
   assert.match(String(api.calls[0].body.text), /No son ganancias del trader/);
   await new TelegramTradeNotifications(store, api, now).tick(settings);
   assert.equal(api.calls.filter(c => c.method === "sendMessage").length, 1);
+});
+
+const prospectiveJob = (id = "prospective") => ({
+  ...sample(id), evaluationId: 1,
+  createdTime: new Date(clock.getTime() - 2000), queuedAt: new Date(clock.getTime() - 1000),
+});
+const prospectiveRoi = (): NotificationRoi => ({
+  ...grossRoi({ roiPct: 7, games: 10, trades: 30 })!,
+  evidence: {
+    historyAsOf: new Date(clock.getTime() - 60000).toISOString(), gameId: "game", gameIdentity: "milestone",
+    feeModel: feeModel(null, clock), feeAssumptions: SIGNAL_FEE_ASSUMPTIONS,
+    feeType: null, feeMultiplier: null, entryFeeUsd: null,
+  },
+});
+
+test("a new signal is frozen BEFORE sending; restarts/retries cannot replace its ROI, basis, price, side, amount or names", async () => {
+  const { store, api, worker, advance, now } = setup();
+  store.add(prospectiveJob());
+  api.roiResult = prospectiveRoi();
+  api.failSend = "Temporary Telegram failure";
+  await worker.tick(settings);
+  const row = store.row(settings.chatId, "prospective");
+  assert.ok(row.evidence, "Evidence is durable even though delivery failed");
+  assert.equal(row.sentAt, undefined);
+  const frozen = JSON.stringify(row.evidence);
+  Object.assign(row, { price: .2, outcomeSide: "no", notional: 10, eventTitle: "Corrected later" });
+  api.roiResult = null;
+  api.failRoi = true; api.failContext = true;
+  advance(15000);
+  await new TelegramTradeNotifications(store, api, now).tick({ ...settings, notificationRoiBasis: "net" });
+  assert.ok(row.sentAt);
+  assert.equal(JSON.stringify(row.evidence), frozen);
+  assert.equal(api.roiTrades.length, 1, "Never recompute the original rule evidence on retry");
+  const requests = api.calls.filter(call => call.method === "sendMessage");
+  assert.equal(requests.length, 2);
+  assert.equal(requests[0].body.text, requests[1].body.text);
+  assert.match(String(requests[1].body.text), /Filtro elegido: bruto/);
+  assert.match(String(requests[1].body.text), /60¢/);
+  await new TelegramTradeNotifications(store, api, now).tick(settings);
+  assert.equal(api.calls.filter(call => call.method === "sendMessage").length, 2);
+});
+
+test("failed evidence persistence prevents sending and preserves the outbox retry", async () => {
+  const { store, api, worker, advance } = setup();
+  store.add(prospectiveJob());
+  api.roiResult = prospectiveRoi(); store.failCapture = true;
+  await worker.tick(settings);
+  const row = store.row(settings.chatId, "prospective");
+  assert.equal(row.evidence, undefined);
+  assert.equal(row.skippedAt, undefined);
+  assert.equal(api.calls.length, 0);
+  assert.equal(row.attempts, 1);
+  store.failCapture = false; advance(15000);
+  await worker.tick(settings);
+  assert.ok(row.evidence);
+  assert.ok(row.sentAt);
+  assert.equal(api.calls.filter(call => call.method === "sendMessage").length, 1);
+});
+
+test("legacy notifications still retry without being converted to new signals; rejected new candidates remain rejected", async () => {
+  const { store, api, worker, advance } = setup();
+  store.add(sample("legacy"));
+  api.roiResult = prospectiveRoi(); api.failSend = "Retry legacy";
+  await worker.tick(settings);
+  advance(15000); await worker.tick(settings);
+  assert.equal(store.row(settings.chatId, "legacy").evidence, undefined);
+  assert.ok(store.row(settings.chatId, "legacy").sentAt);
+  store.add(prospectiveJob("rejected")); api.roiResult = null;
+  await worker.tick(settings);
+  api.roiResult = prospectiveRoi();
+  await worker.tick(settings);
+  assert.equal(store.row(settings.chatId, "rejected").evidence, undefined);
+  assert.ok(store.row(settings.chatId, "rejected").skippedAt);
 });

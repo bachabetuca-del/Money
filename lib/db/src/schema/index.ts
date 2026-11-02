@@ -28,3 +28,4 @@ export * from "./kalshi-settlements";
 export * from "./kalshi-recovery";
 export * from "./kalshi-metadata-jobs";
 export * from "./kalshi-fees";
+export * from "./kalshi-signals";

@@ -1,6 +1,6 @@
 ---
-name: Historical ROI research method
-description: Interpretation and data boundaries for the user's continuously updated ROI ranking.
+name: ROI research and forward evaluation
+description: Interpretation, historical coverage and prospective evidence boundaries for ROI research.
 ---
 
 Use equal hypothetical stakes per observed execution, held to official final binary market settlement, as the default research comparison—not volume-weighted trader profitability. The user delegated the choice to our recommendation to assess whether an approach could make money.
@@ -48,3 +48,9 @@ Preserve the original equal entry notional when comparing gross and estimated ne
 **Why:** The user wants to avoid confusing the existing historical +7% with after-cost profit while retaining the original research comparison. Changing position size or selecting only the observations with cheaper/known fees would make the comparison misleading. Public trades do not reveal actual maker/taker execution, account rounding, rebates or funding costs.
 
 **How to apply:** Declare the execution and fee-time assumptions, distinguish direct-member precision from intermediary costs, and check current official exceptions rather than trusting an old illustrative fee table. Unknown costs remain unknown; never publish an all-history gross beside a net computed from a different covered subset.
+
+Prospective evaluation is separate from retrospective ranking. Freeze qualifying evidence before the first delivery attempt, including the selected rule, observed execution, historical sample and cost assumptions. Retries must reuse it, even after rule changes or history repairs.
+
+**Why:** Recomputing a failed delivery from later results could make the same alert qualify using information unavailable at its original decision. Saving only after successful delivery would also lose that decision when delivery fails.
+
+**How to apply:** Admit only genuinely new live outbox entries after a durable activation boundary; never enroll legacy entries or replays later. Keep undelivered signals visible but outside post-alert returns. Evaluate confirmed deliveries using later official binary verification, not the scoreboard. Preserve the original fee estimate, including unknown costs, rather than repricing older signals with a newer model.

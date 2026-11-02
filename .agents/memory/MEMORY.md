@@ -10,4 +10,4 @@
 - [Kalshi credential formatting](kalshi-credential-formatting.md) — rule out altered PEM line breaks before asking the user to replace an API key pair.
 - [Live analysis scope](live-analysis-rules.md) — preserve the current interface; pause freezes the view, and concentration signals remain visual-only.
 - [Explorer performance boundary](explorer-performance-boundary.md) — reuse catalog work without freezing trades, weakening filter validation, or changing Telegram.
-- [ROI research method](roi-research-method.md) — equal hypothetical stakes, gross/net cost scenarios and official settlements; preserve coverage and disclose hindsight limits.
+- [ROI research method](roi-research-method.md) — equal stakes, official settlements and verified history; freeze forward evidence before delivery and preserve its original cost model.
