@@ -93,6 +93,46 @@ test("no settled data has null ROI, including recent; errors and pending are vis
   assert.equal(settled.rows[0].recentRoiPct, null);
 });
 
+test("fees preserve gross samples in every view, weekly/amount cohorts and recent returns", () => {
+  const input = [
+    row({ fees: 3.5, feeTrades: 1, recentFees: 3.5, recentFeeTrades: 1, moneyBand: "small" }),
+    row({ ticker: "KXNFLGAME-B-A", gameId: "other", profit: -100, wins: 0, fees: 1.75, feeTrades: 1,
+      recentTrades: 0, recentProfit: 0, recentFees: 0, recentFeeTrades: 0, moneyBand: "large", weekStart: "2026-10-19" }),
+    row({ category: "pending", fees: 7, feeTrades: 1 }),
+  ];
+  for (const group of ["sport", "marketType", "odds", "segment", "market", "amount"] as const) {
+    const ranked = buildRoiRanking(input, group, 1, { now });
+    const grossOnly = buildRoiRanking(input.map(r => ({ ...r, fees: undefined, feeTrades: undefined })), group, 1, { now });
+    assert.equal(ranked.summary.roiPct, grossOnly.summary.roiPct);
+    assert.equal(ranked.summary.settledTrades, 2);
+    assert.equal(ranked.summary.profit, 0);
+    assert.equal(ranked.summary.net.fees, 5.25);
+    assert.equal(ranked.summary.net.roiPct, -2.5579);
+    assert.equal(ranked.summary.recentNet.roiPct, 93.2367);
+    for (const r of ranked.rows) {
+      assert.equal(r.net.coveredTrades, r.trades);
+      assert.equal(r.weekly.reduce((n, w) => n + (w.net.fees ?? 0), 0), r.net.fees);
+      assert.equal(r.moneyBands.reduce((n, b) => n + (b.net.fees ?? 0), 0), r.net.fees);
+    }
+  }
+});
+
+test("net sorting is optional, unknown fees sort last but do not hide gross observations", () => {
+  const input = [
+    row({ sport: "Highest gross", profit: 10, fees: 7, feeTrades: 1 }),
+    row({ sport: "Best net", profit: 9, fees: 0, feeTrades: 1 }),
+    row({ sport: "Unknown net", profit: 80 }),
+  ];
+  const normal = buildRoiRanking(input, "sport", 1);
+  assert.equal(normal.rows[0].sport, "Unknown net");
+  const net = buildRoiRanking(input, "sport", 1, { sortBy: "netRoi" });
+  assert.deepEqual(net.rows.map(r => r.sport), ["Best net", "Highest gross", "Unknown net"]);
+  assert.equal(net.rows[2].net.roiPct, null);
+  assert.equal(net.summary.settledTrades, 3);
+  assert.equal(net.summary.net.missingTrades, 1);
+  assert.equal(net.summary.net.roiPct, null, "Cannot compare gross all-trades against a fee-covered subset");
+});
+
 test("soccer market reclassification preserves execution returns, sides and game counts", () => {
   const input = [
     row({ ticker: "KXEPLBTTS-26OCT30AB-YES", marketTitle: "Both Teams To Score", sport: "Soccer", profit: 100 }),

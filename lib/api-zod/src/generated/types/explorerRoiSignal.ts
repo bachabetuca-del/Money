@@ -8,8 +8,10 @@
 import type { ExplorerRoiSignalLevel } from './explorerRoiSignalLevel';
 import type { ExplorerRoiSignalReason } from './explorerRoiSignalReason';
 import type { ExplorerRoiSignalSide } from './explorerRoiSignalSide';
+import type { RoiNetEstimate } from './roiNetEstimate';
 
 export interface ExplorerRoiSignal {
+  net: RoiNetEstimate;
   side: ExplorerRoiSignalSide;
   level: ExplorerRoiSignalLevel;
   /** @nullable */

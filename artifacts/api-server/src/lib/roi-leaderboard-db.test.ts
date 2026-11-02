@@ -2,13 +2,14 @@ import assert from "node:assert/strict";
 import { after, test } from "node:test";
 import { db, pool } from "@workspace/db";
 import { sql, type SQLWrapper } from "drizzle-orm";
-import { GetKalshiLeaderboardResponse, GetKalshiLeaderboardQueryParams, GetKalshiExplorerQueryParams, GetKalshiExplorerRoiQueryParams, GetKalshiExplorerRoiResponse } from "@workspace/api-zod";
+import { GetKalshiLeaderboardResponse, GetKalshiLeaderboardQueryParams, GetKalshiExplorerQueryParams, GetKalshiExplorerRoiQueryParams, GetKalshiExplorerRoiResponse, SaveKalshiSettingsBody } from "@workspace/api-zod";
 import { getRoiLeaderboard, loadRoiRollups } from "./kalshi-roi-leaderboard";
 import { buildRoiRanking } from "./roi-ranking";
 import { HISTORY_AUDIT_VERSION } from "./kalshi-market-history";
 import { loadRoiReferencePrices } from "./kalshi-roi-reference-prices";
 import { tradeRange } from "./kalshi-trade-bands";
 import { buildExplorerRoi, ROI_COLOR_POLICY } from "./explorer-roi";
+import { createFeeSnapshot, estimateHypotheticalEntryFee, feeModel } from "./kalshi-fees";
 
 after(() => pool.end());
 
@@ -54,6 +55,7 @@ test("ROI color references: latest valid trade per side and band, exact boundari
     const output = {
       band: "small", scope: "active", generatedAt: now.toISOString(), historyAsOf: now.toISOString(),
       ...ROI_COLOR_POLICY,
+      feeModel: feeModel(null, now),
       markets: buildExplorerRoi([{ ticker: "T", sport: "Soccer", marketType: "winner" }], small, [], now),
     };
     GetKalshiExplorerRoiResponse.parse(output);
@@ -75,6 +77,12 @@ test("read-only development ranking separates directions without changing verifi
     }
     assert.equal(GetKalshiExplorerQueryParams.safeParse({ marketType: "fabricated-category" }).success, false);
     assert.equal(GetKalshiLeaderboardQueryParams.parse({}).sortBy, "roi");
+    assert.equal(GetKalshiLeaderboardQueryParams.parse({ sortBy: "netRoi" }).sortBy, "netRoi");
+    const settings = { enabled: false, minimumNotional: 10000, chatId: "unit-test-only" };
+    assert.equal(SaveKalshiSettingsBody.parse(settings).notificationRoiBasis, undefined,
+      "An old client must leave an existing net choice unchanged, not default it to gross");
+    assert.equal(SaveKalshiSettingsBody.parse({ ...settings, notificationRoiBasis: "net" }).notificationRoiBasis, "net");
+    assert.equal(SaveKalshiSettingsBody.safeParse({ ...settings, notificationRoiBasis: "best" }).success, false);
     assert.equal(GetKalshiLeaderboardQueryParams.parse({ groupBy: "amount", sortBy: "winRate" }).groupBy, "amount");
     assert.equal(GetKalshiLeaderboardQueryParams.safeParse({ sortBy: "guaranteedProfit" }).success, false);
     assert.equal(GetKalshiLeaderboardQueryParams.safeParse({ minGames: 0 }).success, false);
@@ -169,6 +177,30 @@ test("read-only PostgreSQL fixtures verify exact money boundaries, New York week
     assert.equal(row.profit, 0);
     assert.equal(row.roiPct, 0);
     assert.equal(row.winRatePct, 50);
+    assert.equal(row.net.roiPct, null, "Without a fee snapshot gross stays available, net is unknown");
+    const fees = createFeeSnapshot([...new Set(inputs.map(r => r[0].split("-")[0]))].map(ticker =>
+      ({ ticker, fee_type: ticker === "MEDIUM" ? "quadratic_with_maker_fees" : "quadratic", fee_multiplier: 1 })), [], [], at);
+    const withFees = await loadRoiRollups(options, 10000, at, executor, fees);
+    const priced = buildRoiRanking(withFees.rows, "sport", 1, { now: at });
+    assert.equal(priced.summary.net.coveredTrades, 6);
+    assert.equal(priced.summary.net.missingTrades, 0);
+    assert.equal(priced.summary.net.fees, 27.9986);
+    for (const rollup of withFees.rows) {
+      assert.equal(rollup.feeTrades, rollup.category === "settled" ? rollup.trades : 0);
+      if (rollup.category === "settled") {
+        const price = Number(inputs.find(r => r[0] === rollup.ticker)![2]);
+        assert.equal(rollup.fees, estimateHypotheticalEntryFee(price, { feeType: "quadratic", multiplier: 1 }));
+      }
+    }
+    const override = createFeeSnapshot(Object.keys(fees.series).map(ticker =>
+      ({ ticker, fee_type: "quadratic", fee_multiplier: 1 })), [
+      { event_ticker: "EVENT", scheduled_ts: at.toISOString(), fee_type_override: null, fee_multiplier_override: 0 },
+    ], [], at);
+    const free = buildRoiRanking((await loadRoiRollups(options, 10000, at, executor, override)).rows, "sport", 1, { now: at });
+    assert.equal(free.summary.net.fees, 0, "An explicit zero event override must not fall through to series multiplier 1");
+    assert.equal(free.summary.net.roiPct, free.summary.roiPct);
+    override.events.EVENT.feeType = "flat";
+    assert.equal(buildRoiRanking((await loadRoiRollups(options, 10000, at, executor, override)).rows, "sport", 1, { now: at }).summary.net.roiPct, null);
     assert.deepEqual(row.moneyBands.map(b => [b.band, b.trades, b.games]), [
       ["small", 2, 1], ["medium", 2, 1], ["large", 2, 1],
     ]);

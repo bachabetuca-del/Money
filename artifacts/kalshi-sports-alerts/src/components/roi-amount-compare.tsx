@@ -1,5 +1,6 @@
 import type { RoiLeaderboard } from '@workspace/api-client-react';
 import { bandLeaders, MONEY_BAND_ORDER, MONEY_BANDS, NO_DATA, ratePct, rateTone, type MoneyBandKey } from '../lib/roi-breakdown';
+import { RoiNetValue } from './roi-costs';
 
 /** Side-by-side observed accuracy/ROI for the three amount ranges in the amount view. Values come from server rows only. */
 export function RoiAmountCompare({ data }: { data: Pick<RoiLeaderboard, 'rows' | 'minGames' | 'band'> }) {
@@ -14,7 +15,7 @@ export function RoiAmountCompare({ data }: { data: Pick<RoiLeaderboard, 'rows' |
       <p className="lb-amt-lead" data-testid="text-amount-leaders">
         Mayor % de aciertos observado: <b>{leaders.winRate ? `${name(leaders.winRate.bands)} (${ratePct(leaders.winRate.value, false)})` : NO_DATA}</b>
         <span aria-hidden="true"> · </span>
-        Mayor ROI observado: <b className={leaders.roi ? rateTone(leaders.roi.value) : ''}>{leaders.roi ? `${name(leaders.roi.bands)} (${ratePct(leaders.roi.value)})` : NO_DATA}</b>
+        Mayor ROI bruto observado: <b className={leaders.roi ? rateTone(leaders.roi.value) : ''}>{leaders.roi ? `${name(leaders.roi.bands)} (${ratePct(leaders.roi.value)})` : NO_DATA}</b>
       </p>
       <ul className="lb-amt-grid">
         {items.map(({ band, row }) => (
@@ -24,7 +25,8 @@ export function RoiAmountCompare({ data }: { data: Pick<RoiLeaderboard, 'rows' |
             {row ? <>
               <div className="lb-amt-nums">
                 <div><em>% aciertos</em><b>{ratePct(row.winRatePct, false)}</b></div>
-                <div><em>ROI</em><b className={rateTone(row.roiPct)}>{ratePct(row.roiPct)}</b></div>
+                <div><em>ROI bruto</em><b className={rateTone(row.roiPct)}>{ratePct(row.roiPct)}</b></div>
+                <div><em>Neto estimado</em><RoiNetValue net={row.net} /></div>
               </div>
               <small>{row.wins}/{row.trades} ganadas · {row.games} partidos{row.sampleWarning ? ' · muestra pequeña' : ''}</small>
             </> : <p>{NO_DATA}{data.band !== 'all' ? ' · excluido por el filtro de banda' : ` · no alcanza ${data.minGames} ${data.minGames === 1 ? 'partido' : 'partidos'} o sin operaciones`}</p>}

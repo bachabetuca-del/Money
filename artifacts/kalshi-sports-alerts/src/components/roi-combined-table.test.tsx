@@ -1,31 +1,38 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { renderToStaticMarkup } from 'react-dom/server';
-import type { RoiRankingRow } from '@workspace/api-client-react';
+import type { RoiRankingRow, RoiNetEstimate } from '@workspace/api-client-react';
 import { RoiCombinedTable } from './roi-combined-table';
 import { RoiRowBreakdown } from './roi-row-breakdown';
 import { RoiAmountCompare } from './roi-amount-compare';
+import { RoiFeeMethodology, RoiNetValue } from './roi-costs';
+import { NotificationRoiChoice } from './notification-roi-choice';
 
+const missing = (trades: number): RoiNetEstimate => ({
+  roiPct: null, fees: null, profit: null, cashOutlay: null, coveredTrades: 0, missingTrades: trades,
+});
+const complete: RoiNetEstimate = { roiPct: 30.4348, fees: 143.5, profit: 1291.5, cashOutlay: 4243.5, coveredTrades: 41, missingTrades: 0 };
 const row: RoiRankingRow = {
   id: 'test-segment', rank: 1, label: 'Test segment', sport: 'Basketball', marketType: 'total',
   side: 'no', moneyBand: null, marketUrl: null, oddsMin: 0.5, oddsMax: 0.6,
   trades: 41, wins: 29, losses: 12, games: 12, markets: 15, winRatePct: 70.73,
   profit: 1435, invested: 4100, roiPct: 35, recentRoiPct: 20, recentTrades: 10, sampleWarning: false,
+  net: complete, recentNet: missing(10),
   weekly: [
-    { weekStart: '2025-01-06', trades: 30, games: 9, wins: 20, profit: -120, roiPct: -4, winRatePct: 66.7, partial: false, sampleWarning: false },
-    { weekStart: '2025-01-13', trades: 0, games: 0, wins: 0, profit: 0, roiPct: null, winRatePct: null, partial: false, sampleWarning: true },
-    { weekStart: '2025-01-20', trades: 11, games: 4, wins: 9, profit: 1555, roiPct: 141.4, winRatePct: 81.8, partial: true, sampleWarning: true },
+    { weekStart: '2025-01-06', trades: 30, games: 9, wins: 20, profit: -120, roiPct: -4, winRatePct: 66.7, partial: false, sampleWarning: false, net: missing(30) },
+    { weekStart: '2025-01-13', trades: 0, games: 0, wins: 0, profit: 0, roiPct: null, winRatePct: null, partial: false, sampleWarning: true, net: missing(0) },
+    { weekStart: '2025-01-20', trades: 11, games: 4, wins: 9, profit: 1555, roiPct: 141.4, winRatePct: 81.8, partial: true, sampleWarning: true, net: missing(11) },
   ],
   moneyBands: [
-    { band: 'small', trades: 30, games: 10, wins: 22, profit: 900, roiPct: 30, winRatePct: 73.3, sampleWarning: false, meetsMinimum: true },
-    { band: 'large', trades: 11, games: 5, wins: 7, profit: 535, roiPct: 48.6, winRatePct: 63.6, sampleWarning: true, meetsMinimum: false },
+    { band: 'small', trades: 30, games: 10, wins: 22, profit: 900, roiPct: 30, winRatePct: 73.3, sampleWarning: false, meetsMinimum: true, net: missing(30) },
+    { band: 'large', trades: 11, games: 5, wins: 7, profit: 535, roiPct: 48.6, winRatePct: 63.6, sampleWarning: true, meetsMinimum: false, net: missing(11) },
   ],
 };
 
-test('the compact table keeps seven columns and shows accuracy % and distinct games', () => {
+test('the compact table adds net alongside gross, preserving accuracy and distinct games', () => {
   const html = renderToStaticMarkup(<RoiCombinedTable rows={[row]} />);
-  assert.equal((html.match(/scope="col"/g) ?? []).length, 7);
-  for (const name of ['Deporte', 'Mercado', 'Lado', 'Odds americanas', 'Aciertos', 'ROI', 'Muestras']) assert.ok(html.includes(name));
+  assert.equal((html.match(/scope="col"/g) ?? []).length, 8);
+  for (const name of ['Deporte', 'Mercado', 'Lado', 'Odds americanas', 'Aciertos', 'ROI bruto', 'ROI neto est.', 'Muestras']) assert.ok(html.includes(name));
   assert.match(html, /Baloncesto/);
   assert.match(html, /Totales/);
   assert.match(html, />NO<\/span>/);
@@ -34,6 +41,8 @@ test('the compact table keeps seven columns and shows accuracy % and distinct ga
   assert.match(html, />29<span class="lb-fraction">\/41<\/span>/);
   assert.match(html, />12 partidos</);
   assert.match(html, /\+35\.0%/);
+  assert.match(html, /\+30\.43%/);
+  assert.match(html, /41\/41 con tarifa/);
   assert.equal((html.match(/aria-sort="descending"/g) ?? []).length, 1);
   assert.match(html, /aria-expanded="false"/);
   assert.match(html, /aria-controls="lb-detail-[0-9a-f]+"/);
@@ -88,17 +97,17 @@ test('breakdown: newest week first, empty weeks say Sin datos, partial and negat
 test('breakdown: medium band missing renders Sin datos, leaders and minimum flags shown', () => {
   const html = renderToStaticMarkup(<RoiRowBreakdown row={row} minGames={10} />);
   assert.match(html, /row-money-test-segment-medium.*?Sin datos/);
-  assert.match(html, /mayor ROI observado/);
+  assert.match(html, /mayor ROI bruto observado/);
   assert.match(html, /mayor % observado/);
   assert.match(html, /bajo mínimo \(10\)/);
   // large (48.6% ROI) fails the minimum: it keeps its value and warning but gets no leader badge
   assert.match(html, /row-money-test-segment-large.*?48\.6%.*?bajo mínimo/);
-  assert.doesNotMatch(html, /row-money-test-segment-large"[^]*?mayor ROI observado[^]*?<\/tr>/);
+  assert.doesNotMatch(html, /row-money-test-segment-large"[^]*?mayor ROI bruto observado[^]*?<\/tr>/);
 });
 
 test('no leader badges when no band meets the minimum', () => {
   const html = renderToStaticMarkup(<RoiRowBreakdown row={{ ...row, moneyBands: row.moneyBands.map((m) => ({ ...m, meetsMinimum: false })) }} minGames={50} />);
-  assert.doesNotMatch(html, /mayor (ROI|%) observado/);
+  assert.doesNotMatch(html, /mayor (ROI bruto|%) observado/);
   assert.match(html, /\+30\.0%/);
   assert.match(html, /no tamaño de apuesta sugerido/);
   assert.match(html, /no se suman/);
@@ -112,9 +121,43 @@ test('amount compare names highest observed accuracy and ROI, missing bands are 
   ];
   const html = renderToStaticMarkup(<RoiAmountCompare data={{ rows, minGames: 10, band: 'all' }} />);
   assert.match(html, /aciertos observado: <b>\$1k–\$5k \(58\.2%\)/);
-  assert.match(html, /ROI observado: <b class="pos">≥ \$10k \(\+8\.1%\)/);
+  assert.match(html, /ROI bruto observado: <b class="pos">≥ \$10k \(\+8\.1%\)/);
   assert.match(html, /-12\.5%/);
   assert.match(html, /card-amount-medium.*?Sin datos/);
   const none = renderToStaticMarkup(<RoiAmountCompare data={{ rows: [], minGames: 1, band: 'large' }} />);
   assert.match(none, /excluido por el filtro de banda/);
+});
+
+test('net sorting, partial fee coverage and explicit settings choice are accessible', () => {
+  const html = renderToStaticMarkup(<RoiCombinedTable rows={[{ ...row, net: missing(41) }]} sortBy="netRoi" />);
+  assert.match(html, /aria-sort="descending"><span class="lb-sort">ROI neto est./);
+  assert.match(html, /No disponible/);
+  assert.match(html, /0\/41 con tarifa · faltan 41/);
+  assert.match(html, /\+35\.0%/, 'Missing fees do not hide gross ROI');
+  const choice = renderToStaticMarkup(<NotificationRoiChoice value="net" saved="gross" disabled={false} onChange={() => {}} />);
+  assert.match(choice, /value="net" selected=""/);
+  assert.match(choice, /Guardado: <strong>bruto, antes de comisiones/);
+  assert.match(choice, /Cambio pendiente/);
+  assert.match(choice, /Guardar ajustes/);
+  const saved = renderToStaticMarkup(<NotificationRoiChoice value="net" saved="net" disabled={false} onChange={() => {}} />);
+  assert.match(saved, /Guardado: <strong>neto estimado/);
+  assert.doesNotMatch(saved, /Cambio pendiente/);
+});
+
+test('fee explanation exposes assumptions, official sources, coverage and unavailable costs', () => {
+  const note = renderToStaticMarkup(<RoiFeeMethodology model={{
+    version: 'fixture', status: 'stale', documentationReviewedOn: '2026-11-02',
+    scheduleAsOf: '2026-11-01T10:00:00Z', validUntil: '2026-11-02T10:00:00Z',
+    sources: ['https://kalshi.com/docs/kalshi-fee-schedule.pdf', 'https://kalshi.com/fee-schedule',
+      'https://docs.kalshi.com/getting_started/fee_rounding', 'https://docs.kalshi.com/api-reference/market/get-series',
+      'https://docs.kalshi.com/api-reference/events/get-event-fee-changes'],
+  }} />);
+  for (const word of ['Tarifas caducadas', 'actuales aplicadas al histórico', '0,0001', 'taker', 'FCM',
+    'deslizamiento', 'No es una orden ejecutable', 'no el beneficio de un trader', 'suma de entradas + comisiones']) {
+    assert.ok(note.includes(word), word);
+  }
+  assert.match(note, /href="https:\/\/kalshi.com\/docs\/kalshi-fee-schedule.pdf"/);
+  const zero = renderToStaticMarkup(<RoiNetValue net={{ ...complete, fees: 0, roiPct: 0 }} />);
+  assert.match(zero, />0%</);
+  assert.doesNotMatch(zero, /No disponible/);
 });

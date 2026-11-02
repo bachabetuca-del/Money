@@ -160,6 +160,7 @@ router.put("/kalshi/settings", async (req, res): Promise<void> => {
     enabled: parsed.data.enabled,
     minimumNotional: parsed.data.minimumNotional,
     chatId: parsed.data.chatId.trim(),
+    notificationRoiBasis: parsed.data.notificationRoiBasis,
   });
   const data = await getKalshiDashboard();
   res.json(SaveKalshiSettingsResponse.parse(data));

@@ -22,6 +22,7 @@ export async function getExplorerRoi(band: TradeBand, scope: "active" | "history
     return {
       generatedAt: now.toISOString(), historyAsOf: snapshot.generatedAt, band, scope,
       ...ROI_COLOR_POLICY,
+      feeModel: snapshot.feeModel,
       markets: buildExplorerRoi(catalog.markets, prices, snapshot.rows, now),
     };
   });

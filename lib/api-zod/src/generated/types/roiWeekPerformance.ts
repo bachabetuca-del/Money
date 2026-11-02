@@ -5,8 +5,10 @@
  * API specification
  * OpenAPI spec version: 0.1.0
  */
+import type { RoiNetEstimate } from './roiNetEstimate';
 
 export interface RoiWeekPerformance {
+  net: RoiNetEstimate;
   /**
      * Monday local calendar date in America/New_York, grouped by execution time rather than settlement time. Empty intervening weeks have null rates.
      * @pattern ^\d{4}-\d{2}-\d{2}$

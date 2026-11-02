@@ -1,5 +1,6 @@
 import type { ExplorerMarketRoi, ExplorerRoiSignal } from "@workspace/api-zod";
 import { buildRoiRanking, oddsBucket, type RoiRollup } from "./roi-ranking";
+import { netEstimate } from "./roi-performance";
 
 export const ROI_COLOR_POLICY = {
   minimumGames: 10,
@@ -40,6 +41,7 @@ export function buildExplorerRoi(
       const value: ExplorerRoiSignal = {
         side, level: "insufficient", reason: "no_price",
         roiPct: null, trades: 0, games: 0,
+        net: netEstimate(0, 0, {}),
         price: ref?.price ?? null, observedAt: ref?.observedAt ?? null,
         oddsMin: bucket === null ? null : bucket / 10,
         oddsMax: bucket === null ? null : (bucket + 1) / 10,
@@ -51,6 +53,7 @@ export function buildExplorerRoi(
       const row = groups.get(JSON.stringify([market.sport, market.marketType, side, bucket]));
       if (!row || !Number.isFinite(row.roiPct)) return { ...value, reason: "no_history" as const };
       value.roiPct = row.roiPct;
+      value.net = row.net;
       value.trades = row.trades;
       value.games = row.games;
       if (row.games < ROI_COLOR_POLICY.minimumGames || row.trades < ROI_COLOR_POLICY.minimumTrades) {

@@ -1,4 +1,4 @@
-import type { RoiMoneyPerformance, RoiWeekPerformance } from "@workspace/api-zod";
+import type { RoiMoneyPerformance, RoiWeekPerformance, RoiNetEstimate } from "@workspace/api-zod";
 
 export const ROI_STAKE = 100;
 export type RoiMoneyBand = RoiMoneyPerformance["band"];
@@ -6,19 +6,47 @@ export const ROI_MONEY_BANDS: RoiMoneyBand[] = ["small", "medium", "large"];
 export const ROI_MONEY_LABELS: Record<RoiMoneyBand, string> = {
   small: "$1k–$5k inclusive", medium: "Más de $5k y menos de $10k", large: "$10k+",
 };
-export type PerformanceTotals = { trades: number; wins: number; profit: number; games: Set<string> };
-type Observation = { trades: number; wins: number; profit: number; gameId: string };
+export type FeeTotals = { fees?: number; feeTrades?: number };
+export type PerformanceTotals = FeeTotals & { trades: number; wins: number; profit: number; games: Set<string> };
+type Observation = FeeTotals & { trades: number; wins: number; profit: number; gameId: string };
 const rounded = (value: number, decimals = 2) => Number(value.toFixed(decimals));
 export const roiPct = (profit: number, trades: number) =>
   trades ? rounded(100 * profit / (trades * ROI_STAKE), 4) : null;
 
+/** All-or-nothing comparability: never compare gross on all observations to net
+ * on a cheaper, fee-covered subset. Absence of fee metadata is not a zero fee. */
+export function validatedFees(row: FeeTotals & { trades: number }) {
+  return Number.isSafeInteger(row.feeTrades) && row.feeTrades! >= 0 && row.feeTrades! <= row.trades &&
+    Number.isFinite(row.fees) && row.fees! >= 0
+    ? { fees: row.fees!, feeTrades: row.feeTrades! } : { fees: 0, feeTrades: 0 };
+}
+export function rawNetRoiPct(profit: number, trades: number, costs: FeeTotals) {
+  const { fees, feeTrades } = validatedFees({ ...costs, trades });
+  return trades > 0 && Number.isFinite(profit) && feeTrades === trades
+    ? 100 * (profit - fees) / (trades * ROI_STAKE + fees) : null;
+}
+export function netEstimate(profit: number, trades: number, costs: FeeTotals): RoiNetEstimate {
+  const { fees, feeTrades } = validatedFees({ ...costs, trades });
+  const net = rawNetRoiPct(profit, trades, costs);
+  return {
+    roiPct: net === null ? null : rounded(net, 4),
+    profit: net === null ? null : rounded(profit - fees, 4),
+    fees: net === null ? null : rounded(fees, 4),
+    cashOutlay: net === null ? null : rounded(trades * ROI_STAKE + fees, 4),
+    coveredTrades: feeTrades, missingTrades: trades - feeTrades,
+  };
+}
+
 export function accumulatePerformance(groups: Map<string, PerformanceTotals>, key: string, row: Observation) {
   let total = groups.get(key);
   if (!total) {
-    total = { trades: 0, wins: 0, profit: 0, games: new Set() };
+    total = { trades: 0, wins: 0, profit: 0, games: new Set(), fees: 0, feeTrades: 0 };
     groups.set(key, total);
   }
   total.trades += row.trades; total.wins += row.wins; total.profit += row.profit;
+  const costs = validatedFees(row);
+  total.fees = (total.fees ?? 0) + costs.fees;
+  total.feeTrades = (total.feeTrades ?? 0) + costs.feeTrades;
   total.games.add(row.gameId);
 }
 
@@ -28,6 +56,7 @@ function metrics(total?: PerformanceTotals) {
   return {
     trades, games, wins, profit: rounded(profit),
     roiPct: roiPct(profit, trades),
+    net: netEstimate(profit, trades, total ?? {}),
     winRatePct: trades ? rounded(100 * wins / trades) : null,
     sampleWarning: games < 10 || trades < 30,
   };

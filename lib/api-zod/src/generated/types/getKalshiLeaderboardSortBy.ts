@@ -11,5 +11,6 @@ export type GetKalshiLeaderboardSortBy = typeof GetKalshiLeaderboardSortBy[keyof
 
 export const GetKalshiLeaderboardSortBy = {
   roi: 'roi',
+  netRoi: 'netRoi',
   winRate: 'winRate',
 } as const;

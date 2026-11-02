@@ -4,12 +4,14 @@ import {
   liveNotificationTrades, notificationText, TelegramTradeNotifications,
   type NotificationApi, type NotificationJob, type NotificationStore,
 } from "./telegram-trade-notifications";
-import { buildNotificationRoiLookup, type NotificationRoi } from "./telegram-notification-roi";
+import { buildNotificationRoiLookup, type NotificationRoi, type RoiBasis } from "./telegram-notification-roi";
 import type { RoiRollup } from "./roi-ranking";
 import { shouldCaptureTrade } from "./kalshi-trade-bands";
 
 const clock = new Date("2026-10-22T21:00:00Z");
 const settings = { enabled: true, chatId: "notification-test" };
+const grossRoi = (row: { roiPct: number; games: number; trades: number } | null): NotificationRoi | null =>
+  row ? { ...row, basis: "gross", grossRoiPct: row.roiPct, netRoiPct: null } : null;
 const sample = (tradeId = "trade-1", notional = 15000): NotificationJob => ({
   tradeId, chatId: settings.chatId, attempts: 0,
   ticker: "KXNFLGAME-TEST-CHI", sport: "Football", eventTitle: "New England vs Chicago",
@@ -62,10 +64,12 @@ class FakeNotificationsApi implements NotificationApi {
   failDelete = false;
   failContext = false;
   failRoi = false;
-  roiResult: NotificationRoi | null = { roiPct: 7, games: 10, trades: 30 };
+  roiResult: NotificationRoi | null = grossRoi({ roiPct: 7, games: 10, trades: 30 });
   roiTrades: NotificationJob[] = [];
-  async roi(trade: NotificationJob) {
+  roiBases: RoiBasis[] = [];
+  async roi(trade: NotificationJob, basis: RoiBasis) {
     this.roiTrades.push(trade);
+    this.roiBases.push(basis);
     if (this.failRoi) throw new Error("Historical ROI temporarily unavailable.");
     return this.roiResult;
   }
@@ -117,9 +121,11 @@ test("a new qualifying trade sends a push-enabled text alert, not another graph"
   assert.match(String(body.text), /\$15,000\.00/);
   assert.match(String(body.text), /New England &amp; Chicago/);
   assert.match(String(body.text), /A favor de «Chicago gana»/);
-  assert.match(String(body.text), /ROI histórico comparable \(SÍ\): \+7,00%/);
+  assert.match(String(body.text), /ROI histórico comparable \(SÍ\)/);
+  assert.match(String(body.text), /Bruto: \+7,00% · Neto estimado: no disponible/);
   assert.match(String(body.text), /10 partidos · 30 operaciones verificadas/);
-  assert.match(String(body.text), /antes de comisiones; no garantiza ganancias/);
+  assert.match(String(body.text), /neto con comisión taker actual/);
+  assert.match(String(body.text), /No son ganancias del trader ni una garantía/);
   assert.doesNotMatch(String(body.text), /KXNFLGAME/);
   assert.deepEqual(body.link_preview_options, { is_disabled: true });
   assert.match(JSON.stringify(body.reply_markup), /Abrir en Kalshi/);
@@ -212,7 +218,7 @@ test("a larger trade cannot bypass a poor ROI, and smaller bands require the sam
   for (const notional of [1000, 5000, 7500, 10000, 1000000]) {
     for (const roi of [{ roiPct: 6.99, games: 10, trades: 30 }, { roiPct: 100, games: 9, trades: 100 }]) {
       const { store, api, worker } = setup();
-      api.roiResult = roi;
+      api.roiResult = grossRoi(roi);
       store.add(sample("blocked", notional));
       await worker.tick(settings);
       assert.equal(api.calls.length, 0);
@@ -286,7 +292,7 @@ test("ROI +7% is inclusive; lower or unavailable ROI and insufficient samples ne
     [null, false],
   ] as const) {
     const { store, api, worker } = setup();
-    api.roiResult = roi;
+    api.roiResult = grossRoi(roi);
     store.add(sample());
     await worker.tick(settings);
     assert.equal(api.calls.some(call => call.method === "sendMessage"), allowed, JSON.stringify(roi));
@@ -298,10 +304,10 @@ test("filtered trades keep the last notice and are not replayed when ROI later i
   const { store, api, worker, now } = setup();
   store.add(sample());
   await worker.tick(settings);
-  api.roiResult = { roiPct: 6.9, trades: 30, games: 10 };
+  api.roiResult = grossRoi({ roiPct: 6.9, trades: 30, games: 10 });
   store.add(sample("filtered"));
   await worker.tick(settings);
-  api.roiResult = { roiPct: 20, trades: 30, games: 10 };
+  api.roiResult = grossRoi({ roiPct: 20, trades: 30, games: 10 });
   await new TelegramTradeNotifications(store, api, now).tick(settings);
   assert.deepEqual(api.calls.map(call => call.method), ["sendMessage"]);
   assert.equal(store.row(settings.chatId, "trade-1").removedAt, undefined);
@@ -347,7 +353,8 @@ test("checks the actual NO execution and enriched market, never the opposite sid
   assert.equal(api.roiTrades[0].price, .4);
   assert.equal(api.roiTrades[0].outcomeSide, "no");
   assert.equal(api.roiTrades[0].eventTitle, "New England & Chicago");
-  assert.match(String(api.calls[0].body.text), /ROI histórico comparable \(SÍ\): \+20,00%/);
+  assert.match(String(api.calls[0].body.text), /ROI histórico comparable \(SÍ\)/);
+  assert.match(String(api.calls[0].body.text), /Bruto: \+20,00%/);
 });
 
 test("filter draining is bounded and still sends at most one notice per tick", async () => {
@@ -359,9 +366,27 @@ test("filter draining is bounded and still sends at most one notice per tick", a
   assert.equal(api.calls.length, 0);
   await worker.tick(settings);
   assert.equal(api.roiTrades.length, 12);
-  api.roiResult = { roiPct: 7, games: 10, trades: 30 };
+  api.roiResult = grossRoi({ roiPct: 7, games: 10, trades: 30 });
   store.add(sample("eligible-1"));
   store.add(sample("eligible-2"));
   await worker.tick(settings);
   assert.equal(api.calls.filter(call => call.method === "sendMessage").length, 1);
+});
+
+test("selected basis reaches the worker, cannot silently revert, and filtered trades are never replayed", async () => {
+  const { store, api, worker, now } = setup();
+  store.add(sample("gross-only"));
+  await worker.tick({ ...settings, notificationRoiBasis: "net" });
+  assert.equal(api.roiBases[0], "net");
+  assert.equal(api.calls.length, 0, "A gross-only lookup cannot satisfy a net request");
+  assert.ok(store.row(settings.chatId, "gross-only").skippedAt);
+  api.roiResult = { roiPct: 7, grossRoiPct: 11, netRoiPct: 7, basis: "net", games: 10, trades: 30 };
+  store.add(sample("net-pass"));
+  await worker.tick({ ...settings, notificationRoiBasis: "net" });
+  assert.equal(api.calls.filter(c => c.method === "sendMessage").length, 1);
+  assert.match(String(api.calls[0].body.text), /Bruto: \+11,00% · Neto estimado: \+7,00%/);
+  assert.match(String(api.calls[0].body.text), /Filtro elegido: neto estimado/);
+  assert.match(String(api.calls[0].body.text), /No son ganancias del trader/);
+  await new TelegramTradeNotifications(store, api, now).tick(settings);
+  assert.equal(api.calls.filter(c => c.method === "sendMessage").length, 1);
 });

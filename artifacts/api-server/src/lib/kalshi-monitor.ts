@@ -34,6 +34,8 @@ import { KalshiMetadataWorker, type MarketContext } from "./kalshi-metadata-work
 import { bootstrapMetadataJobs, metadataStore, persistTrades } from "./kalshi-ingestion-store";
 import { KalshiLifecycle } from "./kalshi-lifecycle";
 import { applyLifecycle } from "./kalshi-lifecycle-store";
+import { refreshStoredFees } from "./kalshi-fee-store";
+import { notificationRoiBasis, type RoiBasis } from "./telegram-notification-roi";
 
 const KALSHI_API = "https://external-api.kalshi.com/trade-api/v2";
 const TELEGRAM_API = "https://api.telegram.org";
@@ -47,6 +49,8 @@ type KalshiSeries = {
   category?: string;
   categories?: string[] | null;
   tags?: string[] | null;
+  fee_type?: unknown;
+  fee_multiplier?: unknown;
 };
 
 type KalshiTradeApi = {
@@ -105,6 +109,7 @@ type Settings = {
   minimumNotional: number;
   chatId: string | null;
   telegramUpdateOffset?: number | null;
+  notificationRoiBasis?: RoiBasis;
 };
 
 type TelegramResponse<T> = {
@@ -264,6 +269,10 @@ async function refreshSportsSeries() {
   }
   sportsSeries = nextSeries;
   seriesFetchedAt = Date.now();
+  // Reuse discovery; fee metadata must never hold up saving public trades.
+  void refreshStoredFees([...nextSeries.values()],
+    <T>(path: string) => fetchJson<T>(`${KALSHI_API}${path}`, "history"), new Date(seriesFetchedAt))
+    .catch(error => logger.warn({ error: String(error) }, "Fee snapshot incomplete; net ROI may be unavailable"));
   return sportsSeries;
 }
 
@@ -440,6 +449,7 @@ async function readSettings(): Promise<Settings> {
     minimumNotional: saved?.minimumNotional ?? DEFAULT_THRESHOLD,
     chatId: ownerChatId(),
     telegramUpdateOffset: saved?.telegramUpdateOffset ?? null,
+    notificationRoiBasis: notificationRoiBasis(saved?.notificationRoiBasis),
   };
 }
 
@@ -878,6 +888,7 @@ export async function getKalshiDashboard() {
     enabled: settings.enabled,
     minimumNotional: settings.minimumNotional,
     chatId: settings.chatId,
+    notificationRoiBasis: settings.notificationRoiBasis ?? "gross",
     telegramConfigured: Boolean(botToken() && settings.chatId),
     status,
     lastChecked,
@@ -897,6 +908,7 @@ export async function saveKalshiSettings(settings: Settings) {
       enabled: settings.enabled,
       minimumNotional: settings.minimumNotional,
       chatId: settings.chatId,
+      ...(settings.notificationRoiBasis === undefined ? {} : { notificationRoiBasis: settings.notificationRoiBasis }),
     })
     .onConflictDoUpdate({
       target: kalshiMonitorSettingsTable.id,
@@ -904,6 +916,7 @@ export async function saveKalshiSettings(settings: Settings) {
         enabled: settings.enabled,
         minimumNotional: settings.minimumNotional,
         chatId: settings.chatId,
+        ...(settings.notificationRoiBasis === undefined ? {} : { notificationRoiBasis: settings.notificationRoiBasis }),
         updatedAt: new Date(),
       },
     });

@@ -19,7 +19,13 @@ The user wants Telegram notifications “de +7.0 ROI en adelante”: require com
 
 **Why:** The user asked to restrict push notifications by historical performance, not to remove lower-ROI executions from charts or saved history.
 
-**How to apply:** Match the execution's own sport, bet type, YES/NO side, odds and amount band; never borrow a more profitable band's history. Require the same verified-history sample minimum as the website comparison. Compare before display rounding; the website's green color threshold is not the alert cutoff. Missing or inadequate evidence is silent; a lookup failure must not bypass the filter. Show ROI and sample size in the notice without implying guaranteed returns or net-of-fees profits. Do not replay filtered trades later just because their group's ROI improved.
+**How to apply:** Match the execution's own sport, bet type, YES/NO side, odds and amount band; never borrow a more profitable band's history. Require the same verified-history sample minimum as the website comparison. Compare before display rounding; the website's green color threshold is not the alert cutoff. Missing or inadequate evidence is silent; a lookup failure must not bypass the filter. Show gross versus estimated net and sample size without implying guaranteed or realized trader profits. Do not replay filtered trades later just because their group's ROI improved.
+
+Keep the existing gross-based notification rule until the owner explicitly saves a net-based choice. Missing net-cost evidence must never silently fall back to gross.
+
+**Why:** The user specifically requested an explicit choice of calculation rather than an automatic change when fee estimates become available. Sorting a ranking is a research action, not consent to change notification behavior.
+
+**How to apply:** Preserve the saved basis on updates from older clients that omit the choice. Keep Telegram's basis independent of chart colors, selected display filters and sorting; changing the choice must not replay older filtered trades.
 
 Use “a favor / en contra” as the public direction of an operation, not as a confirmed sale or closed position.
 

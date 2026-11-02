@@ -20,6 +20,7 @@ export const kalshiMonitorSettingsTable = pgTable("kalshi_monitor_settings", {
     .notNull()
     .default(10000),
   chatId: text("chat_id"),
+  notificationRoiBasis: text("notification_roi_basis", { enum: ["gross", "net"] }).notNull().default("gross"),
   telegramUpdateOffset: bigint("telegram_update_offset", { mode: "number" }),
   updatedAt: timestamp("updated_at", { withTimezone: true })
     .notNull()

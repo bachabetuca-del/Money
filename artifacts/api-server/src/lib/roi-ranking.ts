@@ -3,6 +3,7 @@ import { marketType, type MarketType } from "./market-type";
 import {
   accumulatePerformance, moneyPerformance, weeklyPerformance, roiPct, ROI_STAKE,
   ROI_MONEY_LABELS, type RoiMoneyBand, type PerformanceTotals,
+  validatedFees, netEstimate, rawNetRoiPct,
 } from "./roi-performance";
 
 export { ROI_STAKE } from "./roi-performance";
@@ -23,6 +24,7 @@ export type RoiRollup = {
   category: "settled" | "pending" | "excluded" | "incomplete";
   historyVerified?: boolean; historyError?: boolean;
   trades: number; wins: number; profit: number; recentTrades: number; recentProfit: number;
+  fees?: number; feeTrades?: number; recentFees?: number; recentFeeTrades?: number;
   firstAt: string; lastAt: string; checkedAt: string | null; error: boolean;
 };
 const rounded = (n: number, precision = 2) => Number(n.toFixed(precision));
@@ -45,6 +47,7 @@ type Accumulator = {
   moneyBand: RoiMoneyBand | null;
   marketUrl: string | null; oddsMin: number | null; oddsMax: number | null;
   trades: number; wins: number; profit: number; recentTrades: number; recentProfit: number;
+  fees: number; feeTrades: number; recentFees: number; recentFeeTrades: number;
   games: Set<string>; markets: Set<string>;
   weeks: Map<string, PerformanceTotals>; amounts: Map<string, PerformanceTotals>;
 };
@@ -62,6 +65,7 @@ export function buildRoiRanking(
   let historyExcludedTrades = 0;
   let savedTrades = 0, settledTrades = 0, pendingTrades = 0, excludedTrades = 0;
   let profit = 0, recentTrades = 0, recentProfit = 0;
+  let fees = 0, feeTrades = 0, recentFees = 0, recentFeeTrades = 0;
   let firstTradeAt: string | null = null, lastTradeAt: string | null = null, lastSettlementCheckAt: string | null = null;
   for (const r of rollups) {
     savedTrades += r.trades;
@@ -81,6 +85,10 @@ export function buildRoiRanking(
     }
     settledTrades += r.trades; profit += r.profit;
     recentTrades += r.recentTrades; recentProfit += r.recentProfit;
+    const costs = validatedFees(r);
+    const recentCosts = validatedFees({ trades: r.recentTrades, fees: r.recentFees, feeTrades: r.recentFeeTrades });
+    fees += costs.fees; feeTrades += costs.feeTrades;
+    recentFees += recentCosts.fees; recentFeeTrades += recentCosts.feeTrades;
     settledMarkets.add(r.ticker); games.add(r.gameId);
     const type = marketType(r);
     const id = groupBy === "sport" ? r.sport : groupBy === "marketType" ? type :
@@ -104,6 +112,7 @@ export function buildRoiRanking(
         oddsMin: ["odds", "segment"].includes(groupBy) ? r.bucket / 10 : null,
         oddsMax: ["odds", "segment"].includes(groupBy) ? (r.bucket + 1) / 10 : null,
         trades: 0, wins: 0, profit: 0, recentTrades: 0, recentProfit: 0,
+        fees: 0, feeTrades: 0, recentFees: 0, recentFeeTrades: 0,
         games: new Set(), markets: new Set(),
         weeks: new Map(), amounts: new Map(),
       };
@@ -113,12 +122,15 @@ export function buildRoiRanking(
     if (group.moneyBand !== r.moneyBand) group.moneyBand = null;
     group.trades += r.trades; group.wins += r.wins; group.profit += r.profit;
     group.recentTrades += r.recentTrades; group.recentProfit += r.recentProfit;
+    group.fees += costs.fees; group.feeTrades += costs.feeTrades;
+    group.recentFees += recentCosts.fees; group.recentFeeTrades += recentCosts.feeTrades;
     group.games.add(r.gameId); group.markets.add(r.ticker);
     accumulatePerformance(group.weeks, r.weekStart, r);
     accumulatePerformance(group.amounts, r.moneyBand, r);
   }
   const rows: RoiRankingRow[] = [...groups.values()].filter(g => g.games.size >= minGames)
-    .sort((a, b) => (options.sortBy === "winRate" ? b.wins / b.trades - a.wins / a.trades : 0) ||
+    .sort((a, b) => (options.sortBy === "winRate" ? b.wins / b.trades - a.wins / a.trades :
+      options.sortBy === "netRoi" ? compareNet(a, b) : 0) ||
       b.profit / b.trades - a.profit / a.trades ||
       b.games.size - a.games.size || b.trades - a.trades || a.id.localeCompare(b.id))
     .map((g, i) => ({
@@ -127,6 +139,8 @@ export function buildRoiRanking(
       trades: g.trades, games: g.games.size, markets: g.markets.size,
       wins: g.wins, losses: g.trades - g.wins, winRatePct: rounded(100 * g.wins / g.trades),
       roiPct: roiPct(g.profit, g.trades)!, profit: rounded(g.profit), invested: g.trades * ROI_STAKE,
+      net: netEstimate(g.profit, g.trades, g),
+      recentNet: netEstimate(g.recentProfit, g.recentTrades, { fees: g.recentFees, feeTrades: g.recentFeeTrades }),
       recentRoiPct: roiPct(g.recentProfit, g.recentTrades), recentTrades: g.recentTrades,
       sampleWarning: g.games.size < 10 || g.trades < 30,
       weekly: weeklyPerformance(g.weeks, now, options.since ?? null),
@@ -136,6 +150,8 @@ export function buildRoiRanking(
     savedTrades, settledTrades, pendingTrades, excludedTrades, settledMarkets: settledMarkets.size,
     pendingMarkets: pendingMarkets.size, games: games.size, roiPct: roiPct(profit, settledTrades),
     profit: rounded(profit), recentRoiPct: roiPct(recentProfit, recentTrades), recentTrades,
+    net: netEstimate(profit, settledTrades, { fees, feeTrades }),
+    recentNet: netEstimate(recentProfit, recentTrades, { fees: recentFees, feeTrades: recentFeeTrades }),
     firstTradeAt: firstTradeAt ? new Date(firstTradeAt) : null,
     lastTradeAt: lastTradeAt ? new Date(lastTradeAt) : null,
     lastSettlementCheckAt: lastSettlementCheckAt ? new Date(lastSettlementCheckAt) : null,
@@ -144,4 +160,9 @@ export function buildRoiRanking(
     historyErrorMarkets: historyErrors.size, historyExcludedTrades,
   };
   return { rows, summary };
+}
+
+function compareNet(a: Accumulator, b: Accumulator) {
+  const left = rawNetRoiPct(a.profit, a.trades, a), right = rawNetRoiPct(b.profit, b.trades, b);
+  return left === null ? right === null ? 0 : 1 : right === null ? -1 : right - left;
 }

@@ -6,11 +6,14 @@
  * OpenAPI spec version: 0.1.0
  */
 import type { RoiMoneyPerformance } from './roiMoneyPerformance';
+import type { RoiNetEstimate } from './roiNetEstimate';
 import type { RoiRankingRowMoneyBand } from './roiRankingRowMoneyBand';
 import type { RoiRankingRowSide } from './roiRankingRowSide';
 import type { RoiWeekPerformance } from './roiWeekPerformance';
 
 export interface RoiRankingRow {
+  net: RoiNetEstimate;
+  recentNet: RoiNetEstimate;
   id: string;
   rank: number;
   label: string;

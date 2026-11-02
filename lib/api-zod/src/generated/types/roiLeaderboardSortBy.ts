@@ -11,5 +11,6 @@ export type RoiLeaderboardSortBy = typeof RoiLeaderboardSortBy[keyof typeof RoiL
 
 export const RoiLeaderboardSortBy = {
   roi: 'roi',
+  netRoi: 'netRoi',
   winRate: 'winRate',
 } as const;

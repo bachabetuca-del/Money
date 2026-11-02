@@ -20,6 +20,7 @@ import { americanOddsRange, ROI_MARKET_NAMES } from '../lib/roi-display';
 import { RoiRowBreakdown } from './roi-row-breakdown';
 import { RoiAmountCompare } from './roi-amount-compare';
 import { bandLabel, domId } from '../lib/roi-breakdown';
+import { RoiFeeMethodology, RoiNetValue } from './roi-costs';
 import './roi-leaderboard.css';
 
 const TZ = 'America/New_York';
@@ -32,7 +33,7 @@ const GROUPS: { v: GetKalshiLeaderboardGroupBy; l: string }[] = [
   { v: 'amount', l: 'Rangos de importe' },
 ];
 const SORTS: { v: GetKalshiLeaderboardSortBy; l: string }[] = [
-  { v: 'roi', l: 'ROI' }, { v: 'winRate', l: '% aciertos' },
+  { v: 'roi', l: 'ROI bruto' }, { v: 'netRoi', l: 'ROI neto estimado' }, { v: 'winRate', l: '% aciertos' },
 ];
 const WINDOWS: { v: GetKalshiLeaderboardWindow; l: string }[] = [
   { v: 'all', l: 'Todo' }, { v: '30d', l: '30 días' }, { v: '7d', l: '7 días' },
@@ -136,7 +137,7 @@ export function RoiLeaderboard() {
         <div>
           <div className="eyebrow">Ranking ROI · evidencia histórica</div>
           <h2><Trophy size={20} /> Ranking de ROI</h2>
-          <p>Compara deporte, mercado, lado y odds con $100 hipotéticos por operación y liquidaciones oficiales. De mayor a menor ROI.</p>
+          <p>Compara deporte, mercado, lado, odds e importe con $100 hipotéticos por operación y liquidaciones oficiales. Bruto y neto estimado, con las mismas muestras.</p>
         </div>
         <div className="lb-snap" data-testid="text-leaderboard-snapshot">
           {q.isFetching ? <><RefreshCw className="spin" size={12} /> Actualizando…</> : data ? <>Instantánea {when(data.generatedAt)}</> : 'Sin instantánea'}
@@ -147,9 +148,11 @@ export function RoiLeaderboard() {
       <div className="lb-caution" role="note" data-testid="text-leaderboard-caution">
         <AlertTriangle size={16} />
         <div>
-          <strong>Histórico, no predicción.</strong> ROI hipotético sin comisiones ni deslizamiento. Las operaciones del mismo partido están correlacionadas; no garantiza rentabilidad futura.
+          <strong>Histórico, no predicción.</strong> El bruto no descuenta comisiones; el neto solo estima la comisión de entrada, sin deslizamiento ni otros costes personales. Las operaciones del mismo partido están correlacionadas; no garantiza rentabilidad futura.
         </div>
       </div>
+
+      {data && <RoiFeeMethodology model={data.feeModel} />}
 
       <div className="lb-filters" role="group" aria-label="Filtros del ranking">
         <div className="lb-filter wide">
@@ -213,8 +216,9 @@ export function RoiLeaderboard() {
           <section className={`ws-card lb-card ${data.groupBy === 'segment' ? 'lb-combined-card' : ''} ${stale ? 'stale' : ''}`} aria-busy={stale} aria-labelledby="lb-table-title">
             <header className="row">
               <div>
-                <h3 id="lb-table-title">{GROUPS.find((g) => g.v === data.groupBy)?.l ?? 'Ranking'} · ordenado por {data.sortBy === 'winRate' ? '% aciertos' : 'ROI'}</h3>
+                <h3 id="lb-table-title">{GROUPS.find((g) => g.v === data.groupBy)?.l ?? 'Ranking'} · ordenado por {SORTS.find(s => s.v === data.sortBy)?.l}</h3>
                 <p>{data.totalRows.toLocaleString('es-US')} combinaciones con al menos {data.minGames} {data.minGames === 1 ? 'partido' : 'partidos'} · ${data.stakePerTrade} por operación{data.groupBy === 'segment' ? ' · YES y NO separados' : ' · reciente = últimos 7 días'}{data.band === 'large' ? ` · banda grande desde $${data.largeTradeThreshold.toLocaleString('en-US')}` : ''}</p>
+                <p>Tarifas estimables: {data.summary.net.coveredTrades.toLocaleString('es-US')} de {data.summary.settledTrades.toLocaleString('es-US')} operaciones liquidadas. El filtro de Telegram se elige por separado en Ajustes.</p>
               </div>
               {stale && <span className="lb-tag" data-testid="status-leaderboard-stale">Cargando filtros nuevos…</span>}
             </header>
@@ -230,9 +234,10 @@ export function RoiLeaderboard() {
                       <tr>
                         <th scope="col">#</th>
                         <th scope="col">Grupo</th>
-                        <th scope="col" className="r" aria-sort={data.sortBy === 'roi' ? 'descending' : undefined}>ROI periodo</th>
-                        <th scope="col" className="r">ROI reciente 7d</th>
-                        <th scope="col" className="r">Resultado</th>
+                        <th scope="col" className="r" aria-sort={data.sortBy === 'roi' ? 'descending' : undefined}>ROI bruto</th>
+                        <th scope="col" className="r" aria-sort={data.sortBy === 'netRoi' ? 'descending' : undefined}>ROI neto est.</th>
+                        <th scope="col" className="r">ROI reciente 7d<br />bruto / neto est.</th>
+                        <th scope="col" className="r">Resultado bruto</th>
                         <th scope="col" className="r">Operaciones</th>
                         <th scope="col" className="r">Partidos · mercados</th>
                         <th scope="col" className="r" aria-sort={data.sortBy === 'winRate' ? 'descending' : undefined}>% aciertos · G / P</th>
@@ -298,16 +303,18 @@ function Row({ r, data }: { r: RoiRankingRow; data: RoiLeaderboardData }) {
         </button>
       </td>
       <td className={`r lb-roi ${tone(r.roiPct)}`} data-testid={`text-roi-${r.id}`}>{pct(r.roiPct)}</td>
+      <td className="r lb-roi" data-testid={`text-net-roi-${r.id}`}><RoiNetValue net={r.net} /></td>
       <td className="r">
         <span className={tone(r.recentRoiPct)} data-testid={`text-recent-roi-${r.id}`}>{pct(r.recentRoiPct)}</span>
         <small className="lb-sub">{r.recentTrades} op.{delta != null ? ` · ${delta >= 0 ? '+' : ''}${delta.toFixed(1)} pts` : ''}</small>
+        <RoiNetValue net={r.recentNet} />
       </td>
       <td className={`r ${tone(r.profit)}`}>{usd(r.profit)}<small className="lb-sub">de ${r.invested.toLocaleString('en-US')}</small></td>
       <td className="r">{r.trades.toLocaleString('es-US')}</td>
       <td className="r">{r.games} · {r.markets}</td>
       <td className="r"><span className="lb-pct" data-testid={`text-winrate-${r.id}`}>{pct(r.winRatePct, false)}</span><small className="lb-sub">{r.wins} / {r.losses} ganadas / perdidas</small></td>
     </tr>
-    {open && <tr className="lb-detail-row" id={domId('lb-detail', r.id)}><td colSpan={8}><RoiRowBreakdown row={r} minGames={data.minGames} /></td></tr>}
+    {open && <tr className="lb-detail-row" id={domId('lb-detail', r.id)}><td colSpan={9}><RoiRowBreakdown row={r} minGames={data.minGames} /></td></tr>}
     </Fragment>
   );
 }
@@ -318,14 +325,16 @@ function Coverage({ s }: { s: RoiCoverage }) {
     <>
       <section className="lb-kpis" aria-label="Cobertura de liquidaciones">
         <div className="hero-kpi">
-          <span>ROI del periodo</span>
+          <span>ROI bruto del periodo</span>
           <b className={tone(s.roiPct)} data-testid="text-summary-roi">{pct(s.roiPct)}</b>
           <small>{usd(s.profit)} hipotéticos · {s.settledTrades.toLocaleString('es-US')} liquidadas</small>
+          <span>Neto estimado</span><RoiNetValue net={s.net} />
         </div>
         <div>
-          <span>ROI reciente · 7 días</span>
+          <span>ROI bruto reciente · 7 días</span>
           <b className={tone(s.recentRoiPct)} data-testid="text-summary-recent-roi">{pct(s.recentRoiPct)}</b>
           <small>{s.recentTrades.toLocaleString('es-US')} operaciones recientes{s.recentTrades < 30 ? ' · muestra pequeña' : ''}</small>
+          <span>Neto estimado</span><RoiNetValue net={s.recentNet} />
         </div>
         <div>
           <span>Cobertura</span>

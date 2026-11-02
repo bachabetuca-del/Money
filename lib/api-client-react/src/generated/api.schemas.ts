@@ -5,6 +5,58 @@
  * API specification
  * OpenAPI spec version: 0.1.0
  */
+/**
+ * Explicit Telegram filter basis. Existing settings remain gross; an omitted update never changes the saved choice.
+ */
+export type RoiBasis = typeof RoiBasis[keyof typeof RoiBasis];
+
+
+export const RoiBasis = {
+  gross: 'gross',
+  net: 'net',
+} as const;
+
+/**
+ * Same observations and $100 entry notional as gross ROI. Net return divides profit minus estimated entry fees by notional plus fees. All financial values are null unless every observation has a supported, fresh fee rule; missing costs are never zero.
+ */
+export interface RoiNetEstimate {
+  /** @nullable */
+  roiPct: number | null;
+  /** @nullable */
+  profit: number | null;
+  /** @nullable */
+  fees: number | null;
+  /** @nullable */
+  cashOutlay: number | null;
+  /** @minimum 0 */
+  coveredTrades: number;
+  /** @minimum 0 */
+  missingTrades: number;
+}
+
+export type RoiFeeModelStatus = typeof RoiFeeModelStatus[keyof typeof RoiFeeModelStatus];
+
+
+export const RoiFeeModelStatus = {
+  current: 'current',
+  stale: 'stale',
+  unavailable: 'unavailable',
+} as const;
+
+/**
+ * Current published fee schedules applied to historical observations, not a reconstruction of fees paid at the time. One hypothetical taker entry, direct-member rounding to $0.0001, held to binary settlement; no exit fee, slippage, funding, taxes, FCM fees or rebates. Theoretical quantity $100/price preserves the existing equal-stake comparison and is not an executable order.
+ */
+export interface RoiFeeModel {
+  version: string;
+  documentationReviewedOn: string;
+  /** @nullable */
+  scheduleAsOf: string | null;
+  /** @nullable */
+  validUntil: string | null;
+  status: RoiFeeModelStatus;
+  sources: string[];
+}
+
 export type RoiLeaderboardCoverage = typeof RoiLeaderboardCoverage[keyof typeof RoiLeaderboardCoverage];
 
 
@@ -30,6 +82,7 @@ export type RoiLeaderboardSortBy = typeof RoiLeaderboardSortBy[keyof typeof RoiL
 
 export const RoiLeaderboardSortBy = {
   roi: 'roi',
+  netRoi: 'netRoi',
   winRate: 'winRate',
 } as const;
 
@@ -62,6 +115,8 @@ export const RoiLeaderboardDirection = {
 } as const;
 
 export interface RoiCoverage {
+  net: RoiNetEstimate;
+  recentNet: RoiNetEstimate;
   savedTrades: number;
   settledTrades: number;
   pendingTrades: number;
@@ -114,6 +169,7 @@ export const RoiRankingRowMoneyBand = {
 } as const;
 
 export interface RoiWeekPerformance {
+  net: RoiNetEstimate;
   /**
      * Monday local calendar date in America/New_York, grouped by execution time rather than settlement time. Empty intervening weeks have null rates.
      * @pattern ^\d{4}-\d{2}-\d{2}$
@@ -145,6 +201,7 @@ export const RoiMoneyPerformanceBand = {
 } as const;
 
 export interface RoiMoneyPerformance {
+  net: RoiNetEstimate;
   /** small: $1,000–$5,000 inclusive; medium: strictly above $5,000 and below $10,000; large: $10,000 and above. Other selected filters still apply. */
   band: RoiMoneyPerformanceBand;
   trades: number;
@@ -161,6 +218,8 @@ export interface RoiMoneyPerformance {
 }
 
 export interface RoiRankingRow {
+  net: RoiNetEstimate;
+  recentNet: RoiNetEstimate;
   id: string;
   rank: number;
   label: string;
@@ -202,6 +261,7 @@ export interface RoiRankingRow {
 }
 
 export interface RoiLeaderboard {
+  feeModel: RoiFeeModel;
   generatedAt: string;
   stakePerTrade: number;
   /** Actual minimum applied when the large-operation filter is selected; canonical money bands still use $10,000 as their boundary. */
@@ -281,6 +341,7 @@ export const ExplorerRoiSignalReason = {
 } as const;
 
 export interface ExplorerRoiSignal {
+  net: RoiNetEstimate;
   side: ExplorerRoiSignalSide;
   level: ExplorerRoiSignalLevel;
   /** @nullable */
@@ -325,6 +386,7 @@ export const ExplorerRoiScope = {
 } as const;
 
 export interface ExplorerRoi {
+  feeModel: RoiFeeModel;
   generatedAt: string;
   historyAsOf: string;
   band: ExplorerRoiBand;
@@ -464,6 +526,7 @@ export interface KalshiTrade {
 }
 
 export interface KalshiDashboard {
+  notificationRoiBasis: RoiBasis;
   workersPaused: boolean;
   enabled: boolean;
   minimumNotional: number;
@@ -481,6 +544,7 @@ export interface KalshiDashboard {
 }
 
 export interface KalshiSettingsInput {
+  notificationRoiBasis?: RoiBasis;
   enabled: boolean;
   /**
      * @minimum 1
@@ -591,6 +655,7 @@ export type GetKalshiLeaderboardSortBy = typeof GetKalshiLeaderboardSortBy[keyof
 
 export const GetKalshiLeaderboardSortBy = {
   roi: 'roi',
+  netRoi: 'netRoi',
   winRate: 'winRate',
 } as const;
 

@@ -6,8 +6,10 @@
  * OpenAPI spec version: 0.1.0
  */
 import type { RoiMoneyPerformanceBand } from './roiMoneyPerformanceBand';
+import type { RoiNetEstimate } from './roiNetEstimate';
 
 export interface RoiMoneyPerformance {
+  net: RoiNetEstimate;
   /** small: $1,000–$5,000 inclusive; medium: strictly above $5,000 and below $10,000; large: $10,000 and above. Other selected filters still apply. */
   band: RoiMoneyPerformanceBand;
   trades: number;

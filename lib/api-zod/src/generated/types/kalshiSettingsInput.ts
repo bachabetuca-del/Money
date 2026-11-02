@@ -5,8 +5,10 @@
  * API specification
  * OpenAPI spec version: 0.1.0
  */
+import type { RoiBasis } from './roiBasis';
 
 export interface KalshiSettingsInput {
+  notificationRoiBasis?: RoiBasis;
   enabled: boolean;
   /**
      * @minimum 1

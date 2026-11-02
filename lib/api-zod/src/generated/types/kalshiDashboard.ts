@@ -6,8 +6,10 @@
  * OpenAPI spec version: 0.1.0
  */
 import type { KalshiTrade } from './kalshiTrade';
+import type { RoiBasis } from './roiBasis';
 
 export interface KalshiDashboard {
+  notificationRoiBasis: RoiBasis;
   workersPaused: boolean;
   enabled: boolean;
   minimumNotional: number;

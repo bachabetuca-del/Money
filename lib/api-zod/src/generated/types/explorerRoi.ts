@@ -8,8 +8,10 @@
 import type { ExplorerMarketRoi } from './explorerMarketRoi';
 import type { ExplorerRoiBand } from './explorerRoiBand';
 import type { ExplorerRoiScope } from './explorerRoiScope';
+import type { RoiFeeModel } from './roiFeeModel';
 
 export interface ExplorerRoi {
+  feeModel: RoiFeeModel;
   generatedAt: string;
   historyAsOf: string;
   band: ExplorerRoiBand;

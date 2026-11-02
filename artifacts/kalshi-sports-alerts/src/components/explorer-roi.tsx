@@ -1,5 +1,6 @@
-import type { ExplorerMarketRoi, ExplorerRoiSignal } from '@workspace/api-client-react';
+import type { ExplorerMarketRoi, ExplorerRoiSignal, RoiFeeModel } from '@workspace/api-client-react';
 import { americanOddsRange, oddsBoundaryText } from '@/lib/roi-display';
+import { RoiFeeMethodology, RoiNetValue } from './roi-costs';
 import './explorer-roi.css';
 
 export type RoiView = {
@@ -7,6 +8,7 @@ export type RoiView = {
   loading: boolean;
   error: boolean;
   historyAsOf?: string;
+  feeModel?: RoiFeeModel;
 };
 type Direction = 'all' | 'yes' | 'no';
 const reasons = {
@@ -35,7 +37,7 @@ function presentation(view: RoiView, signal?: ExplorerRoiSignal) {
     level: signal.level,
     text: signal.level === 'insufficient' && signal.roiPct !== null ? `${text} · muestra baja` : text,
     title: [
-      `ROI histórico ${reason ?? levels[signal.level]}.`,
+      `ROI bruto histórico ${reason ?? levels[signal.level]}. Neto estimado: ${signal.net.roiPct === null ? 'no disponible' : pct(signal.net.roiPct)}.`,
       `${signal.games} partidos distintos · ${signal.trades} operaciones.`,
       `Odds americanas aprox.: ${americanOddsRange(signal.oddsMin, signal.oddsMax)}.`,
       oddsBoundaryText(signal.oddsMin, signal.oddsMax),
@@ -51,7 +53,7 @@ export function MarketRoiBadges({ view, direction }: { view: RoiView; direction:
       const signal = view.market?.signals.find(s => s.side === side);
       const p = presentation(view, signal);
       return <span key={side} className={`mr-badge mr-${p.level}`} title={p.title} data-roi-side={side} data-roi-level={p.level}>
-        <i aria-hidden="true" />{sideLabel(side)} · ROI {p.text}
+        <i aria-hidden="true" />{sideLabel(side)} · ROI bruto {p.text}
       </span>;
     })}
   </span>;
@@ -61,7 +63,7 @@ export function RoiColorLegend({ minimumGames = 10, minimumTrades = 30, greenMin
   minimumGames?: number; minimumTrades?: number; greenMin?: number;
 }) {
   return <section className="mr-legend" aria-label="Leyenda de colores ROI" data-testid="roi-color-legend">
-    <strong>Colores · ROI histórico</strong>
+    <strong>Colores · ROI bruto histórico</strong>
     <div className="mr-key">
       <span className="mr-badge mr-good"><i aria-hidden="true" />Verde · ≥ +{greenMin}%</span>
       <span className="mr-badge mr-medium"><i aria-hidden="true" />Amarillo · 0% a &lt; +{greenMin}%</span>
@@ -90,6 +92,7 @@ export function MarketRoiDetail({ view, direction }: { view: RoiView; direction:
         if (!s) return null;
         return <div key={side}>
           <b>{sideLabel(side)}</b>
+          <span>Bruto: {s.roiPct === null ? 'no disponible' : pct(s.roiPct)} · Neto estimado: <RoiNetValue net={s.net} /></span>
           <span>{s.games.toLocaleString('es-US')} partidos · {s.trades.toLocaleString('es-US')} operaciones</span>
           {s.price !== null && <>
             <span>Odds del grupo: {americanOddsRange(s.oddsMin, s.oddsMax)} <span className="mr-boundary">({oddsBoundaryText(s.oddsMin, s.oddsMax)})</span></span>
@@ -100,7 +103,8 @@ export function MarketRoiDetail({ view, direction }: { view: RoiView; direction:
       })}
     </div>}
     <p>Mismo deporte, tipo, lado, odds y banda de dinero. Histórico completo verificado;
-      no es el ROI de este partido ni una predicción. $100 simulados por operación, sin comisiones.</p>
+      no es el ROI de este partido ni una predicción. $100 simulados por operación; bruto antes de comisiones y neto después de la comisión estimada. Los colores siguen usando el bruto.</p>
+    <RoiFeeMethodology model={view.feeModel} />
     {view.historyAsOf && <p className="mr-asof">Histórico calculado: {timeLabel(view.historyAsOf)} · actualización cada minuto</p>}
   </section>;
 }

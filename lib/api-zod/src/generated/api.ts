@@ -19,7 +19,21 @@ export const GetKalshiExplorerRoiQueryParams = zod.object({
   "scope": zod.enum(['active', 'history']).default(getKalshiExplorerRoiQueryScopeDefault)
 })
 
+export const getKalshiExplorerRoiResponseMarketsItemSignalsItemNetCoveredTradesMin = 0;
+
+export const getKalshiExplorerRoiResponseMarketsItemSignalsItemNetMissingTradesMin = 0;
+
+
+
 export const GetKalshiExplorerRoiResponse = zod.object({
+  "feeModel": zod.object({
+  "version": zod.string(),
+  "documentationReviewedOn": zod.string(),
+  "scheduleAsOf": zod.string().nullable(),
+  "validUntil": zod.string().nullable(),
+  "status": zod.enum(['current', 'stale', 'unavailable']),
+  "sources": zod.array(zod.string())
+}).describe('Current published fee schedules applied to historical observations, not a reconstruction of fees paid at the time. One hypothetical taker entry, direct-member rounding to $0.0001, held to binary settlement; no exit fee, slippage, funding, taxes, FCM fees or rebates. Theoretical quantity $100/price preserves the existing equal-stake comparison and is not an executable order.'),
   "generatedAt": zod.string(),
   "historyAsOf": zod.string(),
   "band": zod.enum(['large', 'medium', 'small']),
@@ -30,6 +44,14 @@ export const GetKalshiExplorerRoiResponse = zod.object({
   "markets": zod.array(zod.object({
   "ticker": zod.string(),
   "signals": zod.array(zod.object({
+  "net": zod.object({
+  "roiPct": zod.number().nullable(),
+  "profit": zod.number().nullable(),
+  "fees": zod.number().nullable(),
+  "cashOutlay": zod.number().nullable(),
+  "coveredTrades": zod.number().int().min(getKalshiExplorerRoiResponseMarketsItemSignalsItemNetCoveredTradesMin),
+  "missingTrades": zod.number().int().min(getKalshiExplorerRoiResponseMarketsItemSignalsItemNetMissingTradesMin)
+}).describe('Same observations and $100 entry notional as gross ROI. Net return divides profit minus estimated entry fees by notional plus fees. All financial values are null unless every observation has a supported, fresh fee rule; missing costs are never zero.'),
   "side": zod.enum(['yes', 'no']),
   "level": zod.enum(['good', 'medium', 'bad', 'insufficient']),
   "reason": zod.union([zod.literal('no_price'),zod.literal('no_history'),zod.literal('small_sample'),zod.literal('unclassified'),zod.literal(null)]).nullable(),
@@ -65,7 +87,7 @@ export const getKalshiLeaderboardQueryPageMax = 100000;
 export const GetKalshiLeaderboardQueryParams = zod.object({
   "coverage": zod.enum(['verified', 'all']).default(getKalshiLeaderboardQueryCoverageDefault),
   "groupBy": zod.enum(['sport', 'marketType', 'odds', 'segment', 'market', 'amount']).default(getKalshiLeaderboardQueryGroupByDefault),
-  "sortBy": zod.enum(['roi', 'winRate']).default(getKalshiLeaderboardQuerySortByDefault),
+  "sortBy": zod.enum(['roi', 'netRoi', 'winRate']).default(getKalshiLeaderboardQuerySortByDefault),
   "window": zod.enum(['all', '30d', '7d']).default(getKalshiLeaderboardQueryWindowDefault),
   "band": zod.enum(['all', 'large', 'medium', 'small']).default(getKalshiLeaderboardQueryBandDefault),
   "direction": zod.enum(['all', 'yes', 'no']).default(getKalshiLeaderboardQueryDirectionDefault),
@@ -73,21 +95,69 @@ export const GetKalshiLeaderboardQueryParams = zod.object({
   "page": zod.coerce.number().int().min(1).max(getKalshiLeaderboardQueryPageMax).default(getKalshiLeaderboardQueryPageDefault)
 })
 
+export const getKalshiLeaderboardResponseSummaryNetCoveredTradesMin = 0;
+
+export const getKalshiLeaderboardResponseSummaryNetMissingTradesMin = 0;
+
+export const getKalshiLeaderboardResponseSummaryRecentNetCoveredTradesMin = 0;
+
+export const getKalshiLeaderboardResponseSummaryRecentNetMissingTradesMin = 0;
+
+export const getKalshiLeaderboardResponseRowsItemNetCoveredTradesMin = 0;
+
+export const getKalshiLeaderboardResponseRowsItemNetMissingTradesMin = 0;
+
+export const getKalshiLeaderboardResponseRowsItemRecentNetCoveredTradesMin = 0;
+
+export const getKalshiLeaderboardResponseRowsItemRecentNetMissingTradesMin = 0;
+
+export const getKalshiLeaderboardResponseRowsItemWeeklyItemNetCoveredTradesMin = 0;
+
+export const getKalshiLeaderboardResponseRowsItemWeeklyItemNetMissingTradesMin = 0;
+
 export const getKalshiLeaderboardResponseRowsItemWeeklyItemWeekStartRegExp = new RegExp('^\\d{4}-\\d{2}-\\d{2}$');
+export const getKalshiLeaderboardResponseRowsItemMoneyBandsItemNetCoveredTradesMin = 0;
+
+export const getKalshiLeaderboardResponseRowsItemMoneyBandsItemNetMissingTradesMin = 0;
+
 
 
 export const GetKalshiLeaderboardResponse = zod.object({
+  "feeModel": zod.object({
+  "version": zod.string(),
+  "documentationReviewedOn": zod.string(),
+  "scheduleAsOf": zod.string().nullable(),
+  "validUntil": zod.string().nullable(),
+  "status": zod.enum(['current', 'stale', 'unavailable']),
+  "sources": zod.array(zod.string())
+}).describe('Current published fee schedules applied to historical observations, not a reconstruction of fees paid at the time. One hypothetical taker entry, direct-member rounding to $0.0001, held to binary settlement; no exit fee, slippage, funding, taxes, FCM fees or rebates. Theoretical quantity $100/price preserves the existing equal-stake comparison and is not an executable order.'),
   "generatedAt": zod.coerce.date(),
   "stakePerTrade": zod.number(),
   "largeTradeThreshold": zod.number().describe('Actual minimum applied when the large-operation filter is selected; canonical money bands still use $10,000 as their boundary.'),
   "coverage": zod.enum(['verified', 'all']),
   "groupBy": zod.enum(['sport', 'marketType', 'odds', 'segment', 'market', 'amount']),
-  "sortBy": zod.enum(['roi', 'winRate']),
+  "sortBy": zod.enum(['roi', 'netRoi', 'winRate']),
   "window": zod.enum(['all', '30d', '7d']),
   "band": zod.enum(['all', 'large', 'medium', 'small']),
   "direction": zod.enum(['all', 'yes', 'no']),
   "minGames": zod.number().int(),
   "summary": zod.object({
+  "net": zod.object({
+  "roiPct": zod.number().nullable(),
+  "profit": zod.number().nullable(),
+  "fees": zod.number().nullable(),
+  "cashOutlay": zod.number().nullable(),
+  "coveredTrades": zod.number().int().min(getKalshiLeaderboardResponseSummaryNetCoveredTradesMin),
+  "missingTrades": zod.number().int().min(getKalshiLeaderboardResponseSummaryNetMissingTradesMin)
+}).describe('Same observations and $100 entry notional as gross ROI. Net return divides profit minus estimated entry fees by notional plus fees. All financial values are null unless every observation has a supported, fresh fee rule; missing costs are never zero.'),
+  "recentNet": zod.object({
+  "roiPct": zod.number().nullable(),
+  "profit": zod.number().nullable(),
+  "fees": zod.number().nullable(),
+  "cashOutlay": zod.number().nullable(),
+  "coveredTrades": zod.number().int().min(getKalshiLeaderboardResponseSummaryRecentNetCoveredTradesMin),
+  "missingTrades": zod.number().int().min(getKalshiLeaderboardResponseSummaryRecentNetMissingTradesMin)
+}).describe('Same observations and $100 entry notional as gross ROI. Net return divides profit minus estimated entry fees by notional plus fees. All financial values are null unless every observation has a supported, fresh fee rule; missing costs are never zero.'),
   "savedTrades": zod.number().int(),
   "settledTrades": zod.number().int(),
   "pendingTrades": zod.number().int(),
@@ -109,6 +179,22 @@ export const GetKalshiLeaderboardResponse = zod.object({
   "historyExcludedTrades": zod.number().int()
 }),
   "rows": zod.array(zod.object({
+  "net": zod.object({
+  "roiPct": zod.number().nullable(),
+  "profit": zod.number().nullable(),
+  "fees": zod.number().nullable(),
+  "cashOutlay": zod.number().nullable(),
+  "coveredTrades": zod.number().int().min(getKalshiLeaderboardResponseRowsItemNetCoveredTradesMin),
+  "missingTrades": zod.number().int().min(getKalshiLeaderboardResponseRowsItemNetMissingTradesMin)
+}).describe('Same observations and $100 entry notional as gross ROI. Net return divides profit minus estimated entry fees by notional plus fees. All financial values are null unless every observation has a supported, fresh fee rule; missing costs are never zero.'),
+  "recentNet": zod.object({
+  "roiPct": zod.number().nullable(),
+  "profit": zod.number().nullable(),
+  "fees": zod.number().nullable(),
+  "cashOutlay": zod.number().nullable(),
+  "coveredTrades": zod.number().int().min(getKalshiLeaderboardResponseRowsItemRecentNetCoveredTradesMin),
+  "missingTrades": zod.number().int().min(getKalshiLeaderboardResponseRowsItemRecentNetMissingTradesMin)
+}).describe('Same observations and $100 entry notional as gross ROI. Net return divides profit minus estimated entry fees by notional plus fees. All financial values are null unless every observation has a supported, fresh fee rule; missing costs are never zero.'),
   "id": zod.string(),
   "rank": zod.number().int(),
   "label": zod.string(),
@@ -132,6 +218,14 @@ export const GetKalshiLeaderboardResponse = zod.object({
   "recentTrades": zod.number().int(),
   "sampleWarning": zod.boolean(),
   "weekly": zod.array(zod.object({
+  "net": zod.object({
+  "roiPct": zod.number().nullable(),
+  "profit": zod.number().nullable(),
+  "fees": zod.number().nullable(),
+  "cashOutlay": zod.number().nullable(),
+  "coveredTrades": zod.number().int().min(getKalshiLeaderboardResponseRowsItemWeeklyItemNetCoveredTradesMin),
+  "missingTrades": zod.number().int().min(getKalshiLeaderboardResponseRowsItemWeeklyItemNetMissingTradesMin)
+}).describe('Same observations and $100 entry notional as gross ROI. Net return divides profit minus estimated entry fees by notional plus fees. All financial values are null unless every observation has a supported, fresh fee rule; missing costs are never zero.'),
   "weekStart": zod.string().regex(getKalshiLeaderboardResponseRowsItemWeeklyItemWeekStartRegExp).describe('Monday local calendar date in America/New_York, grouped by execution time rather than settlement time. Empty intervening weeks have null rates.'),
   "trades": zod.number().int(),
   "games": zod.number().int(),
@@ -143,6 +237,14 @@ export const GetKalshiLeaderboardResponse = zod.object({
   "sampleWarning": zod.boolean()
 })),
   "moneyBands": zod.array(zod.object({
+  "net": zod.object({
+  "roiPct": zod.number().nullable(),
+  "profit": zod.number().nullable(),
+  "fees": zod.number().nullable(),
+  "cashOutlay": zod.number().nullable(),
+  "coveredTrades": zod.number().int().min(getKalshiLeaderboardResponseRowsItemMoneyBandsItemNetCoveredTradesMin),
+  "missingTrades": zod.number().int().min(getKalshiLeaderboardResponseRowsItemMoneyBandsItemNetMissingTradesMin)
+}).describe('Same observations and $100 entry notional as gross ROI. Net return divides profit minus estimated entry fees by notional plus fees. All financial values are null unless every observation has a supported, fresh fee rule; missing costs are never zero.'),
   "band": zod.enum(['small', 'medium', 'large']).describe('small: $1,000–$5,000 inclusive; medium: strictly above $5,000 and below $10,000; large: $10,000 and above. Other selected filters still apply.'),
   "trades": zod.number().int(),
   "games": zod.number().int(),
@@ -317,6 +419,7 @@ export const HealthCheckResponse = zod.object({
  * @summary Get monitor status and recent qualifying sports trades
  */
 export const GetKalshiDashboardResponse = zod.object({
+  "notificationRoiBasis": zod.enum(['gross', 'net']).describe('Explicit Telegram filter basis. Existing settings remain gross; an omitted update never changes the saved choice.'),
   "workersPaused": zod.boolean(),
   "enabled": zod.boolean(),
   "minimumNotional": zod.number(),
@@ -353,12 +456,14 @@ export const saveKalshiSettingsBodyMinimumNotionalMax = 999999999999.99;
 
 
 export const SaveKalshiSettingsBody = zod.object({
+  "notificationRoiBasis": zod.enum(['gross', 'net']).optional().describe('Explicit Telegram filter basis. Existing settings remain gross; an omitted update never changes the saved choice.'),
   "enabled": zod.boolean(),
   "minimumNotional": zod.number().min(1).max(saveKalshiSettingsBodyMinimumNotionalMax),
   "chatId": zod.string().min(1)
 })
 
 export const SaveKalshiSettingsResponse = zod.object({
+  "notificationRoiBasis": zod.enum(['gross', 'net']).describe('Explicit Telegram filter basis. Existing settings remain gross; an omitted update never changes the saved choice.'),
   "workersPaused": zod.boolean(),
   "enabled": zod.boolean(),
   "minimumNotional": zod.number(),

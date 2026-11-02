@@ -7,7 +7,7 @@ Use equal hypothetical stakes per observed execution, held to official final bin
 
 **Why:** Public activity does not reveal actual portfolios, opening versus closing transactions, attainable fills, or realized profits. Large operations and correlated executions from one game otherwise distort comparisons.
 
-**How to apply:** Keep the stake and gross-of-fees assumption explicit. Resolve each bet from its official market settlement, never the game's score or its last traded price. Pending, provisional, unsupported payouts and invalid observations cannot become losses or fabricated returns. Show coverage, distinct-game estimates and recent performance with sample-size and hindsight warnings; none establishes future profitability. Use only saved monitor history, not a claim of complete exchange coverage. Keep enrichment inside the existing singleton production runtime, with development workers disabled and no new Telegram notifications.
+**How to apply:** Keep the stake and the distinction between gross and estimated net explicit. Resolve each bet from its official market settlement, never the game's score or its last traded price. Pending, provisional, unsupported payouts and invalid observations cannot become losses or fabricated returns. Show coverage, distinct-game estimates and recent performance with sample-size and hindsight warnings; none establishes future profitability. Use only saved monitor history, not a claim of complete exchange coverage. Keep enrichment inside the existing singleton production runtime, with development workers disabled and no new Telegram notifications.
 
 Default to markets whose available execution history has been fully reconciled after official settlement. Keep an explicit opt-in for partial histories, with visible coverage and errors. A finished game's final reconciliation is a one-time audit, not renewed recurring game/trade polling.
 
@@ -42,3 +42,9 @@ The user requested green/best, yellow/medium and red/bad ROI indicators in Anál
 **Why:** An unresolved market has no final ROI. Borrowing a broad sport average, the opposite side's better return, or a different odds/amount band could make an unrelated history appear favorable.
 
 **How to apply:** Keep SÍ/NO separate and require an exact comparison group. Use neutral gray for inadequate evidence or unavailable data, label the visual thresholds explicitly, and show the observed reference price's date rather than presenting it as a live quote. Website comparisons load independently so they cannot block live exploration. The user separately requested a Telegram ROI filter; follow the notification rules without changing the website's color thresholds.
+
+Preserve the original equal entry notional when comparing gross and estimated net; treat fees as additional capital, not fewer hypothetical contracts. Current public fee rules applied to history are a scenario, not evidence of the fees actually paid then.
+
+**Why:** The user wants to avoid confusing the existing historical +7% with after-cost profit while retaining the original research comparison. Changing position size or selecting only the observations with cheaper/known fees would make the comparison misleading. Public trades do not reveal actual maker/taker execution, account rounding, rebates or funding costs.
+
+**How to apply:** Declare the execution and fee-time assumptions, distinguish direct-member precision from intermediary costs, and check current official exceptions rather than trusting an old illustrative fee table. Unknown costs remain unknown; never publish an all-history gross beside a net computed from a different covered subset.

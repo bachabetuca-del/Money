@@ -27,3 +27,4 @@ export * from "./kalshi-analysis";
 export * from "./kalshi-settlements";
 export * from "./kalshi-recovery";
 export * from "./kalshi-metadata-jobs";
+export * from "./kalshi-fees";

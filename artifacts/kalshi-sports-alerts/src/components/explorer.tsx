@@ -362,6 +362,7 @@ export function Explorer() {
   const roiByTicker = useMemo(() => new Map(roi.data?.markets.map(m => [m.ticker, m])), [roi.data]);
   const roiView = (id: string): RoiView => ({
     market: roiByTicker.get(id), loading: roi.isPending, error: roi.isError, historyAsOf: roi.data?.historyAsOf,
+    feeModel: roi.data?.feeModel,
   });
   const detailParams = { band, scope, direction, marketType, window: win, ticker, view: 'detail' as const };
   const detailKey = ['/api/kalshi/explorer', detailParams] as const;

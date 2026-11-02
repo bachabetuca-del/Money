@@ -6,6 +6,7 @@
  * OpenAPI spec version: 0.1.0
  */
 import type { RoiCoverage } from './roiCoverage';
+import type { RoiFeeModel } from './roiFeeModel';
 import type { RoiLeaderboardBand } from './roiLeaderboardBand';
 import type { RoiLeaderboardCoverage } from './roiLeaderboardCoverage';
 import type { RoiLeaderboardDirection } from './roiLeaderboardDirection';
@@ -15,6 +16,7 @@ import type { RoiLeaderboardWindow } from './roiLeaderboardWindow';
 import type { RoiRankingRow } from './roiRankingRow';
 
 export interface RoiLeaderboard {
+  feeModel: RoiFeeModel;
   generatedAt: Date;
   stakePerTrade: number;
   /** Actual minimum applied when the large-operation filter is selected; canonical money bands still use $10,000 as their boundary. */

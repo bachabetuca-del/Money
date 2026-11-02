@@ -5,6 +5,7 @@ import { marketCardSvg, type MarketCardTrade } from "./telegram-market-card";
 import { dashboardChartCaption, spanishRange } from "./telegram-dashboard-caption";
 import { tradeRange, type TradeRange } from "./kalshi-trade-bands";
 import type { HistoryStatus } from "./kalshi-market-history";
+import type { RoiBasis } from "./telegram-notification-roi";
 import {
   buildCatalog, catalogGameBadge, chartKeyboard, HOME, keyFor, menuSvg, menuView,
   navigate, normalizeSelection, type MarketSummary, type Selection,
@@ -18,7 +19,7 @@ export type DashboardState = Selection & {
   cleanupWarning: string | null;
 };
 export type DashboardTrade = MarketCardTrade & { marketUrl: string };
-export type DashboardSettings = { enabled: boolean; minimumNotional: number; chatId: string | null };
+export type DashboardSettings = { enabled: boolean; minimumNotional: number; chatId: string | null; notificationRoiBasis?: RoiBasis };
 export type CallbackQuery = {
   id: string;
   data?: string;
@@ -148,6 +149,7 @@ export class TelegramDashboard {
         checkedAt: market.gameCheckedAt, range, history,
         gameResult: market.gameResult, scoreStatus: market.scoreStatus,
         scoreMessage: market.scoreMessage,
+        notificationRoiBasis: settings.notificationRoiBasis,
       });
       keyboard = chartKeyboard(selection, market.marketUrl, settings.minimumNotional);
     } else {

@@ -4,8 +4,9 @@ import type { RoiRankingRow } from '@workspace/api-client-react';
 import { americanOddsRange, oddsBoundaryText, ROI_MARKET_NAMES, roiSportLabel } from '../lib/roi-display';
 import { RoiRowBreakdown } from './roi-row-breakdown';
 import { domId } from '../lib/roi-breakdown';
+import { RoiNetValue } from './roi-costs';
 
-type Sort = 'roi' | 'winRate';
+type Sort = 'roi' | 'netRoi' | 'winRate';
 
 /** The server sorts and paginates these side-specific segments; do not re-rank a page locally. */
 export function RoiCombinedTable({ rows, sortBy = 'roi', minGames }: { rows: RoiRankingRow[]; sortBy?: Sort; minGames?: number }) {
@@ -23,7 +24,8 @@ export function RoiCombinedTable({ rows, sortBy = 'roi', minGames }: { rows: Roi
               <th scope="col">Lado</th>
               <th scope="col">Odds americanas <span className="lb-approx">aprox.</span></th>
               <th scope="col" className="r" aria-sort={sortBy === 'winRate' ? 'descending' : undefined}><span className="lb-sort">Aciertos{sortBy === 'winRate' && <ArrowDown size={12} aria-hidden="true" />}</span></th>
-              <th scope="col" className="r" aria-sort={sortBy === 'roi' ? 'descending' : undefined}><span className="lb-sort">ROI{sortBy === 'roi' && <ArrowDown size={12} aria-hidden="true" />}</span></th>
+               <th scope="col" className="r" aria-sort={sortBy === 'roi' ? 'descending' : undefined}><span className="lb-sort">ROI bruto{sortBy === 'roi' && <ArrowDown size={12} aria-hidden="true" />}</span></th>
+               <th scope="col" className="r" aria-sort={sortBy === 'netRoi' ? 'descending' : undefined}><span className="lb-sort">ROI neto est.{sortBy === 'netRoi' && <ArrowDown size={12} aria-hidden="true" />}</span></th>
               <th scope="col" className="r">Muestras</th>
             </tr>
           </thead>
@@ -52,6 +54,7 @@ export function RoiCombinedTable({ rows, sortBy = 'roi', minGames }: { rows: Roi
                     <td className={`r lb-roi ${r.roiPct > 0 ? 'pos' : r.roiPct < 0 ? 'neg' : ''}`} data-testid={`text-roi-${r.id}`}>
                       {r.roiPct > 0 ? '+' : ''}{r.roiPct.toFixed(1)}%
                     </td>
+                     <td className="r lb-roi" data-testid={`text-net-roi-${r.id}`}><RoiNetValue net={r.net} /></td>
                     <td className="r">
                       <span className="lb-sample" data-testid={`text-samples-${r.id}`}>
                         {r.sampleWarning && <span className="lb-sample-warning" data-testid={`status-sample-${r.id}`} title="Muestra pequeña: menos de 10 partidos o 30 operaciones">
@@ -64,7 +67,7 @@ export function RoiCombinedTable({ rows, sortBy = 'roi', minGames }: { rows: Roi
                   </tr>
                   {isOpen && (
                     <tr className="lb-detail-row" id={domId('lb-detail', r.id)}>
-                      <td colSpan={7}><RoiRowBreakdown row={r} minGames={minGames} /></td>
+                       <td colSpan={8}><RoiRowBreakdown row={r} minGames={minGames} /></td>
                     </tr>
                   )}
                 </Fragment>
@@ -74,7 +77,7 @@ export function RoiCombinedTable({ rows, sortBy = 'roi', minGames }: { rows: Roi
         </table>
       </div>
       <div className="lb-table-note">
-        <span>Aciertos = % y ganadas / total. Muestras = operaciones liquidadas y partidos distintos, no partidos independientes. Toca el deporte para ver ROI semanal y rangos de importe.</span>
+        <span>Bruto y neto usan las mismas muestras. Aciertos = % y ganadas / total. Muestras = operaciones liquidadas y partidos distintos, no partidos independientes. Toca el deporte para ver ROI semanal y rangos de importe.</span>
         {rows.some(r => r.sampleWarning) && <span className="lb-sample-legend"><AlertTriangle size={12} aria-hidden="true" /> Muestra pequeña</span>}
         <span className="lb-scroll-hint">Desliza para ver todas las columnas.</span>
       </div>

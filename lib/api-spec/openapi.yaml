@@ -57,7 +57,7 @@ paths:
           schema: { type: string, enum: [sport, marketType, odds, segment, market, amount], default: segment }
         - in: query
           name: sortBy
-          schema: { type: string, enum: [roi, winRate], default: roi }
+          schema: { type: string, enum: [roi, netRoi, winRate], default: roi }
         - in: query
           name: window
           schema: { type: string, enum: [all, 30d, 7d], default: all }
@@ -360,10 +360,39 @@ components:
           schema:
             $ref: "#/components/schemas/ApiError"
   schemas:
+    RoiBasis:
+      type: string
+      enum: [gross, net]
+      description: Explicit Telegram filter basis. Existing settings remain gross; an omitted update never changes the saved choice.
+    RoiNetEstimate:
+      type: object
+      required: [roiPct, profit, fees, cashOutlay, coveredTrades, missingTrades]
+      description: Same observations and $100 entry notional as gross ROI. Net return divides profit minus estimated entry fees by notional plus fees. All financial values are null unless every observation has a supported, fresh fee rule; missing costs are never zero.
+      properties:
+        roiPct: { type: [number, "null"] }
+        profit: { type: [number, "null"] }
+        fees: { type: [number, "null"] }
+        cashOutlay: { type: [number, "null"] }
+        coveredTrades: { type: integer, minimum: 0 }
+        missingTrades: { type: integer, minimum: 0 }
+    RoiFeeModel:
+      type: object
+      required: [version, documentationReviewedOn, scheduleAsOf, validUntil, status, sources]
+      description: Current published fee schedules applied to historical observations, not a reconstruction of fees paid at the time. One hypothetical taker entry, direct-member rounding to $0.0001, held to binary settlement; no exit fee, slippage, funding, taxes, FCM fees or rebates. Theoretical quantity $100/price preserves the existing equal-stake comparison and is not an executable order.
+      properties:
+        version: { type: string }
+        documentationReviewedOn: { type: string }
+        scheduleAsOf: { type: [string, "null"] }
+        validUntil: { type: [string, "null"] }
+        status: { type: string, enum: [current, stale, unavailable] }
+        sources:
+          type: array
+          items: { type: string }
     RoiLeaderboard:
       type: object
-      required: [generatedAt, stakePerTrade, largeTradeThreshold, summary, rows, totalRows, page, pageSize, totalPages, groupBy, sortBy, window, band, direction, minGames, coverage]
+      required: [generatedAt, stakePerTrade, largeTradeThreshold, summary, rows, totalRows, page, pageSize, totalPages, groupBy, sortBy, window, band, direction, minGames, coverage, feeModel]
       properties:
+        feeModel: { $ref: "#/components/schemas/RoiFeeModel" }
         generatedAt: { type: string, format: date-time }
         stakePerTrade: { type: number }
         largeTradeThreshold:
@@ -371,7 +400,7 @@ components:
           description: Actual minimum applied when the large-operation filter is selected; canonical money bands still use $10,000 as their boundary.
         coverage: { type: string, enum: [verified, all] }
         groupBy: { type: string, enum: [sport, marketType, odds, segment, market, amount] }
-        sortBy: { type: string, enum: [roi, winRate] }
+        sortBy: { type: string, enum: [roi, netRoi, winRate] }
         window: { type: string, enum: [all, 30d, 7d] }
         band: { type: string, enum: [all, large, medium, small] }
         direction: { type: string, enum: [all, yes, no] }
@@ -386,8 +415,10 @@ components:
         totalPages: { type: integer }
     RoiCoverage:
       type: object
-      required: [savedTrades, settledTrades, pendingTrades, excludedTrades, settledMarkets, pendingMarkets, games, roiPct, profit, recentRoiPct, recentTrades, firstTradeAt, lastTradeAt, lastSettlementCheckAt, settlementErrors, verifiedHistoryMarkets, incompleteHistoryMarkets, historyErrorMarkets, historyExcludedTrades]
+      required: [savedTrades, settledTrades, pendingTrades, excludedTrades, settledMarkets, pendingMarkets, games, roiPct, profit, recentRoiPct, recentTrades, firstTradeAt, lastTradeAt, lastSettlementCheckAt, settlementErrors, verifiedHistoryMarkets, incompleteHistoryMarkets, historyErrorMarkets, historyExcludedTrades, net, recentNet]
       properties:
+        net: { $ref: "#/components/schemas/RoiNetEstimate" }
+        recentNet: { $ref: "#/components/schemas/RoiNetEstimate" }
         savedTrades: { type: integer }
         settledTrades: { type: integer }
         pendingTrades: { type: integer }
@@ -409,8 +440,10 @@ components:
         historyExcludedTrades: { type: integer }
     RoiRankingRow:
       type: object
-      required: [id, rank, label, sport, marketType, side, moneyBand, marketUrl, oddsMin, oddsMax, trades, games, markets, wins, losses, winRatePct, roiPct, profit, invested, recentRoiPct, recentTrades, sampleWarning, weekly, moneyBands]
+      required: [id, rank, label, sport, marketType, side, moneyBand, marketUrl, oddsMin, oddsMax, trades, games, markets, wins, losses, winRatePct, roiPct, profit, invested, recentRoiPct, recentTrades, sampleWarning, weekly, moneyBands, net, recentNet]
       properties:
+        net: { $ref: "#/components/schemas/RoiNetEstimate" }
+        recentNet: { $ref: "#/components/schemas/RoiNetEstimate" }
         id: { type: string }
         rank: { type: integer }
         label: { type: string }
@@ -447,8 +480,9 @@ components:
           items: { $ref: "#/components/schemas/RoiMoneyPerformance" }
     RoiWeekPerformance:
       type: object
-      required: [weekStart, trades, games, wins, profit, roiPct, winRatePct, partial, sampleWarning]
+      required: [weekStart, trades, games, wins, profit, roiPct, winRatePct, partial, sampleWarning, net]
       properties:
+        net: { $ref: "#/components/schemas/RoiNetEstimate" }
         weekStart:
           type: string
           pattern: '^\d{4}-\d{2}-\d{2}$'
@@ -465,8 +499,9 @@ components:
         sampleWarning: { type: boolean }
     RoiMoneyPerformance:
       type: object
-      required: [band, trades, games, wins, profit, roiPct, winRatePct, sampleWarning, meetsMinimum]
+      required: [band, trades, games, wins, profit, roiPct, winRatePct, sampleWarning, meetsMinimum, net]
       properties:
+        net: { $ref: "#/components/schemas/RoiNetEstimate" }
         band:
           type: string
           enum: [small, medium, large]
@@ -512,8 +547,9 @@ components:
         text: { type: string }
     ExplorerRoiSignal:
       type: object
-      required: [side, level, reason, roiPct, trades, games, price, observedAt, oddsMin, oddsMax]
+      required: [side, level, reason, roiPct, trades, games, price, observedAt, oddsMin, oddsMax, net]
       properties:
+        net: { $ref: "#/components/schemas/RoiNetEstimate" }
         side: { type: string, enum: [yes, no] }
         level: { type: string, enum: [good, medium, bad, insufficient] }
         reason:
@@ -538,8 +574,9 @@ components:
           items: { $ref: "#/components/schemas/ExplorerRoiSignal" }
     ExplorerRoi:
       type: object
-      required: [generatedAt, historyAsOf, band, scope, minimumGames, minimumTrades, greenMinRoiPct, markets]
+      required: [generatedAt, historyAsOf, band, scope, minimumGames, minimumTrades, greenMinRoiPct, markets, feeModel]
       properties:
+        feeModel: { $ref: "#/components/schemas/RoiFeeModel" }
         generatedAt: { type: string }
         historyAsOf: { type: string }
         band: { type: string, enum: [large, medium, small] }
@@ -687,6 +724,7 @@ components:
     KalshiDashboard:
       type: object
       properties:
+        notificationRoiBasis: { $ref: "#/components/schemas/RoiBasis" }
         workersPaused:
           type: boolean
         enabled:
@@ -712,6 +750,7 @@ components:
           items:
             $ref: "#/components/schemas/KalshiTrade"
       required:
+        - notificationRoiBasis
         - workersPaused
         - enabled
         - minimumNotional
@@ -726,6 +765,7 @@ components:
     KalshiSettingsInput:
       type: object
       properties:
+        notificationRoiBasis: { $ref: "#/components/schemas/RoiBasis" }
         enabled:
           type: boolean
         minimumNotional:

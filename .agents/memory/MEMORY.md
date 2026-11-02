@@ -2,7 +2,7 @@
 - [Single Telegram dashboard](single-telegram-dashboard.md) — sport → game → market navigation; keep one selected graph updating in the same message.
 - [Trade value sections](trade-value-sections.md) — separate $5k–$10k activity from $10k+; no shared trades at the boundary.
 - [Market history and recency](market-history-and-recency.md) — include pre-bot history within the chosen range; distinguish recent executions from newly imported records.
-- [Telegram push notifications](telegram-push-notifications.md) — ROI ≥ +7% across captured amount bands; fresh trades only, with just the latest notice alongside the graph.
+- [Telegram push notifications](telegram-push-notifications.md) — ROI ≥ +7% with explicit gross/net choice; fresh trades only, with just the latest notice alongside the graph.
 - [Game lifecycle](game-lifecycle.md) — white upcoming, yellow in play, red finished; archive ended games without recurring individual checks or deleting history.
 - [Always-on ownership](always-on-ownership.md) — user-approved Reserved VM preparation, owner-only controls, and explicit development-to-production polling handoff.
 - [Kalshi rate limits](kalshi-rate-limits.md) — share 429 pauses across workers; respect Retry-After and keep saved data accessible.
@@ -10,4 +10,4 @@
 - [Kalshi credential formatting](kalshi-credential-formatting.md) — rule out altered PEM line breaks before asking the user to replace an API key pair.
 - [Live analysis scope](live-analysis-rules.md) — preserve the current interface; pause freezes the view, and concentration signals remain visual-only.
 - [Explorer performance boundary](explorer-performance-boundary.md) — reuse catalog work without freezing trades, weakening filter validation, or changing Telegram.
-- [ROI research method](roi-research-method.md) — equal hypothetical stakes and official settlements; expose coverage, correlated samples and hindsight limitations.
+- [ROI research method](roi-research-method.md) — equal hypothetical stakes, gross/net cost scenarios and official settlements; preserve coverage and disclose hindsight limits.

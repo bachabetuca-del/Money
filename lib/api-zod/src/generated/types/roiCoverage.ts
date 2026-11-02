@@ -5,8 +5,11 @@
  * API specification
  * OpenAPI spec version: 0.1.0
  */
+import type { RoiNetEstimate } from './roiNetEstimate';
 
 export interface RoiCoverage {
+  net: RoiNetEstimate;
+  recentNet: RoiNetEstimate;
   savedTrades: number;
   settledTrades: number;
   pendingTrades: number;

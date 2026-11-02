@@ -110,7 +110,7 @@
 .lb-amt-grid li p { margin: 6px 0 0; font-size: 11px; color: #78847e; }
 .lb-amt-band { font-weight: 800; font-size: 15px; letter-spacing: -.02em; }
 .lb-amt-grid small { font-size: 10.5px; color: #78847e; }
-.lb-amt-nums { display: flex; gap: 18px; margin: 6px 0 2px; }
+.lb-amt-nums { display: flex; flex-wrap: wrap; gap: 12px; margin: 6px 0 2px; }
 .lb-amt-nums em { display: block; font: normal 9.5px var(--app-font-mono); text-transform: uppercase; letter-spacing: .06em; color: #78827d; }
 .lb-amt-nums b { font: 500 18px var(--app-font-mono); }
 @media (max-width: 720px) { .lb-amt-grid { grid-template-columns: 1fr; } .lb-bd { padding: 12px 10px; } }

@@ -1,6 +1,6 @@
 import { escapeHtml, betLabelEs, type MarketCardTrade } from "./telegram-market-card";
 import { directionLabel, directionMeaning, publicDirection, DIRECTION_NOTE } from "./telegram-trade-direction";
-import { qualifiesForNotificationRoi, type NotificationRoi } from "./telegram-notification-roi";
+import { notificationRoiBasis, qualifiesForNotificationRoi, type NotificationRoi, type RoiBasis } from "./telegram-notification-roi";
 import { shouldCaptureTrade } from "./kalshi-trade-bands";
 
 export type NotificationTrade = MarketCardTrade & { tradeId: string; ticker: string; marketUrl: string };
@@ -28,7 +28,7 @@ export interface NotificationStore {
 export interface NotificationApi {
   request<T>(method: string, body: Record<string, unknown>): Promise<{ result?: T }>;
   context(ticker: string): Promise<{ eventTitle: string; marketTitle: string }>;
-  roi(trade: NotificationJob): Promise<NotificationRoi | null>;
+  roi(trade: NotificationJob, basis: RoiBasis): Promise<NotificationRoi | null>;
   active?(ticker: string): Promise<boolean>;
 }
 
@@ -40,6 +40,8 @@ export function notificationText(trade: NotificationTrade, roi?: NotificationRoi
   const price = (trade.price * 100).toLocaleString("en-US", { maximumFractionDigits: 2 });
   const time = trade.createdTime.toLocaleString("en-US", { timeZone: "America/New_York",
     month: "short", day: "numeric", hour: "numeric", minute: "2-digit", timeZoneName: "short" });
+  const pct = (value: number | null) => value === null ? "no disponible" :
+    `${value >= 0 ? "+" : ""}${value.toLocaleString("es-ES", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}%`;
   return [
     `<b>${amount} · operación deportiva</b>`,
     `<b>${escapeHtml(trade.eventTitle ?? "Game details unavailable")}</b>`,
@@ -47,9 +49,11 @@ export function notificationText(trade: NotificationTrade, roi?: NotificationRoi
     direction === "unknown" ? "" : `<b>${directionMeaning(direction)}</b>`,
     `${contracts} contratos a ${price}¢`,
     ...(roi ? [
-      `<b>ROI histórico comparable (${direction === "yes" ? "SÍ" : "NO"}): +${roi.roiPct.toLocaleString("es-ES", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}%</b>`,
+      `<b>ROI histórico comparable (${direction === "yes" ? "SÍ" : "NO"})</b>`,
+      `Bruto: ${pct(roi.grossRoiPct)} · Neto estimado: ${pct(roi.netRoiPct)}`,
+      `<b>Filtro elegido: ${roi.basis === "net" ? "neto estimado" : "bruto"} ≥ +7,0%</b>`,
       `${roi.games.toLocaleString("es-ES")} partidos · ${roi.trades.toLocaleString("es-ES")} operaciones verificadas`,
-      "<i>Simulación antes de comisiones; no garantiza ganancias.</i>",
+      "<i>$100 por operación; neto con comisión taker actual, hasta liquidación y sin deslizamiento. No son ganancias del trader ni una garantía.</i>",
     ] : []),
     time,
     `<i>${DIRECTION_NOTE}</i>`,
@@ -65,11 +69,12 @@ export class TelegramTradeNotifications {
     private log: (event: "sent" | "filtered" | "failed" | "cleanup-failed", detail: string) => void = () => undefined,
   ) {}
 
-  async tick(settings: { enabled: boolean; chatId: string | null }) {
+  async tick(settings: { enabled: boolean; chatId: string | null; notificationRoiBasis?: RoiBasis }) {
     if (this.busy || !settings.enabled || !settings.chatId) return;
     this.busy = true;
     const chatId = settings.chatId;
     try {
+      const basis = notificationRoiBasis(settings.notificationRoiBasis);
       // Retire a bounded batch of filtered jobs, so they cannot block a qualifying
       // execution behind them. Still send at most one notification per tick.
       for (let checked = 0; checked < 10; checked++) {
@@ -86,8 +91,8 @@ export class TelegramTradeNotifications {
             context.eventTitle.includes(job.ticker) || context.marketTitle.includes(job.ticker)) {
             throw new Error("Readable game and bet details are not available yet.");
           }
-          const roi = await this.api.roi({ ...job, ...context });
-          if (!qualifiesForNotificationRoi(roi)) {
+          const roi = await this.api.roi({ ...job, ...context }, basis);
+          if (!qualifiesForNotificationRoi(roi) || roi.basis !== basis) {
             await this.store.skipped(job, this.now());
             this.log("filtered", job.tradeId);
             continue;

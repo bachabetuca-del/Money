@@ -3,10 +3,20 @@ import { marketType } from "./market-type";
 import { oddsBucket, ROI_STAKE, type RoiRollup } from "./roi-ranking";
 import { publicDirection } from "./telegram-trade-direction";
 import { inTradeRange, tradeRange } from "./kalshi-trade-bands";
-import { ROI_MONEY_BANDS } from "./roi-performance";
+import { ROI_MONEY_BANDS, rawNetRoiPct, validatedFees } from "./roi-performance";
+import type { RoiBasis } from "@workspace/api-zod";
+export type { RoiBasis } from "@workspace/api-zod";
 
 export const NOTIFICATION_MIN_ROI_PCT = 7;
-export type NotificationRoi = { roiPct: number; games: number; trades: number };
+export type NotificationRoi = {
+  roiPct: number; games: number; trades: number;
+  basis: RoiBasis; grossRoiPct: number; netRoiPct: number | null;
+};
+export function notificationRoiBasis(value: unknown): RoiBasis {
+  if (value === undefined || value === null) return "gross";
+  if (value === "gross" || value === "net") return value;
+  throw new Error("Unknown Telegram ROI basis; refusing to change the filter.");
+}
 type TradeReference = {
   ticker: string; sport?: string; eventTitle: string | null; marketTitle: string | null;
   outcomeSide: string; bookSide?: string; price: number; notional: number;
@@ -14,7 +24,9 @@ type TradeReference = {
 
 /** Never round a below-threshold ROI up into notification eligibility. */
 export function qualifiesForNotificationRoi(roi: NotificationRoi | null): roi is NotificationRoi {
-  return roi !== null && Number.isFinite(roi.roiPct) && roi.roiPct >= NOTIFICATION_MIN_ROI_PCT &&
+  return roi !== null && ["gross", "net"].includes(roi.basis) &&
+    Number.isFinite(roi.roiPct) && roi.roiPct === (roi.basis === "net" ? roi.netRoiPct : roi.grossRoiPct) &&
+    roi.roiPct >= NOTIFICATION_MIN_ROI_PCT &&
     Number.isSafeInteger(roi.games) && roi.games >= ROI_COLOR_POLICY.minimumGames &&
     Number.isSafeInteger(roi.trades) && roi.trades >= ROI_COLOR_POLICY.minimumTrades;
 }
@@ -22,8 +34,9 @@ export function qualifiesForNotificationRoi(roi: NotificationRoi | null): roi is
 /** Same exact comparison and equal-stake formula as the ranking, before display
  * rounding. Build once per historical snapshot, then look up each live execution.
  * Each amount band has its own history, independent of dashboard filters. */
-export function buildNotificationRoiLookup(history: RoiRollup[]) {
-  const groups = new Map<string, { profit: number; trades: number; games: Set<string> }>();
+export function buildNotificationRoiLookup(history: RoiRollup[], basis: RoiBasis = "gross") {
+  notificationRoiBasis(basis);
+  const groups = new Map<string, { profit: number; trades: number; games: Set<string>; fees: number; feeTrades: number }>();
   for (const row of history) {
     if (row.category !== "settled" || row.historyVerified !== true || row.historyError ||
         !ROI_MONEY_BANDS.includes(row.moneyBand) || !["yes", "no"].includes(row.side) ||
@@ -32,7 +45,9 @@ export function buildNotificationRoiLookup(history: RoiRollup[]) {
     const type = marketType(row);
     if (type === "other") continue;
     const key = JSON.stringify([row.moneyBand, row.sport, type, row.side, row.bucket]);
-    const group = groups.get(key) ?? { profit: 0, trades: 0, games: new Set<string>() };
+    const group = groups.get(key) ?? { profit: 0, trades: 0, games: new Set<string>(), fees: 0, feeTrades: 0 };
+    const costs = validatedFees(row);
+    group.fees += costs.fees; group.feeTrades += costs.feeTrades;
     group.profit += row.profit;
     group.trades += row.trades;
     group.games.add(row.gameId);
@@ -45,8 +60,12 @@ export function buildNotificationRoiLookup(history: RoiRollup[]) {
     if (!band || !trade.sport || side === "unknown" || bucket === null || type === "other") return null;
     const group = groups.get(JSON.stringify([band, trade.sport, type, side, bucket]));
     if (!group) return null;
+    const grossRoiPct = 100 * group.profit / (group.trades * ROI_STAKE);
+    const netRoiPct = rawNetRoiPct(group.profit, group.trades, group);
+    const roiPct = basis === "net" ? netRoiPct : grossRoiPct;
+    if (roiPct === null) return null;
     return {
-      roiPct: 100 * group.profit / (group.trades * ROI_STAKE),
+      roiPct, basis, grossRoiPct, netRoiPct,
       games: group.games.size, trades: group.trades,
     };
   };

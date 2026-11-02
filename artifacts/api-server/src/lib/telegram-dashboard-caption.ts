@@ -1,6 +1,6 @@
 import { CAPTURE_MINIMUM, type TradeRange } from "./kalshi-trade-bands";
 import { escapeHtml, marketCardCaption, type MarketCardTrade } from "./telegram-market-card";
-import { NOTIFICATION_MIN_ROI_PCT } from "./telegram-notification-roi";
+import { NOTIFICATION_MIN_ROI_PCT, type RoiBasis } from "./telegram-notification-roi";
 
 export function spanishRange(range: TradeRange) {
   const amount = (value: number) => `$${value.toLocaleString("en-US")}`;
@@ -28,6 +28,7 @@ type CaptionOptions = {
   scoreMessage?: string | null;
   range: TradeRange;
   history?: { phase: string; error: boolean; scanned: number };
+  notificationRoiBasis?: RoiBasis;
 };
 
 /** Bound user/provider names before HTML escaping; never cut an HTML tag/entity.
@@ -65,6 +66,6 @@ export function dashboardChartCaption(options: CaptionOptions) {
     lines.push("Recientes: ejecutadas en los últimos 15 minutos.");
     lines.push(enabled ? "Se actualiza aquí cada 15 segundos." : "Seguimiento pausado; se muestran datos guardados.");
   }
-  lines.push(`Avisos: nuevas desde $${CAPTURE_MINIMUM.toLocaleString("en-US")} y ROI histórico ≥ +${NOTIFICATION_MIN_ROI_PCT.toFixed(1).replace(".", ",")}%; solo el último.`);
+  lines.push(`Avisos: nuevas desde $${CAPTURE_MINIMUM.toLocaleString("en-US")} y ROI ${options.notificationRoiBasis === "net" ? "neto estimado" : "bruto"} histórico ≥ +${NOTIFICATION_MIN_ROI_PCT.toFixed(1).replace(".", ",")}%; solo el último.`);
   return lines.join("\n");
 }
