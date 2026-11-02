@@ -1,8 +1,8 @@
 import { escapeHtml, betLabelEs, type MarketCardTrade } from "./telegram-market-card";
 import { directionLabel, directionMeaning, publicDirection, DIRECTION_NOTE } from "./telegram-trade-direction";
 import { qualifiesForNotificationRoi, type NotificationRoi } from "./telegram-notification-roi";
+import { shouldCaptureTrade } from "./kalshi-trade-bands";
 
-export const NOTIFICATION_THRESHOLD = 10_000;
 export type NotificationTrade = MarketCardTrade & { tradeId: string; ticker: string; marketUrl: string };
 export type NotificationJob = NotificationTrade & { sport: string; chatId: string; attempts: number };
 type CleanupJob = { tradeId: string; messageId: number };
@@ -12,8 +12,8 @@ export function liveNotificationTrades<T extends { notional: number; createdTime
   trades: T[], boundary: number | null,
 ) {
   if (boundary === null) return [];
-  return trades.filter(trade => Number.isFinite(trade.notional) &&
-    trade.notional > NOTIFICATION_THRESHOLD && new Date(trade.createdTime).getTime() > boundary);
+  return trades.filter(trade => shouldCaptureTrade(trade.notional) &&
+    new Date(trade.createdTime).getTime() > boundary);
 }
 
 export interface NotificationStore {
@@ -76,7 +76,7 @@ export class TelegramTradeNotifications {
         const job = await this.store.next(chatId, this.now());
         if (!job) break;
         try {
-          if (!(job.notional > NOTIFICATION_THRESHOLD)) throw new Error("Non-qualifying trade in notification queue.");
+          if (!shouldCaptureTrade(job.notional)) throw new Error("Non-qualifying trade in notification queue.");
           if (this.api.active && !await this.api.active(job.ticker)) {
             await this.store.skipped(job, this.now());
             continue;

@@ -7,7 +7,7 @@ import { buildExplorerRoi } from "./explorer-roi";
 const now = new Date("2026-10-31T12:00:00Z");
 const trade = {
   ticker: "KXEPLGAME-LIVE-A", sport: "Soccer", eventTitle: "A vs B", marketTitle: "A wins",
-  outcomeSide: "yes", bookSide: "bid", price: .5,
+  outcomeSide: "yes", bookSide: "bid", price: .5, notional: 15000,
 };
 const history = (roi = 7, patch: Partial<RoiRollup> = {}): RoiRollup[] =>
   Array.from({ length: 10 }, (_, i) => ({
@@ -35,7 +35,7 @@ test("raw ROI below +7% cannot qualify even when presentation rounds it up to +7
   assert.equal(qualifiesForNotificationRoi(buildNotificationRoiLookup(rows)(trade)), false);
 });
 
-test("sport, market type, actual side, odds bucket and $10k+ cohort must all match", () => {
+test("sport, market type, actual side, odds bucket and the execution's amount band must all match", () => {
   for (const patch of [
     { sport: "Football" }, { ticker: "KXEPLTOTAL-HIST-A" }, { side: "no" }, { bucket: 6 },
     { moneyBand: "small" }, { moneyBand: "medium" },
@@ -44,6 +44,34 @@ test("sport, market type, actual side, odds bucket and $10k+ cohort must all mat
   }
   const lookup = buildNotificationRoiLookup([...history(7), ...history(90, { moneyBand: "small" })]);
   assert.deepEqual(lookup(trade), { roiPct: 7, games: 10, trades: 30 });
+});
+
+test("small, medium and large executions use their own histories with nonoverlapping amount boundaries", () => {
+  const lookup = buildNotificationRoiLookup([
+    ...history(8, { moneyBand: "small" }), ...history(9, { moneyBand: "medium" }), ...history(-4),
+  ]);
+  for (const [notional, roiPct] of [
+    [1000, 8], [4999.99, 8], [5000, 8], [5000.01, 9], [7500, 9],
+    [9999.999, 9], [10000, -4], [10000.01, -4], [100000, -4],
+  ]) {
+    const result = lookup({ ...trade, notional });
+    assert.deepEqual(result, { roiPct, games: 10, trades: 30 }, String(notional));
+    assert.equal(qualifiesForNotificationRoi(result), roiPct >= 7);
+  }
+  for (const notional of [0, 999.99, NaN, Infinity, -Infinity]) {
+    assert.equal(lookup({ ...trade, notional }), null);
+  }
+});
+
+test("a profitable different amount band cannot substitute for missing evidence or increase its sample", () => {
+  const lookup = buildNotificationRoiLookup([
+    ...history(50, { moneyBand: "large", trades: 1000 }),
+    ...history(8, { moneyBand: "small", trades: 2 }),
+  ]);
+  assert.equal(lookup({ ...trade, notional: 7500 }), null);
+  const small = lookup({ ...trade, notional: 1000 });
+  assert.equal(small?.trades, 20);
+  assert.equal(qualifiesForNotificationRoi(small), false);
 });
 
 test("NO uses its own execution price, with canonical direction fallback only when needed", () => {

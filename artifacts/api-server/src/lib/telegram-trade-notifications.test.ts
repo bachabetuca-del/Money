@@ -6,6 +6,7 @@ import {
 } from "./telegram-trade-notifications";
 import { buildNotificationRoiLookup, type NotificationRoi } from "./telegram-notification-roi";
 import type { RoiRollup } from "./roi-ranking";
+import { shouldCaptureTrade } from "./kalshi-trade-bands";
 
 const clock = new Date("2026-10-22T21:00:00Z");
 const settings = { enabled: true, chatId: "notification-test" };
@@ -29,7 +30,7 @@ class MemoryNotifications implements NotificationStore {
   row(chatId: string, tradeId: string) { return this.rows.get(`${chatId}:${tradeId}`)!; }
   async next(chatId: string, now: Date) {
     const row = [...this.rows.values()].filter(item => item.chatId === chatId &&
-      !item.sentAt && !item.skippedAt && item.retryAt <= now && item.notional > 10000)
+      !item.sentAt && !item.skippedAt && item.retryAt <= now && shouldCaptureTrade(item.notional))
       .sort((a, b) => a.createdTime.getTime() - b.createdTime.getTime())[0];
     return row ? { ...row } : undefined;
   }
@@ -91,7 +92,7 @@ function setup() {
     worker: new TelegramTradeNotifications(store, api, () => now), now: () => now };
 }
 
-test("only fresh sports trades strictly over $10k qualify; snapshots, exact $10k and older history are silent", () => {
+test("fresh trades from all captured amounts reach the ROI gate; snapshots and older history are silent", () => {
   const boundary = clock.getTime();
   const rows = [999.99, 1000, 2500, 5000, 9999.99, 10000, 10000.01, 20000].map(notional => ({
     notional, createdTime: new Date(boundary + 1).toISOString(),
@@ -99,7 +100,8 @@ test("only fresh sports trades strictly over $10k qualify; snapshots, exact $10k
   rows.push({ notional: 80000, createdTime: new Date(boundary - 1).toISOString() });
   rows.push({ notional: 80000, createdTime: "invalid" });
   rows.push({ notional: Infinity, createdTime: new Date(boundary + 1).toISOString() });
-  assert.deepEqual(liveNotificationTrades(rows, boundary).map(row => row.notional), [10000.01, 20000]);
+  assert.deepEqual(liveNotificationTrades(rows, boundary).map(row => row.notional),
+    [1000, 2500, 5000, 9999.99, 10000, 10000.01, 20000]);
   assert.deepEqual(liveNotificationTrades(rows, null), []);
   assert.deepEqual(liveNotificationTrades(rows, boundary + 1000), []);
 });
@@ -182,7 +184,7 @@ test("cleanup errors retry deletion without resending a delivered alert", async 
   assert.equal(api.calls.filter(call => call.method === "sendMessage").length, 2);
 });
 
-test("paused monitoring, missing destinations, foreign chats and $10k-or-smaller trades cannot notify", async () => {
+test("paused monitoring, missing destinations, foreign chats and trades below the capture floor cannot notify", async () => {
   const { store, api, worker } = setup();
   store.add(sample());
   await worker.tick({ ...settings, enabled: false });
@@ -190,10 +192,33 @@ test("paused monitoring, missing destinations, foreign chats and $10k-or-smaller
   await worker.tick({ ...settings, chatId: "another-chat" });
   assert.equal(api.calls.length, 0);
   const other = setup();
-  other.store.add(sample("exact", 10000));
-  other.store.add(sample("medium", 7500));
+  other.store.add(sample("below-floor", 999.99));
+  other.store.add(sample("invalid", NaN));
   await other.worker.tick(settings);
   assert.equal(other.api.calls.length, 0);
+});
+
+test("all three amount bands can notify at +7%, including exact $1k, $5k and $10k boundaries", async () => {
+  for (const notional of [1000, 2500, 5000, 5000.01, 7500, 9999.99, 10000, 10000.01, 25000]) {
+    const { store, api, worker } = setup();
+    store.add(sample("all-bands", notional));
+    await worker.tick(settings);
+    assert.equal(api.calls.filter(call => call.method === "sendMessage").length, 1, String(notional));
+    assert.equal(api.roiTrades[0].notional, notional);
+  }
+});
+
+test("a larger trade cannot bypass a poor ROI, and smaller bands require the same ROI and sample", async () => {
+  for (const notional of [1000, 5000, 7500, 10000, 1000000]) {
+    for (const roi of [{ roiPct: 6.99, games: 10, trades: 30 }, { roiPct: 100, games: 9, trades: 100 }]) {
+      const { store, api, worker } = setup();
+      api.roiResult = roi;
+      store.add(sample("blocked", notional));
+      await worker.tick(settings);
+      assert.equal(api.calls.length, 0);
+      assert.ok(store.row(settings.chatId, "blocked").skippedAt);
+    }
+  }
 });
 
 test("missing readable metadata is retried rather than sending ticker codes", async () => {

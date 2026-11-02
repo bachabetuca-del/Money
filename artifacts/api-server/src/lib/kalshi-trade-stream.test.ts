@@ -100,16 +100,18 @@ test("healthy stream suppresses REST; gaps freeze checkpoints until successful r
   assert.equal(coverage.boundary, 340_000);
 });
 
-test("startup snapshots and exact $10k never become notifications after REST overlap", () => {
+test("REST overlap keeps startup history silent while live trades across all captured bands reach ROI filtering", () => {
   const coverage = new KalshiLiveCoverage(100_000);
   const rows = [
     { createdTime: new Date(99_999).toISOString(), notional: 20_000 },
     { createdTime: new Date(100_001).toISOString(), notional: 10_000 },
     { createdTime: new Date(100_001).toISOString(), notional: 9_999 },
     { createdTime: new Date(100_001).toISOString(), notional: 10_001 },
+    { createdTime: new Date(100_001).toISOString(), notional: 1_000 },
+    { createdTime: new Date(100_001).toISOString(), notional: 999.99 },
   ];
   assert.deepEqual(liveNotificationTrades(rows, coverage.notificationBoundary(null)), []);
-  assert.deepEqual(liveNotificationTrades(rows, coverage.notificationBoundary(40_000)), [rows[3]]);
+  assert.deepEqual(liveNotificationTrades(rows, coverage.notificationBoundary(40_000)), rows.slice(1, 5));
   coverage.establishStartupBoundary();
   assert.equal(coverage.boundary, 100_000);
 });

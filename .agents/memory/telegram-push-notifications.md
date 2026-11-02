@@ -3,9 +3,9 @@ name: Telegram push notifications
 description: Push-alert eligibility and the low-clutter exception to the single-message dashboard.
 ---
 
-Send push-enabled short notifications only for newly observed individual public sports trades strictly over $10,000 that also meet the historical ROI rule below. Exactly $10,000 remains eligible for the upper dashboard section but is silent for push alerts. Smaller trades, startup snapshots, historical imports, and graph/menu updates must not trigger push notifications. The selected dashboard section does not affect alert eligibility.
+Send push-enabled short notifications for newly observed individual public sports trades in any of the existing captured amount bands that meet the historical ROI rule below. Do not impose a separate $10k notification minimum or privilege large trades. Startup snapshots, historical imports, and graph/menu updates must not trigger push notifications. The selected dashboard section does not affect alert eligibility.
 
-**Why:** After the single-message dashboard was introduced, the user noticed notifications stopped and asked to restore notifications only for bets above $10k. Telegram edits do not generate new-message notifications, so updating the graph alone cannot meet that request.
+**Why:** The user superseded the earlier above-$10k-only request with “El monto no me importa tanto con tal que haga dinero”. They prioritize historical performance over transaction size. Telegram edits do not generate new-message notifications, so updating the graph alone cannot meet the notification requirement.
 
 **How to apply:** Keep the graph as one independently updated message, plus a separate brief notification with readable game/bet names and the Kalshi link. Keep dashboard creations/replacements silent as well. Evaluate the value of an individual trade, never the sum of a graph interval or multiple small trades. Do not replay the saved history to populate the notification queue.
 
@@ -15,11 +15,11 @@ Keep only the latest notification. Confirm and save delivery of a new notice bef
 
 **How to apply:** Track notification delivery separately from graph publication and trade ingestion. A trade appearing in history or a graph does not prove a notification was sent. Preserve delivery retries and notification message identities through restarts; retry old-notice cleanup separately without resending confirmed deliveries. Telegram/phone mute settings remain outside the bot's control.
 
-The user wants Telegram notifications “de +7.0 ROI en adelante”: require comparable historical ROI of at least +7.0%, inclusive, in addition to the existing fresh-trade and amount conditions.
+The user wants Telegram notifications “de +7.0 ROI en adelante”: require comparable historical ROI of at least +7.0%, inclusive, in addition to the fresh-trade conditions.
 
 **Why:** The user asked to restrict push notifications by historical performance, not to remove lower-ROI executions from charts or saved history.
 
-**How to apply:** Match the execution's own sport, bet type, YES/NO side and odds within the $10k+ cohort. Require the same verified-history sample minimum as the website comparison. Compare before display rounding; the website's green color threshold is not the alert cutoff. Missing or inadequate evidence is silent; a lookup failure must not bypass the filter. Show ROI and sample size in the notice without implying guaranteed returns. Do not replay filtered trades later just because their group's ROI improved.
+**How to apply:** Match the execution's own sport, bet type, YES/NO side, odds and amount band; never borrow a more profitable band's history. Require the same verified-history sample minimum as the website comparison. Compare before display rounding; the website's green color threshold is not the alert cutoff. Missing or inadequate evidence is silent; a lookup failure must not bypass the filter. Show ROI and sample size in the notice without implying guaranteed returns or net-of-fees profits. Do not replay filtered trades later just because their group's ROI improved.
 
 Use “a favor / en contra” as the public direction of an operation, not as a confirmed sale or closed position.
 
@@ -27,7 +27,7 @@ Use “a favor / en contra” as the public direction of an operation, not as a 
 
 **How to apply:** Keep the bet name and direction explicit in notices and graph legends. Never imply the same previous large trader has exited or abandoned a prediction. Do not describe direction-label improvements as implementing confirmed exits; report the missing public data honestly.
 
-The user does not need seller identity: they want executions explicitly labeled as sales above $10k, their market, push notifications, and corresponding graph marks.
+The user does not need seller identity: their earlier sales request sought executions explicitly labeled as sales above $10k, their market, push notifications, and corresponding graph marks. The newer ROI-focused notification rules above supersede that amount restriction.
 
 **Why:** They supplied a Kalshi screen showing Bought Yes and Sold No, explicitly said “no necesito saber quién la vendió”, and confirmed that it is public Kalshi activity rather than personal account history.
 
@@ -35,7 +35,7 @@ The user does not need seller identity: they want executions explicitly labeled 
 
 Keep purchase-amount calculations tied to a validated direction. Explicit YES/NO outcome is authoritative. If missing, canonical book direction may supply it: bid ≡ YES, ask ≡ NO; only then use a validated YES/NO legacy fallback.
 
-**Why:** Kalshi's official order-direction documentation defines outcome and book side as the same directional bit, not separate buy/sell flags. Ignoring a valid canonical book side can discard trades; choosing the opposite outcome's quote can incorrectly cross the $10k notification boundary.
+**Why:** Kalshi's official order-direction documentation defines outcome and book side as the same directional bit, not separate buy/sell flags. Ignoring a valid canonical book side can discard trades; choosing the opposite outcome's quote can incorrectly cross an amount-band boundary and select the wrong ROI comparison.
 
 **How to apply:** Calculate notional from the resolved outcome's quote and test both sides around the threshold. Do not invert an explicit outcome because book side conflicts. If execution cannot be priced reliably, do not invent a qualifying amount. See https://docs.kalshi.com/getting_started/order_direction.
 

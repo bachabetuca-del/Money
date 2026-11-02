@@ -329,7 +329,7 @@ function Home() {
                       />
                     </div>
                     <div id="notional-help" className={`small-note ${validMinimum ? '' : 'err'}`} style={{ marginTop: 7 }}>
-                      {validMinimum ? 'Las bandas menores conservan su propio rango. La sección grande nunca baja de $10,000. Los avisos requieren superar $10,000 y un ROI histórico comparable de +7,0% o más.' : 'Introduce un importe válido entre $1 y $999,999,999,999.99.'}
+                      {validMinimum ? 'Las bandas menores conservan su propio rango. La sección grande nunca baja de $10,000. Este umbral no limita los avisos: pueden llegar de cualquiera de las tres bandas, desde $1,000, con ROI histórico comparable de +7,0% o más.' : 'Introduce un importe válido entre $1 y $999,999,999,999.99.'}
                     </div>
                   </div>
 
@@ -380,7 +380,7 @@ function Home() {
                     </div>
                     <p className="setup-copy">
                       {dashboard.telegramConfigured
-                        ? <>Navega por Deporte → Partido → Mercado. La gráfica se actualiza en el mismo mensaje. Solo se avisan operaciones nuevas mayores a $10,000 con <strong>ROI histórico comparable ≥ +7,0%</strong>, respaldado por al menos 10 partidos distintos y 30 operaciones verificadas. Se compara el mismo deporte, tipo de apuesta, lado SÍ/NO y rango de odds dentro de $10k+. Sin muestra suficiente no hay aviso. Se conserva únicamente el último; el historial y las gráficas no se filtran por ROI.</>
+                        ? <>Navega por Deporte → Partido → Mercado. La gráfica se actualiza en el mismo mensaje. Se avisan operaciones nuevas de <strong>cualquiera de las tres bandas, desde $1,000</strong>, con <strong>ROI histórico comparable ≥ +7,0%</strong>, respaldado por al menos 10 partidos distintos y 30 operaciones verificadas. Se compara el mismo deporte, tipo de apuesta, lado SÍ/NO y rango de odds dentro de su propio rango de monto. Sin muestra suficiente no hay aviso. Es una simulación antes de comisiones, no una garantía de ganancias. Se conserva únicamente el último aviso; el historial y las gráficas no se filtran por ROI.</>
                         : <>Abre tu bot en Telegram y envía <strong>/start</strong>. Después comprueba la vinculación del chat.</>}
                     </p>
                     {!dashboard.telegramConfigured && (

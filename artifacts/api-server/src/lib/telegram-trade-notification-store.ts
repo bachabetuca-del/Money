@@ -1,6 +1,7 @@
 import { db, kalshiAlertsTable, kalshiNotificationsTable as notifications } from "@workspace/db";
-import { and, asc, desc, eq, gt, isNotNull, isNull, lte, ne, sql } from "drizzle-orm";
-import { NOTIFICATION_THRESHOLD, type NotificationStore } from "./telegram-trade-notifications";
+import { and, asc, desc, eq, gte, isNotNull, isNull, lte, ne, sql } from "drizzle-orm";
+import { CAPTURE_MINIMUM } from "./kalshi-trade-bands";
+import type { NotificationStore } from "./telegram-trade-notifications";
 
 /** Called only with trades from the live polling window, never by the history importer. */
 export async function enqueueLiveNotifications(chatId: string, tradeIds: string[]) {
@@ -15,7 +16,7 @@ export const tradeNotificationStore: NotificationStore = {
       attempts: notifications.attempts }).from(notifications)
       .innerJoin(kalshiAlertsTable, eq(notifications.tradeId, kalshiAlertsTable.tradeId))
       .where(and(eq(notifications.chatId, chatId), isNull(notifications.sentAt), isNull(notifications.skippedAt),
-        lte(notifications.retryAt, now), gt(kalshiAlertsTable.notional, NOTIFICATION_THRESHOLD)))
+        lte(notifications.retryAt, now), gte(kalshiAlertsTable.notional, CAPTURE_MINIMUM)))
       .orderBy(asc(kalshiAlertsTable.createdTime), asc(notifications.queuedAt)).limit(1);
     return row ? { ...row.trade, chatId: row.chatId, attempts: row.attempts } : undefined;
   },

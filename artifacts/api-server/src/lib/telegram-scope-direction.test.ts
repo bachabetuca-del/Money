@@ -285,10 +285,10 @@ test("explicit outcome takes precedence over a validated legacy fallback, never 
   assert.equal(publicDirection("unknown"), "unknown");
 });
 
-test("both outcomes with both book sides retain the correct price and exact $10k thresholds", () => {
+test("both outcomes retain the correct price, large-band boundary and independent $1k notification floor", () => {
   for (const outcome of ["yes", "no"]) {
     for (const book of ["bid", "ask"]) {
-      for (const amount of [9999, 10000, 10001]) {
+      for (const amount of [999, 1000, 1001, 5000, 9999, 10000, 10001]) {
         const price = outcome === "yes" ? 0.2 : 0.8;
         const execution = publicTradeExecution({
           taker_outcome_side: outcome, taker_book_side: book,
@@ -305,7 +305,7 @@ test("both outcomes with both book sides retain the correct price and exact $10k
           bookSide: book, createdTime: now,
         };
         assert.equal(liveNotificationTrades([{ ...notification, createdTime: now.toISOString() }],
-          now.getTime() - 1).length, amount > 10000 ? 1 : 0);
+          now.getTime() - 1).length, amount >= 1000 ? 1 : 0);
         assert.match(notificationText(notification), outcome === "yes" ? /A favor de/ : /En contra de/);
         assert.match(marketCardCaption(notification), outcome === "yes" ? /A favor de/ : /En contra de/);
       }
@@ -328,9 +328,12 @@ test("legacy outcome price selection and malformed execution data fail safely", 
   assert.equal(publicTradeExecution({ taker_outcome_side: "no", count: 0, no_price: 60 }), undefined);
 });
 
-test("canonical book-only trades retain the exact alert threshold and direction in graphs", () => {
+test("canonical book-only trades retain the capture floor and direction in graphs", () => {
   for (const book of ["bid", "ask"]) {
-    for (const [count, amount] of [["19999.98", 9999.99], ["20000.00", 10000], ["20000.02", 10000.01]] as const) {
+    for (const [count, amount] of [
+      ["1999.98", 999.99], ["2000.00", 1000], ["2000.02", 1000.01],
+      ["19999.98", 9999.99], ["20000.00", 10000], ["20000.02", 10000.01],
+    ] as const) {
       const execution = publicTradeExecution({
         taker_book_side: book, count_fp: count, yes_price_dollars: "0.5000", no_price_dollars: "0.5000",
       })!;
@@ -340,7 +343,7 @@ test("canonical book-only trades retain the exact alert threshold and direction 
         marketTitle: "A wins", marketUrl: "https://kalshi.com/markets/test", createdTime: now, bookSide: book,
       };
       assert.equal(liveNotificationTrades([{ ...trade, createdTime: now.toISOString() }], now.getTime() - 1).length,
-        amount > 10000 ? 1 : 0);
+        amount >= 1000 ? 1 : 0);
       assert.match(notificationText(trade), book === "ask" ? /Compra de NO o venta de SÍ/ : /Compra de SÍ o venta de NO/);
       const plot = bucketHistory([trade], now);
       assert.equal(plot.buckets[0].values[book === "ask" ? 4 : 3], amount);
