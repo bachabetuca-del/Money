@@ -378,3 +378,7 @@ button { cursor: pointer; }
 .ws-ai-snap { font-size: 11px; color: #7b5a1b; margin: 6px 0; }
 .ws-ai-text { white-space: pre-wrap; font-size: 13px; line-height: 1.7; color: #26343a; background: #f2f1e9; border: 1px solid #e5e3d9; border-radius: 9px; padding: 14px 16px; max-height: 520px; overflow-y: auto; }
 .ws-ai-limits { font-size: 10.5px; color: #78847e; margin: 0; }
+@media (max-width: 720px) {
+  .ws-tabs { overflow-x: auto; scrollbar-width: none; }
+  .ws-tabs button { flex: 0 0 auto; white-space: nowrap; }
+}

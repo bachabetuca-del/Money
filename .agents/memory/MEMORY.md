@@ -2,7 +2,7 @@
 - [Single Telegram dashboard](single-telegram-dashboard.md) — sport → game → market navigation; keep one selected graph updating in the same message.
 - [Trade value sections](trade-value-sections.md) — separate $5k–$10k activity from $10k+; no shared trades at the boundary.
 - [Market history and recency](market-history-and-recency.md) — include pre-bot history within the chosen range; distinguish recent executions from newly imported records.
-- [Telegram push notifications](telegram-push-notifications.md) — ROI ≥ +7% with explicit gross/net choice; fresh trades only, with just the latest notice alongside the graph.
+- [Telegram push notifications](telegram-push-notifications.md) — ROI ≥ +7%, explicit gross/net choice; fresh sends, latest chat notice, and original delivery context on the website.
 - [Game lifecycle](game-lifecycle.md) — white upcoming, yellow in play, red finished; archive ended games without recurring individual checks or deleting history.
 - [Always-on ownership](always-on-ownership.md) — user-approved Reserved VM preparation, owner-only controls, and explicit development-to-production polling handoff.
 - [Kalshi rate limits](kalshi-rate-limits.md) — share 429 pauses across workers; respect Retry-After and keep saved data accessible.

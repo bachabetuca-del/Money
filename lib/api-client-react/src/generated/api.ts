@@ -35,6 +35,7 @@ import type {
   GetKalshiExplorerParams,
   GetKalshiExplorerRoiParams,
   GetKalshiLeaderboardParams,
+  GetKalshiNotificationsParams,
   GetKalshiSignalsParams,
   HealthStatus,
   KalshiDashboard,
@@ -46,6 +47,7 @@ import type {
   SignInRequiredResponse,
   SignalEvaluation,
   TelegramChatLookup,
+  TelegramNotices,
   TelegramTestInput,
   TelegramTestResult
 } from './api.schemas';
@@ -76,6 +78,114 @@ const withQueryKey = <T extends object, K>(query: T, queryKey: K): T & { queryKe
   }
   return result;
 };
+
+export const getGetKalshiNotificationsUrl = (params?: GetKalshiNotificationsParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/api/kalshi/notifications?${stringifiedParams}` : `/api/kalshi/notifications`
+}
+
+/**
+ * @summary Readable owner-chat history of confirmed Telegram notifications
+ */
+export const getKalshiNotifications = async (params?: GetKalshiNotificationsParams, options?: Parameters<typeof customFetch>[1]): Promise<TelegramNotices> => {
+
+  return customFetch<TelegramNotices>(getGetKalshiNotificationsUrl(params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetKalshiNotificationsQueryKey = (params?: GetKalshiNotificationsParams,) => {
+    return [
+    `/api/kalshi/notifications`, ...(params ? [params] : [])
+    ] as const;
+    }
+
+
+export const getGetKalshiNotificationsQueryOptions = <TData = Awaited<ReturnType<typeof getKalshiNotifications>>, TError = ErrorType<ApiError | SignInRequiredResponse | OwnerRequiredResponse>>(params?: GetKalshiNotificationsParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getKalshiNotifications>>, TError, TData>>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetKalshiNotificationsQueryKey(params);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getKalshiNotifications>>> = ({ signal }) => getKalshiNotifications(params, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getKalshiNotifications>>, TError, TData> & { queryKey: DataTag<QueryKey, TData, TError> }
+}
+
+export type GetKalshiNotificationsQueryResult = NonNullable<Awaited<ReturnType<typeof getKalshiNotifications>>>
+export type GetKalshiNotificationsQueryError = ErrorType<ApiError | SignInRequiredResponse | OwnerRequiredResponse>
+
+
+export function useGetKalshiNotifications<TData = Awaited<ReturnType<typeof getKalshiNotifications>>, TError = ErrorType<ApiError | SignInRequiredResponse | OwnerRequiredResponse>>(
+ params: undefined |  GetKalshiNotificationsParams, options: { query:Partial<UseQueryOptions<Awaited<ReturnType<typeof getKalshiNotifications>>, TError, TData>> & Pick<
+        DefinedInitialDataOptions<
+          Awaited<ReturnType<typeof getKalshiNotifications>>,
+          TError,
+          Awaited<ReturnType<typeof getKalshiNotifications>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient
+  ):  DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useGetKalshiNotifications<TData = Awaited<ReturnType<typeof getKalshiNotifications>>, TError = ErrorType<ApiError | SignInRequiredResponse | OwnerRequiredResponse>>(
+ params?: GetKalshiNotificationsParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getKalshiNotifications>>, TError, TData>> & Pick<
+        UndefinedInitialDataOptions<
+          Awaited<ReturnType<typeof getKalshiNotifications>>,
+          TError,
+          Awaited<ReturnType<typeof getKalshiNotifications>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useGetKalshiNotifications<TData = Awaited<ReturnType<typeof getKalshiNotifications>>, TError = ErrorType<ApiError | SignInRequiredResponse | OwnerRequiredResponse>>(
+ params?: GetKalshiNotificationsParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getKalshiNotifications>>, TError, TData>>, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+/**
+ * @summary Readable owner-chat history of confirmed Telegram notifications
+ */
+
+export function useGetKalshiNotifications<TData = Awaited<ReturnType<typeof getKalshiNotifications>>, TError = ErrorType<ApiError | SignInRequiredResponse | OwnerRequiredResponse>>(
+ params?: GetKalshiNotificationsParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getKalshiNotifications>>, TError, TData>>, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient
+ ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
+
+  const queryOptions = getGetKalshiNotificationsQueryOptions(params,options)
+
+  const query = useQuery(queryOptions, queryClient) as  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
 
 export const getGetKalshiSignalsUrl = (params?: GetKalshiSignalsParams,) => {
   const normalizedParams = new URLSearchParams();

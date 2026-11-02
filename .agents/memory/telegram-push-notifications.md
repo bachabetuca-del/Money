@@ -50,3 +50,9 @@ Explain the public equivalence in alerts and graphs: a favor means compra de SÍ
 **Why:** The two actions share a public directional signal, but the user explicitly distinguishes closing a previous purchase from opening an opposite bet. This explanation is context, not a substitute for the requested exit detection.
 
 **How to apply:** Show the equivalence next to the direction, with a clear warning that the public feed cannot distinguish a purchase from a sale closing an existing position.
+
+Keep the website's Telegram view as a readable history of actual deliveries, not a new list of potential signals.
+
+**Why:** The user asked to see the Telegram notifications on the website with the price, sport and ROI clearly presented. The chat deliberately retains only its latest notice, so removing an older chat message must not erase its useful website history.
+
+**How to apply:** Show the original selected-side price and the historical ROI basis recorded for that notice. Never substitute today's ranking or a later settlement for its original ROI. Older notices without recorded ROI should say it was not recorded, rather than implying zero or reconstructing a profitable signal after the result.

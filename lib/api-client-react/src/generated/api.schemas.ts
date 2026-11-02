@@ -5,6 +5,102 @@
  * API specification
  * OpenAPI spec version: 0.1.0
  */
+/**
+ * Explicit Telegram filter basis. Existing settings remain gross; an omitted update never changes the saved choice.
+ */
+export type RoiBasis = typeof RoiBasis[keyof typeof RoiBasis];
+
+
+export const RoiBasis = {
+  gross: 'gross',
+  net: 'net',
+} as const;
+
+/**
+ * Historical comparison frozen before sending, not the current ranking or the later profit of this bet.
+ */
+export interface TelegramNoticeRoi {
+  basis: RoiBasis;
+  roiPct: number;
+  grossRoiPct: number;
+  /** @nullable */
+  netRoiPct: number | null;
+  /** @minimum 1 */
+  games: number;
+  /** @minimum 1 */
+  trades: number;
+  historyAsOf: string;
+  capturedAt: string;
+}
+
+export type TelegramNoticeSide = typeof TelegramNoticeSide[keyof typeof TelegramNoticeSide];
+
+
+export const TelegramNoticeSide = {
+  yes: 'yes',
+  no: 'no',
+  unknown: 'unknown',
+} as const;
+
+export type TelegramNoticeDetailsSource = typeof TelegramNoticeDetailsSource[keyof typeof TelegramNoticeDetailsSource];
+
+
+export const TelegramNoticeDetailsSource = {
+  frozen: 'frozen',
+  legacy: 'legacy',
+} as const;
+
+export interface TelegramNotice {
+  tradeId: string;
+  ticker: string;
+  sport: string;
+  eventTitle: string;
+  marketTitle: string;
+  side: TelegramNoticeSide;
+  /**
+     * @maximum 1
+     * @exclusiveMinimum 0
+     * @nullable
+     */
+  price: number | null;
+  /**
+     * @exclusiveMinimum 0
+     * @nullable
+     */
+  contracts: number | null;
+  /**
+     * @minimum 0
+     * @nullable
+     */
+  notional: number | null;
+  /** @nullable */
+  executedAt: string | null;
+  sentAt: string;
+  /** @nullable */
+  marketUrl: string | null;
+  removedFromTelegram: boolean;
+  detailsSource: TelegramNoticeDetailsSource;
+  roi: TelegramNoticeRoi | null;
+}
+
+export interface TelegramNotices {
+  generatedAt: string;
+  workersPaused: boolean;
+  chatConfigured: boolean;
+  /** @minimum 1 */
+  page: number;
+  /** @minimum 1 */
+  pageSize: number;
+  /** @minimum 0 */
+  total: number;
+  /** @minimum 0 */
+  totalPages: number;
+  /** @minimum 0 */
+  totalDelivered: number;
+  availableSports: string[];
+  rows: TelegramNotice[];
+}
+
 export type SignalRuleCoverage = typeof SignalRuleCoverage[keyof typeof SignalRuleCoverage];
 
 
@@ -34,17 +130,6 @@ export const SignalRuleMoneyBand = {
   small: 'small',
   medium: 'medium',
   large: 'large',
-} as const;
-
-/**
- * Explicit Telegram filter basis. Existing settings remain gross; an omitted update never changes the saved choice.
- */
-export type RoiBasis = typeof RoiBasis[keyof typeof RoiBasis];
-
-
-export const RoiBasis = {
-  gross: 'gross',
-  net: 'net',
 } as const;
 
 /**
@@ -821,6 +906,22 @@ export type OwnerRequiredResponse = ApiError;
  * Owner authorization is unavailable or not configured
  */
 export type OwnerUnavailableResponse = ApiError;
+
+export type GetKalshiNotificationsParams = {
+/**
+ * @minimum 1
+ * @maximum 100000
+ */
+page?: number;
+/**
+ * @maxLength 120
+ */
+q?: string;
+/**
+ * @maxLength 80
+ */
+sport?: string;
+};
 
 export type GetKalshiSignalsParams = {
 /**

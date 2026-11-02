@@ -48,6 +48,9 @@ import { NotificationRoiChoice } from '@/components/notification-roi-choice';
 const queryClient = new QueryClient();
 const Explorer = lazy(() => import('@/components/explorer').then(m => ({ default: m.Explorer })));
 const RoiLeaderboard = lazy(() => import('@/components/roi-leaderboard').then(m => ({ default: m.RoiLeaderboard })));
+const TelegramNotices = lazy(() => import('@/components/telegram-notices').then(m => ({ default: m.TelegramNotices })));
+type Tab = 'analysis' | 'settings' | 'leaderboard' | 'signals' | 'notifications';
+function urlTab(): Tab { const t = new URLSearchParams(window.location.search).get('tab'); return t === 'settings' || t === 'leaderboard' || t === 'signals' || t === 'notifications' ? t : 'analysis'; }
 const SignalEvaluation = lazy(() => import('@/components/signal-evaluation').then(m => ({ default: m.SignalEvaluation })));
 const MAX_NOTIONAL = 999_999_999_999.99;
 
@@ -122,8 +125,14 @@ function Home() {
   const [testMessage, setTestMessage] = useState('');
   const [testError, setTestError] = useState(false);
   const [savedMessage, setSavedMessage] = useState('');
-  const [tab, setTab] = useState<'analysis' | 'settings' | 'leaderboard' | 'signals'>(() => { const t = new URLSearchParams(window.location.search).get('tab'); return t === 'settings' || t === 'leaderboard' || t === 'signals' ? t : 'analysis'; });
-  function pickTab(next: 'analysis' | 'settings' | 'leaderboard' | 'signals') { setTab(next); setUrlParams({ tab: next === 'analysis' ? null : next }); }
+  const [tab, setTab] = useState<Tab>(urlTab);
+  function pickTab(next: Tab) {
+    if (next === tab) return;
+    setTab(next);
+    window.history.pushState(window.history.state, '', window.location.href);
+    setUrlParams({ tab: next === 'analysis' ? null : next });
+  }
+  useEffect(() => { const onPop = () => setTab(urlTab()); window.addEventListener('popstate', onPop); return () => window.removeEventListener('popstate', onPop); }, []);
 
   useEffect(() => {
     if (!dashboard || dirty || saveSettings.isPending) return;
@@ -271,6 +280,7 @@ function Home() {
 
             <nav className="ws-tabs" aria-label="Secciones">
               <button className={tab === 'analysis' ? 'on' : ''} onClick={() => pickTab('analysis')} data-testid="tab-analysis">Análisis de mercados</button>
+              <button className={tab === 'notifications' ? 'on' : ''} onClick={() => pickTab('notifications')} data-testid="tab-notifications">Avisos</button>
               <button className={tab === 'settings' ? 'on' : ''} onClick={() => pickTab('settings')} data-testid="tab-settings">Ajustes y Telegram</button>
               <button className={tab === 'leaderboard' ? 'on' : ''} onClick={() => pickTab('leaderboard')} data-testid="tab-leaderboard">Ranking ROI</button>
               <button className={tab === 'signals' ? 'on' : ''} onClick={() => pickTab('signals')} data-testid="tab-signals">Señales</button>
@@ -280,6 +290,7 @@ function Home() {
               {tab === 'analysis' && <Explorer />}
               {tab === 'leaderboard' && <RoiLeaderboard />}
               {tab === 'signals' && <SignalEvaluation />}
+              {tab === 'notifications' && <TelegramNotices />}
             </Suspense>
 
             {tab === 'settings' && <div className="main-grid">

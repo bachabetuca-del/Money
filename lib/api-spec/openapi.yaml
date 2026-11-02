@@ -15,6 +15,41 @@ tags:
   - name: kalshi
     description: Kalshi sports trade monitoring and Telegram alerts
 paths:
+  /kalshi/notifications:
+    get:
+      operationId: getKalshiNotifications
+      tags: [kalshi]
+      summary: Readable owner-chat history of confirmed Telegram notifications
+      parameters:
+        - in: query
+          name: page
+          schema: { type: integer, minimum: 1, maximum: 100000, default: 1 }
+        - in: query
+          name: q
+          schema: { type: string, maxLength: 120, default: "" }
+        - in: query
+          name: sport
+          schema: { type: string, maxLength: 80, default: all }
+      responses:
+        "200":
+          description: Confirmed deliveries, including notices retired from the chat. Historical ROI is never reconstructed for legacy notices.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/TelegramNotices" }
+        "400":
+          description: Invalid notification filters
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ApiError" }
+        "401":
+          $ref: "#/components/responses/SignInRequired"
+        "403":
+          $ref: "#/components/responses/OwnerRequired"
+        "503":
+          description: Notification history temporarily unavailable
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ApiError" }
   /kalshi/signals:
     get:
       operationId: getKalshiSignals
@@ -385,6 +420,59 @@ components:
           schema:
             $ref: "#/components/schemas/ApiError"
   schemas:
+    TelegramNoticeRoi:
+      type: object
+      required: [basis, roiPct, grossRoiPct, netRoiPct, games, trades, historyAsOf, capturedAt]
+      description: Historical comparison frozen before sending, not the current ranking or the later profit of this bet.
+      properties:
+        basis: { $ref: "#/components/schemas/RoiBasis" }
+        roiPct: { type: number }
+        grossRoiPct: { type: number }
+        netRoiPct: { type: [number, "null"] }
+        games: { type: integer, minimum: 1 }
+        trades: { type: integer, minimum: 1 }
+        historyAsOf: { type: string }
+        capturedAt: { type: string }
+    TelegramNotice:
+      type: object
+      required: [tradeId, ticker, sport, eventTitle, marketTitle, side, price, contracts, notional, executedAt, sentAt, marketUrl, removedFromTelegram, detailsSource, roi]
+      properties:
+        tradeId: { type: string }
+        ticker: { type: string }
+        sport: { type: string }
+        eventTitle: { type: string }
+        marketTitle: { type: string }
+        side: { type: string, enum: [yes, no, unknown] }
+        price: { type: [number, "null"], exclusiveMinimum: 0, maximum: 1 }
+        contracts: { type: [number, "null"], exclusiveMinimum: 0 }
+        notional: { type: [number, "null"], minimum: 0 }
+        executedAt: { type: [string, "null"] }
+        sentAt: { type: string }
+        marketUrl: { type: [string, "null"] }
+        removedFromTelegram: { type: boolean }
+        detailsSource: { type: string, enum: [frozen, legacy] }
+        roi:
+          anyOf:
+            - $ref: "#/components/schemas/TelegramNoticeRoi"
+            - type: "null"
+    TelegramNotices:
+      type: object
+      required: [generatedAt, workersPaused, chatConfigured, page, pageSize, total, totalPages, totalDelivered, availableSports, rows]
+      properties:
+        generatedAt: { type: string }
+        workersPaused: { type: boolean }
+        chatConfigured: { type: boolean }
+        page: { type: integer, minimum: 1 }
+        pageSize: { type: integer, minimum: 1 }
+        total: { type: integer, minimum: 0 }
+        totalPages: { type: integer, minimum: 0 }
+        totalDelivered: { type: integer, minimum: 0 }
+        availableSports:
+          type: array
+          items: { type: string }
+        rows:
+          type: array
+          items: { $ref: "#/components/schemas/TelegramNotice" }
     SignalRule:
       type: object
       required: [version, basis, minimumRoiPct, minimumGames, minimumTrades, coverage, window, sport, marketType, side, moneyBand, amountMin, amountMax, amountMinInclusive, amountMaxInclusive, oddsMin, oddsMax, stakeUsd]

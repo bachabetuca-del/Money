@@ -9,6 +9,84 @@ import * as zod from 'zod';
 
 
 /**
+ * @summary Readable owner-chat history of confirmed Telegram notifications
+ */
+export const getKalshiNotificationsQueryPageDefault = 1;
+export const getKalshiNotificationsQueryPageMax = 100000;
+
+export const getKalshiNotificationsQueryQDefault = ``;
+export const getKalshiNotificationsQueryQMax = 120;
+
+export const getKalshiNotificationsQuerySportDefault = `all`;
+export const getKalshiNotificationsQuerySportMax = 80;
+
+
+
+export const GetKalshiNotificationsQueryParams = zod.object({
+  "page": zod.coerce.number().int().min(1).max(getKalshiNotificationsQueryPageMax).default(getKalshiNotificationsQueryPageDefault),
+  "q": zod.coerce.string().max(getKalshiNotificationsQueryQMax).default(getKalshiNotificationsQueryQDefault),
+  "sport": zod.coerce.string().max(getKalshiNotificationsQuerySportMax).default(getKalshiNotificationsQuerySportDefault)
+})
+
+
+
+export const getKalshiNotificationsResponseTotalMin = 0;
+
+export const getKalshiNotificationsResponseTotalPagesMin = 0;
+
+export const getKalshiNotificationsResponseTotalDeliveredMin = 0;
+
+export const getKalshiNotificationsResponseRowsItemPriceExclusiveMin = 0;
+export const getKalshiNotificationsResponseRowsItemPriceMax = 1;
+
+export const getKalshiNotificationsResponseRowsItemContractsExclusiveMin = 0;
+
+export const getKalshiNotificationsResponseRowsItemNotionalMin = 0;
+
+
+
+
+
+export const GetKalshiNotificationsResponse = zod.object({
+  "generatedAt": zod.string(),
+  "workersPaused": zod.boolean(),
+  "chatConfigured": zod.boolean(),
+  "page": zod.number().int().min(1),
+  "pageSize": zod.number().int().min(1),
+  "total": zod.number().int().min(getKalshiNotificationsResponseTotalMin),
+  "totalPages": zod.number().int().min(getKalshiNotificationsResponseTotalPagesMin),
+  "totalDelivered": zod.number().int().min(getKalshiNotificationsResponseTotalDeliveredMin),
+  "availableSports": zod.array(zod.string()),
+  "rows": zod.array(zod.object({
+  "tradeId": zod.string(),
+  "ticker": zod.string(),
+  "sport": zod.string(),
+  "eventTitle": zod.string(),
+  "marketTitle": zod.string(),
+  "side": zod.enum(['yes', 'no', 'unknown']),
+  "price": zod.number().gt(getKalshiNotificationsResponseRowsItemPriceExclusiveMin).max(getKalshiNotificationsResponseRowsItemPriceMax).nullable(),
+  "contracts": zod.number().gt(getKalshiNotificationsResponseRowsItemContractsExclusiveMin).nullable(),
+  "notional": zod.number().min(getKalshiNotificationsResponseRowsItemNotionalMin).nullable(),
+  "executedAt": zod.string().nullable(),
+  "sentAt": zod.string(),
+  "marketUrl": zod.string().nullable(),
+  "removedFromTelegram": zod.boolean(),
+  "detailsSource": zod.enum(['frozen', 'legacy']),
+  "roi": zod.union([zod.object({
+  "basis": zod.enum(['gross', 'net']).describe('Explicit Telegram filter basis. Existing settings remain gross; an omitted update never changes the saved choice.'),
+  "roiPct": zod.number(),
+  "grossRoiPct": zod.number(),
+  "netRoiPct": zod.number().nullable(),
+  "games": zod.number().int().min(1),
+  "trades": zod.number().int().min(1),
+  "historyAsOf": zod.string(),
+  "capturedAt": zod.string()
+}).describe('Historical comparison frozen before sending, not the current ranking or the later profit of this bet.'),zod.null()])
+}))
+})
+
+
+/**
  * @summary Forward-only evaluation of frozen new alert evidence and later official settlements
  */
 export const getKalshiSignalsQueryPageDefault = 1;
