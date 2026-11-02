@@ -14,6 +14,17 @@
 .tn-sent { font: 10.5px var(--app-font-mono); color: #6a7677; }
 .tn-game { margin: 12px 0 3px; font-size: 19px; line-height: 1.25; letter-spacing: -.03em; color: #26343a; }
 .tn-bet { margin: 0; font-size: 14px; font-weight: 700; color: #185b45; line-height: 1.4; }
+.tn-game-context { display: flex; align-items: center; justify-content: space-between; gap: 10px 14px; flex-wrap: wrap; padding: 13px 0 0; }
+.tn-kickoff { display: flex; align-items: center; gap: 9px; min-width: 0; color: #58655f; }
+.tn-kickoff svg { flex-shrink: 0; }
+.tn-kickoff span { display: block; font-size: 11px; line-height: 1.4; }
+.tn-kickoff strong { display: block; font-size: 13px; color: #26343a; line-height: 1.5; font-weight: 600; }
+.tn-game-status { display: inline-flex; align-items: center; gap: 6px; border: 1px solid #d9ddd6; background: #eaece7; color: #52615c; padding: 5px 9px; border-radius: 6px; font-size: 12px; font-weight: 700; white-space: nowrap; }
+.tn-game-status i { width: 7px; height: 7px; border-radius: 50%; background: currentColor; flex-shrink: 0; }
+.tn-game-status.is-upcoming { background: #fff; color: #4e5e58; border-color: #d7ded8; }
+.tn-game-status.is-live { background: #fff1bf; color: #715309; border-color: #e5cc7c; }
+.tn-game-status.is-finished { background: #f9e4df; color: #91443b; border-color: #e9bdb4; }
+.tn-game-delay { flex-basis: 100%; margin: 0; font-size: 11px; line-height: 1.5; color: #75612c; }
 .tn-figures { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; margin-top: 14px; }
 .tn-fig { background: #eef0e7; border: 1px solid #dfe2d6; border-radius: 10px; padding: 11px 14px; display: flex; flex-direction: column; gap: 4px; min-width: 0; }
 .tn-fig span { font: 9.5px var(--app-font-mono); text-transform: uppercase; letter-spacing: .07em; color: #6e7a75; }

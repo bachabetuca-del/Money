@@ -50,6 +50,31 @@ export const TelegramNoticeDetailsSource = {
   legacy: 'legacy',
 } as const;
 
+export type TelegramNoticeGameStatus = typeof TelegramNoticeGameStatus[keyof typeof TelegramNoticeGameStatus];
+
+
+export const TelegramNoticeGameStatus = {
+  upcoming: 'upcoming',
+  live: 'live',
+  finished: 'finished',
+  market_resolved: 'market_resolved',
+  unknown: 'unknown',
+} as const;
+
+/**
+ * Current saved game context, refreshed independently of the original trade and ROI. No status is inferred from elapsed kickoff time or a closed individual bet.
+ */
+export interface TelegramNoticeGame {
+  /** @nullable */
+  startsAt: string | null;
+  dateLabel: string;
+  timeLabel: string;
+  status: TelegramNoticeGameStatus;
+  delayed: boolean;
+  /** @nullable */
+  checkedAt: string | null;
+}
+
 export interface TelegramNotice {
   tradeId: string;
   ticker: string;
@@ -80,6 +105,7 @@ export interface TelegramNotice {
   marketUrl: string | null;
   removedFromTelegram: boolean;
   detailsSource: TelegramNoticeDetailsSource;
+  game: TelegramNoticeGame;
   roi: TelegramNoticeRoi | null;
 }
 

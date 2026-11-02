@@ -6,6 +6,7 @@
  * OpenAPI spec version: 0.1.0
  */
 import type { TelegramNoticeDetailsSource } from './telegramNoticeDetailsSource';
+import type { TelegramNoticeGame } from './telegramNoticeGame';
 import type { TelegramNoticeRoi } from './telegramNoticeRoi';
 import type { TelegramNoticeSide } from './telegramNoticeSide';
 
@@ -39,5 +40,6 @@ export interface TelegramNotice {
   marketUrl: string | null;
   removedFromTelegram: boolean;
   detailsSource: TelegramNoticeDetailsSource;
+  game: TelegramNoticeGame;
   roi: TelegramNoticeRoi | null;
 }

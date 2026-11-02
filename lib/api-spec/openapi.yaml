@@ -435,7 +435,7 @@ components:
         capturedAt: { type: string }
     TelegramNotice:
       type: object
-      required: [tradeId, ticker, sport, eventTitle, marketTitle, side, price, contracts, notional, executedAt, sentAt, marketUrl, removedFromTelegram, detailsSource, roi]
+      required: [tradeId, ticker, sport, eventTitle, marketTitle, side, price, contracts, notional, executedAt, sentAt, marketUrl, removedFromTelegram, detailsSource, roi, game]
       properties:
         tradeId: { type: string }
         ticker: { type: string }
@@ -451,10 +451,22 @@ components:
         marketUrl: { type: [string, "null"] }
         removedFromTelegram: { type: boolean }
         detailsSource: { type: string, enum: [frozen, legacy] }
+        game: { $ref: "#/components/schemas/TelegramNoticeGame" }
         roi:
           anyOf:
             - $ref: "#/components/schemas/TelegramNoticeRoi"
             - type: "null"
+    TelegramNoticeGame:
+      type: object
+      description: Current saved game context, refreshed independently of the original trade and ROI. No status is inferred from elapsed kickoff time or a closed individual bet.
+      required: [startsAt, dateLabel, timeLabel, status, delayed, checkedAt]
+      properties:
+        startsAt: { type: [string, "null"] }
+        dateLabel: { type: string }
+        timeLabel: { type: string }
+        status: { type: string, enum: [upcoming, live, finished, market_resolved, unknown] }
+        delayed: { type: boolean }
+        checkedAt: { type: [string, "null"] }
     TelegramNotices:
       type: object
       required: [generatedAt, workersPaused, chatConfigured, page, pageSize, total, totalPages, totalDelivered, availableSports, rows]

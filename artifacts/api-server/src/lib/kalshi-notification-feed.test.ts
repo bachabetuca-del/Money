@@ -1,12 +1,13 @@
 import assert from "node:assert/strict";
 import { after, test } from "node:test";
 import { db, pool, kalshiAlertsTable as alerts, kalshiNotificationsTable as notices,
-  kalshiSignalsTable as signals } from "@workspace/db";
-import { sql } from "drizzle-orm";
+  kalshiSignalsTable as signals, kalshiGameStatusTable as games } from "@workspace/db";
+import { eq, sql } from "drizzle-orm";
 import { GetKalshiNotificationsQueryParams, GetKalshiNotificationsResponse } from "@workspace/api-zod";
 import { loadTelegramNotifications, notificationFeedRow } from "./kalshi-notification-feed";
 import { buildSignalEvidence, SIGNAL_FEE_ASSUMPTIONS } from "./signal-evaluation";
 import { feeModel } from "./kalshi-fees";
+import { notificationGameContext } from "./notification-game-context";
 
 after(() => pool.end());
 const zero = new Date("2026-11-02T12:00:00Z");
@@ -31,6 +32,39 @@ test("notification query contract rejects malformed filters and supplies default
   for (const bad of [{ page: 0 }, { page: "NaN" }, { page: 1.5 }, { q: "x".repeat(121) }, { sport: "x".repeat(81) }]) {
     assert.equal(GetKalshiNotificationsQueryParams.safeParse(bad).success, false);
   }
+});
+
+test("game context shows the real ET schedule and never guesses kickoff or a final", () => {
+  const saved = { state: "scheduled", source: "milestone", checked_at: at(-30) };
+  const upcoming = notificationGameContext("KXATPTOTAL-26NOV03MOLDRO-24", saved, "2026-11-03T01:30:00Z", zero);
+  assert.equal(upcoming.status, "upcoming");
+  assert.equal(upcoming.startsAt, "2026-11-03T01:30:00.000Z");
+  assert.equal(upcoming.dateLabel, "02 nov 2026", "Prefer the real ET date over the ticker date");
+  assert.equal(upcoming.timeLabel, "8:30 PM ET", "New York's November standard-time offset");
+  const pastKickoff = notificationGameContext("TICKER", saved, at(-60), zero);
+  assert.equal(pastKickoff.status, "unknown");
+  assert.equal(pastKickoff.delayed, true);
+  const live = { ...saved, state: "live", source: "live" };
+  assert.equal(notificationGameContext("T", live, at(-60), zero).status, "live");
+  for (const bad of [
+    { ...live, checked_at: at(-301) }, { ...live, checked_at: at(61) },
+    { ...live, checked_at: null }, { ...live, delayed: true }, { ...live, error: "Unavailable" },
+  ]) {
+    const context = notificationGameContext("T", bad, at(-60), zero);
+    assert.equal(context.status, "unknown");
+    assert.equal(context.delayed, true);
+  }
+  assert.equal(notificationGameContext("T", { ...live, checked_at: at(-300) }, at(-60), zero).status, "live");
+  const final = notificationGameContext("T", { ...live, state: "finished", checked_at: at(-864000) }, at(-900000), zero);
+  assert.equal(final.status, "finished", "A confirmed final does not need ongoing polling");
+  assert.equal(final.delayed, false);
+  assert.equal(notificationGameContext("T", { ...saved, source: "market", state: "finished" }, null, zero).status, "market_resolved");
+  const dateOnly = notificationGameContext("KXATPTOTAL-26NOV02MOLDRO-24", null, null, zero);
+  assert.equal(dateOnly.dateLabel, "02 nov 2026");
+  assert.equal(dateOnly.timeLabel, "Hora por confirmar");
+  assert.equal(dateOnly.startsAt, null);
+  assert.equal(dateOnly.status, "unknown");
+  assert.equal(notificationGameContext("KXUNKNOWN-26FEB31", null, "invalid", zero).dateLabel, "Sin fecha");
 });
 
 test("missing owner chat returns an explicit empty view without reading another chat", async () => {
@@ -80,7 +114,7 @@ test("PostgreSQL history uses confirmed owner deliveries, frozen filters and all
   await db.transaction(async tx => {
     // Temporary tables shadow this connection only and vanish on commit/rollback.
     // No real executions, messages, activation boundary or signal is written.
-    for (const name of ["kalshi_alerts", "kalshi_notifications", "kalshi_signals"]) {
+    for (const name of ["kalshi_alerts", "kalshi_notifications", "kalshi_signals", "kalshi_game_status"]) {
       await tx.execute(sql.raw(`CREATE TEMP TABLE ${name} (LIKE public.${name} INCLUDING ALL) ON COMMIT DROP`));
     }
     const insert = async (
@@ -111,6 +145,14 @@ test("PostgreSQL history uses confirmed owner deliveries, frozen filters and all
       chatId: "owner-fixture", tradeId: "frozen-1", ticker: evidence.ticker,
       evaluationId: 1, gameId: evidence.gameId, capturedAt: at(2), evidence,
     });
+    await tx.insert(games).values([
+      { ticker: evidence.ticker, milestoneId: "game-fixture", state: "finished", source: "market",
+        checkedAt: at(995), marketTerminal: true },
+      { ticker: "SAME-GAME-WINNER", milestoneId: "game-fixture", eventTicker: "another-market-family",
+        state: "live", source: "live", startsAt: at(900), checkedAt: at(990) },
+      { ticker: "UNRELATED-GAME", milestoneId: "different-game", state: "finished", source: "live",
+        startsAt: at(-86400), checkedAt: at(999) },
+    ]);
     await insert("other-owner", at(130), { chat: "foreign-fixture", sport: "Private sport" });
     await insert("pending", null);
     await insert("skipped", null, { skipped: true });
@@ -153,6 +195,26 @@ test("PostgreSQL history uses confirmed owner deliveries, frozen filters and all
       assert.equal((await load({ q: "_" })).total, 1);
       assert.equal((await load({ q: "' OR true --" })).total, 0);
       assert.equal((await load({ q: "\\", sport: "Soccer" })).total, 0);
+    });
+    await t.test("game lifecycle updates independently, shares exact game IDs and preserves original ROI", async () => {
+      const first = (await load({ q: "frozen-1" })).rows[0];
+      assert.equal(first.game.status, "live", "A resolved prop is not a finished game");
+      assert.equal(first.game.startsAt, at(900).toISOString(), "Use the shared game's schedule");
+      assert.equal(first.game.checkedAt, at(990).toISOString());
+      await tx.update(games).set({ state: "finished", checkedAt: at(999) })
+        .where(eq(games.ticker, "SAME-GAME-WINNER"));
+      const updated = (await load({ q: "frozen-1" })).rows[0];
+      assert.equal(updated.game.status, "finished");
+      assert.deepEqual(updated.roi, first.roi, "Current lifecycle must not rewrite the original signal");
+      assert.equal(updated.price, first.price);
+      assert.equal(updated.sentAt, first.sentAt);
+      await tx.update(games).set({ state: "live", checkedAt: at(600) })
+        .where(eq(games.ticker, "SAME-GAME-WINNER"));
+      const stale = (await load({ q: "frozen-1" })).rows[0];
+      assert.equal(stale.game.status, "unknown");
+      assert.equal(stale.game.delayed, true);
+      assert.equal((await load({ q: "legacy-00" })).rows[0].game.status, "unknown",
+        "Unrelated games or the delivery time do not supply missing game state");
     });
   });
 });

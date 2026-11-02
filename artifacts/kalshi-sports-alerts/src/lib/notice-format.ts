@@ -1,4 +1,28 @@
-import type { TelegramNotice, TelegramNoticeRoi } from '@workspace/api-client-react';
+import type { TelegramNotice, TelegramNoticeGame, TelegramNoticeRoi } from '@workspace/api-client-react';
+
+const GAME_LABELS: Record<TelegramNoticeGame['status'], string> = {
+  upcoming: 'Por empezar', live: 'En vivo', finished: 'Finalizado',
+  market_resolved: 'Mercado resuelto', unknown: 'Sin confirmar',
+};
+
+export function noticeGameView(game: TelegramNoticeGame | undefined, now = Date.now()) {
+  const context = game ?? {
+    startsAt: null, dateLabel: 'Fecha por confirmar', timeLabel: 'Hora por confirmar',
+    status: 'unknown' as const, delayed: false, checkedAt: null,
+  };
+  let { status, delayed } = context;
+  const checked = context.checkedAt ? Date.parse(context.checkedAt) : NaN;
+  // A failed refresh must not leave a stale "En vivo" badge on screen.
+  if (status === 'live' && (delayed || !Number.isFinite(checked) || now - checked > 300_000 || checked > now + 60_000)) {
+    status = 'unknown';
+    delayed = true;
+  }
+  if (status === 'upcoming' && (delayed || (context.startsAt && Date.parse(context.startsAt) <= now))) {
+    status = 'unknown';
+    delayed = true;
+  }
+  return { ...context, status, delayed, label: GAME_LABELS[status] };
+}
 
 /** Selected-side price in cents; never complements NO. */
 export function priceCents(price: number | null): string {

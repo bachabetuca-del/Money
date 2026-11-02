@@ -72,6 +72,14 @@ export const GetKalshiNotificationsResponse = zod.object({
   "marketUrl": zod.string().nullable(),
   "removedFromTelegram": zod.boolean(),
   "detailsSource": zod.enum(['frozen', 'legacy']),
+  "game": zod.object({
+  "startsAt": zod.string().nullable(),
+  "dateLabel": zod.string(),
+  "timeLabel": zod.string(),
+  "status": zod.enum(['upcoming', 'live', 'finished', 'market_resolved', 'unknown']),
+  "delayed": zod.boolean(),
+  "checkedAt": zod.string().nullable()
+}).describe('Current saved game context, refreshed independently of the original trade and ROI. No status is inferred from elapsed kickoff time or a closed individual bet.'),
   "roi": zod.union([zod.object({
   "basis": zod.enum(['gross', 'net']).describe('Explicit Telegram filter basis. Existing settings remain gross; an omitted update never changes the saved choice.'),
   "roiPct": zod.number(),

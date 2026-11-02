@@ -56,3 +56,9 @@ Keep the website's Telegram view as a readable history of actual deliveries, not
 **Why:** The user asked to see the Telegram notifications on the website with the price, sport and ROI clearly presented. The chat deliberately retains only its latest notice, so removing an older chat message must not erase its useful website history.
 
 **How to apply:** Show the original selected-side price and the historical ROI basis recorded for that notice. Never substitute today's ranking or a later settlement for its original ROI. Older notices without recorded ROI should say it was not recorded, rather than implying zero or reconstructing a profitable signal after the result.
+
+Preserve the readable notification cards the user approved, and show the game's scheduled date/time and current status directly on each card.
+
+**Why:** The user said “Me encanta lo que hicimos” and asked for the match's date, time and an “en vivo” indicator to understand its current status. This is current game context, not another fact to freeze at notification time.
+
+**How to apply:** Refresh game context independently of original price/ROI. Keep New York time explicit and follow the existing lifecycle colors and freshness rules. A passed scheduled start alone does not confirm play, and a resolved individual market does not confirm the game finished.

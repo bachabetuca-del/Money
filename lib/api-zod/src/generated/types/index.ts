@@ -90,6 +90,8 @@ export * from './signInRequiredResponse';
 export * from './telegramChatLookup';
 export * from './telegramNotice';
 export * from './telegramNoticeDetailsSource';
+export * from './telegramNoticeGame';
+export * from './telegramNoticeGameStatus';
 export * from './telegramNoticeRoi';
 export * from './telegramNotices';
 export * from './telegramNoticeSide';

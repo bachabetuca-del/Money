@@ -4,6 +4,7 @@ import type { GetKalshiNotificationsQueryParams, TelegramNotice, TelegramNotices
 import { ownerChatId } from "./owner-policy";
 import { signalEvidenceSchema } from "./signal-evidence-schema";
 import { publicDirection } from "./telegram-trade-direction";
+import { notificationGameContext } from "./notification-game-context";
 
 type Reader = Pick<typeof db, "execute">;
 type Filters = Partial<ReturnType<typeof GetKalshiNotificationsQueryParams.parse>>;
@@ -43,7 +44,7 @@ function deliveries(chatId: string, now: Date) {
   )`;
 }
 
-export function notificationFeedRow(row: Record<string, unknown>): TelegramNotice {
+export function notificationFeedRow(row: Record<string, unknown>, now = new Date()): TelegramNotice {
   // Missing old evidence is expected; corrupt evidence is not a license to
   // substitute today's ROI or mutable trade details for an original message.
   const frozen = row.evidence == null ? null : signalEvidenceSchema.parse(row.evidence);
@@ -65,6 +66,11 @@ export function notificationFeedRow(row: Record<string, unknown>): TelegramNotic
     marketUrl: kalshiUrl(frozen?.marketUrl ?? row.market_url as string | null),
     removedFromTelegram: row.removed_at != null,
     detailsSource: frozen ? "frozen" : "legacy",
+    game: notificationGameContext(
+      frozen?.ticker ?? String(row.ticker ?? ""),
+      row.game_status as Record<string, unknown> | null,
+      row.game_starts_at, now,
+    ),
     roi: frozen ? {
       basis: frozen.rule.basis, roiPct: frozen.historicalRoiPct,
       grossRoiPct: frozen.historicalGrossRoiPct, netRoiPct: frozen.historicalNetRoiPct,
@@ -99,14 +105,36 @@ export async function loadTelegramNotifications(
   const summary = totals.rows[0];
   const total = Number(summary?.total ?? 0), totalPages = Math.ceil(total / PAGE_SIZE);
   const page = Math.max(1, Math.min(filters.page ?? 1, totalPages || 1));
-  const records = await executor.execute(sql`${deliveries(chatId, now)}
-    SELECT * FROM delivered WHERE ${predicate}
-    ORDER BY sent_at DESC, trade_id ASC
-    LIMIT ${PAGE_SIZE} OFFSET ${(page - 1) * PAGE_SIZE}`);
+  const records = await executor.execute(sql`${deliveries(chatId, now)}, selected AS (
+      SELECT * FROM delivered WHERE ${predicate}
+      ORDER BY sent_at DESC, trade_id ASC
+      LIMIT ${PAGE_SIZE} OFFSET ${(page - 1) * PAGE_SIZE}
+    )
+    SELECT d.*, context.game_status, context.game_starts_at
+    FROM selected d
+    LEFT JOIN kalshi_game_status own ON own.ticker = d.ticker
+    LEFT JOIN LATERAL (
+      WITH candidates AS (
+        SELECT g.* FROM kalshi_game_status g
+        WHERE g.ticker = d.ticker
+          OR g.milestone_id = coalesce(own.milestone_id,
+            CASE WHEN d.evidence->>'gameIdentity' = 'milestone' THEN d.evidence->>'gameId' END)
+          OR g.event_ticker = coalesce(own.event_ticker,
+            CASE WHEN d.evidence->>'gameIdentity' IN ('event', 'ticker') THEN d.evidence->>'gameId' END,
+            split_part(d.ticker, '-', 1) || '-' || nullif(split_part(d.ticker, '-', 2), ''))
+      )
+      SELECT
+        (SELECT to_jsonb(c) FROM candidates c
+          ORDER BY (c.state <> 'unknown' AND c.source <> 'market') DESC,
+            c.checked_at DESC, c.ticker ASC LIMIT 1) AS game_status,
+        (SELECT c.starts_at FROM candidates c WHERE c.starts_at IS NOT NULL
+          ORDER BY c.checked_at DESC, c.ticker ASC LIMIT 1) AS game_starts_at
+    ) context ON true
+    ORDER BY d.sent_at DESC, d.trade_id ASC`);
   return {
     ...common, page, totalPages, total, totalDelivered: Number(summary?.total_delivered ?? 0),
     availableSports: (summary?.sports ?? []) as string[],
-    rows: records.rows.map(notificationFeedRow),
+    rows: records.rows.map(row => notificationFeedRow(row, now)),
   };
 }
 

@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { ArrowUpRight, ChevronLeft, ChevronRight, MessageCircle, RefreshCw, Search, X } from 'lucide-react';
+import { ArrowUpRight, CalendarDays, ChevronLeft, ChevronRight, MessageCircle, RefreshCw, Search, X } from 'lucide-react';
 import {
   getGetKalshiNotificationsQueryKey,
   useGetKalshiNotifications,
@@ -10,7 +10,7 @@ import {
 import { setUrlParams } from '../lib/navigation';
 import { errorText } from './history-export';
 import {
-  contractsText, etTime, priceCents, roiView, safeKalshiUrl, sideLabel, sportName, usd,
+  contractsText, etTime, noticeGameView, priceCents, roiView, safeKalshiUrl, sideLabel, sportName, usd,
 } from '../lib/notice-format';
 import './telegram-notices.css';
 
@@ -20,9 +20,10 @@ function readUrl() {
   return { page, q: (p.get('nq') ?? '').slice(0, 120), sport: (p.get('nsport') || 'all').slice(0, 80) };
 }
 
-export function NoticeCard({ notice }: { notice: TelegramNotice }) {
+export function NoticeCard({ notice, now }: { notice: TelegramNotice; now?: number }) {
   const roi = roiView(notice.roi);
   const link = safeKalshiUrl(notice.marketUrl);
+  const game = noticeGameView(notice.game, now);
   const id = notice.tradeId;
   return (
     <article className="tn-card" data-testid={`card-notice-${id}`}>
@@ -32,6 +33,26 @@ export function NoticeCard({ notice }: { notice: TelegramNotice }) {
       </div>
       <h3 className="tn-game" data-testid={`text-game-${id}`}>{notice.eventTitle || 'Partido no registrado'}</h3>
       <p className="tn-bet" data-testid={`text-bet-${id}`}>{notice.marketTitle || 'Apuesta no registrada'}</p>
+
+      <div className="tn-game-context">
+        <div className="tn-kickoff">
+          <CalendarDays size={17} aria-hidden="true" />
+          <div>
+            <span>Inicio programado del partido</span>
+            <strong data-testid={`text-game-start-${id}`}>
+              {game.startsAt
+                ? <time dateTime={game.startsAt}>{game.dateLabel} · {game.timeLabel}</time>
+                : <>{game.dateLabel} · {game.timeLabel}</>}
+            </strong>
+          </div>
+        </div>
+        <span className={`tn-game-status is-${game.status}`} data-testid={`text-game-status-${id}`}
+          aria-label={`Estado del partido: ${game.label}`}>
+          <i aria-hidden="true" />{game.label}
+        </span>
+        {game.delayed && <p className="tn-game-delay">Estado pendiente de actualización; no se confirma que esté en vivo.</p>}
+        {game.status === 'market_resolved' && <p className="tn-game-delay">La apuesta está resuelta; no confirma que el partido haya terminado.</p>}
+      </div>
 
       <div className="tn-figures">
         <div className={`tn-fig side-${notice.side}`}>
@@ -63,6 +84,7 @@ export function NoticeCard({ notice }: { notice: TelegramNotice }) {
         <summary data-testid={`button-details-${id}`}>Más detalle</summary>
         <dl>
           <div><dt>Ejecución observada</dt><dd>{etTime(notice.executedAt)}</dd></div>
+          <div><dt>Última comprobación del partido</dt><dd>{etTime(game.checkedAt)}</dd></div>
           {roi.other && <div><dt>Otra base de ROI</dt><dd>{roi.other}</dd></div>}
           {notice.roi && <div><dt>Historial hasta</dt><dd>{etTime(notice.roi.historyAsOf)}</dd></div>}
           <div><dt>Ticker</dt><dd className="mono">{notice.ticker}</dd></div>
@@ -129,7 +151,7 @@ export function TelegramNotices() {
         <div>
           <div className="eyebrow">Historial de Telegram</div>
           <h2 id="tn-heading"><MessageCircle size={20} /> Avisos entregados</h2>
-          <p>Cada aviso confirmado, del más reciente al más antiguo. El ROI es una comparación histórica guardada antes del envío: no es ganancia garantizada ni el resultado posterior del partido.</p>
+          <p>Cada aviso confirmado, del más reciente al más antiguo. La fecha y el estado del partido se actualizan; el precio y el ROI conservan los datos originales del aviso. El ROI es histórico, no una ganancia garantizada ni el resultado posterior del partido.</p>
         </div>
         <div className="tn-refresh">
           <span className="ws-refresh" data-testid="status-notices-updated">{isFetching ? 'Actualizando…' : data ? `Actualizado ${etTime(data.generatedAt)}` : ''}</span>

@@ -186,7 +186,8 @@ export function scopeButtons(selection: Selection): Button[] {
   ];
 }
 
-export function catalogGameBadge(markets: MarketSummary[], now?: Date) {
+export function catalogGameBadge(markets: Pick<MarketSummary,
+  "gameState" | "gameSource" | "gameDelayed" | "gameCheckedAt">[], now?: Date) {
   const confirmed = markets.filter(m => m.gameState && m.gameState !== "unknown" && m.gameSource !== "market")
     .sort((a, b) => (b.gameCheckedAt ?? "").localeCompare(a.gameCheckedAt ?? ""));
   const latest = confirmed[0];
