@@ -1,0 +1,11 @@
+.ws-roi-controls { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 14px; width: 100%; }
+.ws-roi-controls input { width: 110px; min-width: 0; max-width: 100%; border: 1px solid #d8dcd2; border-radius: 9px; padding: 10px 12px; background: #f9f8f2; color: #185b45; font: inherit; }
+.ws-roi-controls input:focus-visible { outline: 2px solid #185b45; outline-offset: 2px; }
+.ws-roi-reset { border: 0; background: transparent; padding: 8px 2px; color: #185b45; font-size: 11px; text-decoration: underline; }
+.ws-roi-note { flex-basis: 100%; line-height: 1.5; margin: 0; }
+.ws-roi-heading { margin: 10px 4px 0; font-size: 11px; color: #53615b; line-height: 1.5; }
+.ws-ranked-game { margin: 0; padding: 6px 0; border-left: 0; border-bottom: 1px solid #e5e3d9; }
+.ws-ranked-game:last-child { border-bottom: 0; }
+.ws-roi-sport { display: block; margin-bottom: 4px; font: 10px var(--app-font-mono, monospace); text-transform: uppercase; color: #53615b; }
+.ws-game-roi { display: flex; flex-direction: column; align-items: flex-start; gap: 4px; margin-top: 7px; }
+.ws-roi-reference { font-size: 10px; line-height: 1.4; color: #53615b; font-weight: 400; overflow-wrap: anywhere; }

@@ -43,6 +43,12 @@ The user requested green/best, yellow/medium and red/bad ROI indicators in Anál
 
 **How to apply:** Keep SÍ/NO separate and require an exact comparison group. Use neutral gray for inadequate evidence or unavailable data, label the visual thresholds explicitly, and show the observed reference price's date rather than presenting it as a live quote. Website comparisons load independently so they cannot block live exploration. The user separately requested a Telegram ROI filter; follow the notification rules without changing the website's color thresholds.
 
+The user also wants to filter ROI “en general” in market analysis so games with higher ROI appear first. Interpret this as a global game ordering, not separate sport blocks. A game's ordering reference is its best eligible visible market and side, explicitly identified—not an average or a claim that the game itself has earned that return.
+
+**Why:** An unfinished game has no realized ROI, and averaging opposing bets or letting sport grouping override the order would obscure the comparison the user requested.
+
+**How to apply:** Preserve the existing sport/time navigation as an alternative. Respect the selected money band, side, bet type and search when identifying the ordering reference. An ROI minimum excludes insufficient or unavailable evidence; without a minimum, those games remain available at the end.
+
 Preserve the original equal entry notional when comparing gross and estimated net; treat fees as additional capital, not fewer hypothetical contracts. Current public fee rules applied to history are a scenario, not evidence of the fees actually paid then.
 
 **Why:** The user wants to avoid confusing the existing historical +7% with after-cost profit while retaining the original research comparison. Changing position size or selecting only the observations with cheaper/known fees would make the comparison misleading. Public trades do not reveal actual maker/taker execution, account rounding, rebates or funding costs.

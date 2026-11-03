@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
-import { AlertCircle, ChevronRight, Download, ExternalLink, Pause, Play, RefreshCw, Search } from 'lucide-react';
+import { AlertCircle, Download, ExternalLink, Pause, Play, RefreshCw, Search } from 'lucide-react';
 import {
   Bar,
   CartesianGrid,
@@ -18,10 +18,12 @@ import { useLiveExplorer } from '@/hooks/use-live-explorer';
 import { MarketFlow } from '@/components/market-flow';
 import { HistoryExport } from '@/components/history-export';
 import { GameAnalysisPanel } from '@/components/game-analysis-panel';
-import { MarketRoiBadges, MarketRoiDetail, RoiColorLegend, type RoiView } from '@/components/explorer-roi';
+import { MarketRoiDetail, RoiColorLegend, type RoiView } from '@/components/explorer-roi';
+import { ExplorerCatalog, ExplorerRoiControls } from '@/components/explorer-catalog';
+import { buildExplorerList, explorerSelection, minimumRoi, readExplorerRoiOptions, type ExplorerOrder } from '@/lib/explorer-roi-filter';
 import { setUrlParams } from '@/lib/navigation';
 import { diffFresh, FALLBACK_MS, FRESH_MS, lastExecution, viewSnapshot, type SeenState } from '@/lib/live-model';
-import { MINUTE, RECENT_MS, yesQuote, bubbleRadius, buildBuckets, chartTimeTicks, groupMarkets, type Bucket, type Dir } from '@/lib/explorer-model';
+import { MINUTE, RECENT_MS, yesQuote, bubbleRadius, buildBuckets, chartTimeTicks, type Bucket, type Dir } from '@/lib/explorer-model';
 import type {
   KalshiExplorer,
   ExplorerTrade,
@@ -89,6 +91,8 @@ type Params = {
   q: string;
   direction: 'all' | 'yes' | 'no';
   marketType: GetKalshiExplorerMarketType;
+  order: ExplorerOrder;
+  minRoi: string;
 };
 
 function readParams(): Params {
@@ -99,7 +103,8 @@ function readParams(): Params {
   const win = w === '1h' || w === '24h' ? w : 'all';
   const direction = p.get('direction') === 'yes' ? 'yes' : p.get('direction') === 'no' ? 'no' : 'all';
   const marketType = MARKET_TYPES.find(([key]) => key === p.get('marketType'))?.[0] ?? 'all';
-  return { band, scope, win, direction, marketType, ticker: (p.get('ticker') ?? '').slice(0, 200), q: (p.get('q') ?? '').slice(0, 150) };
+  return { band, scope, win, direction, marketType, ...readExplorerRoiOptions(p),
+    ticker: (p.get('ticker') ?? '').slice(0, 200), q: (p.get('q') ?? '').slice(0, 150) };
 }
 
 function Seg<T extends string>({ value, options, onChange, label }: { value: T; options: [T, string][]; onChange: (v: T) => void; label: string }) {
@@ -337,14 +342,14 @@ function TradeTable({ trades, now, highlight, report, fresh, direction }: {
 
 export function Explorer() {
   const [params, setParams] = useState<Params>(readParams);
-  const [openSports, setOpenSports] = useState<Set<string>>(new Set());
-  const [openGames, setOpenGames] = useState<Set<string>>(new Set());
-  const { band, scope, win, ticker, q, direction, marketType } = params;
+  const { band, scope, win, ticker, q, direction, marketType, order, minRoi } = params;
+  const roiMinimum = minimumRoi(minRoi);
   const selKey = `${ticker}:${band}:${win}:${scope}:${direction}:${marketType}`;
 
   useEffect(() => {
-    setUrlParams({ band: band === 'large' ? null : band, scope: scope === 'active' ? null : scope, window: win === 'all' ? null : win, ticker: ticker || null, direction: direction === 'all' ? null : direction, marketType: marketType === 'all' ? null : marketType, q: q || null });
-  }, [band, scope, win, ticker, direction, marketType, q]);
+    setUrlParams({ band: band === 'large' ? null : band, scope: scope === 'active' ? null : scope, window: win === 'all' ? null : win, ticker: ticker || null, direction: direction === 'all' ? null : direction, marketType: marketType === 'all' ? null : marketType, q: q || null,
+      explorerOrder: order === 'roi' ? order : null, minRoi: roiMinimum === null ? null : String(roiMinimum) });
+  }, [band, scope, win, ticker, direction, marketType, q, order, roiMinimum]);
 
   const [paused, setPaused] = useState(false);
   const [frozen, setFrozen] = useState<{
@@ -410,18 +415,25 @@ export function Explorer() {
   });
 
   const markets = catalog.data?.markets;
+  const roiReady = !!roi.data && !roi.isPending && !roi.isError;
+  const needsRoi = order === 'roi' || roiMinimum !== null;
+  const waitingForRoi = needsRoi && !roiReady && !!markets?.length;
+  const list = useMemo(() => buildExplorerList(markets ?? [], q, roiByTicker, {
+    order, minimum: roiMinimum, direction, roiReady,
+    minimumGames: roi.data?.minimumGames, minimumTrades: roi.data?.minimumTrades,
+  }), [markets, q, roiByTicker, order, roiMinimum, direction, roiReady, roi.data?.minimumGames, roi.data?.minimumTrades]);
+  const visibleTickers = useMemo(() => new Set(list.markets.map(m => m.ticker)), [list.markets]);
   const catalogSelected = markets?.find((m) => m.ticker === ticker);
-  const selected = paused && frozen?.key === selKey ? frozen.market : catalogSelected;
+  const selected = paused && frozen?.key === selKey ? frozen.market :
+    waitingForRoi || visibleTickers.has(ticker) ? catalogSelected : undefined;
   const selectedRoi = paused && frozen?.key === selKey ? frozen.roi : roiView(ticker);
-  const grouped = useMemo(() => groupMarkets(markets ?? [], q), [markets, q]);
 
-  // Open a real chart immediately; never keep an incompatible band/scope selection.
+  // Filtered-out selections must not linger; sorting alone never interrupts a chart.
   useEffect(() => {
-    if (!paused && markets && (!ticker || !markets.some((m) => m.ticker === ticker))) {
-      const next = markets[0]?.ticker ?? '';
-      if (ticker !== next) setParams((p) => ({ ...p, ticker: next }));
-    }
-  }, [markets, ticker, paused]);
+    if (!markets) return;
+    const next = explorerSelection(ticker, markets, list.markets, paused, waitingForRoi);
+    if (ticker !== next) setParams((p) => ({ ...p, ticker: next }));
+  }, [markets, list.markets, ticker, paused, waitingForRoi]);
 
   const change = (patch: Partial<Params>) => setParams((p) => ({ ...p, ...patch }));
   const liveData = detail.data;
@@ -502,15 +514,27 @@ export function Explorer() {
             {MARKET_TYPES.map(([key, label]) => <option key={key} value={key}>{label}</option>)}
           </select>
         </label>
+        <ExplorerRoiControls order={order} minRoi={minRoi} onChange={change} />
+        {needsRoi && <p className="ws-filter-note ws-roi-note">
+          {order === 'roi' ? 'Todos los deportes, de mayor a menor ROI bruto histórico. ' : ''}
+          {roiMinimum !== null ? `Solo mercados con ROI bruto ≥ ${roiMinimum.toLocaleString('es-US')}%. ` : ''}
+          Se usa el mejor mercado y lado {direction === 'all' ? 'SÍ/NO' : direction === 'yes' ? 'SÍ' : 'NO'} que cumple tus filtros,
+          con al menos {roi.data?.minimumGames ?? 10} partidos y {roi.data?.minimumTrades ?? 30} operaciones verificadas.
+          No es el ROI del partido actual ni una garantía de ganancia. Se actualiza cada minuto.
+        </p>}
         {marketType !== 'all' && <span className="ws-filter-note">Tipo: {MARKET_TYPES.find(([key]) => key === marketType)?.[1]}. Solo se muestran mercados de este tipo; la IA y el histórico completo conservan todos los tipos.</span>}
         <span className="ws-filter-note">{scopeText} · {bandText}</span>
         {direction !== 'all' && <span className="ws-filter-note">Solo dirección {direction === 'yes' ? 'YES (SÍ)' : 'NO'} · catálogo, gráficas, flujo, totales y PDF filtrados. Histórico completo e IA sin este filtro.</span>}
       </div>
       <HistoryExport />
       <RoiColorLegend minimumGames={roi.data?.minimumGames} minimumTrades={roi.data?.minimumTrades} greenMin={roi.data?.greenMinRoiPct} />
-      {roi.isPending && !!markets?.length && <p className="mr-loading" role="status">Cargando colores ROI; puedes seguir explorando los mercados.</p>}
+      {roi.isPending && !!markets?.length && <p className="mr-loading" role="status">
+        {needsRoi ? 'Cargando el ROI para ordenar y filtrar los partidos. La gráfica seleccionada sigue disponible.' : 'Cargando colores ROI; puedes seguir explorando los mercados.'}
+      </p>}
       {roi.isError && <Notice tone="warn" title="ROI sin actualizar" action={<button className="button secondary" onClick={() => void roi.refetch()} data-testid="button-retry-roi-colors">Reintentar ROI</button>}>
-        No se pudo actualizar el histórico comparable. Los indicadores ROI quedan en gris; los mercados y las gráficas siguen disponibles.
+        No se pudo actualizar el histórico comparable. {needsRoi
+          ? 'No se aplica el filtro ni el orden ROI con datos desactualizados. Reintenta o vuelve al orden por deporte sin un mínimo.'
+          : 'Los indicadores ROI quedan en gris; los mercados y las gráficas siguen disponibles.'}
       </Notice>}
       {scope === 'history' && catalog.data && (
         <Notice tone="warn" title="Historial posiblemente incompleto">
@@ -523,6 +547,10 @@ export function Explorer() {
           <label className="ws-search"><Search size={14} />
             <input value={q} maxLength={150} onChange={(e) => change({ q: e.target.value })} placeholder="Buscar deporte, partido o apuesta" aria-label="Buscar mercados" data-testid="input-search-market" />
           </label>
+          {order === 'roi' && !waitingForRoi && <p className="ws-roi-heading">
+            <strong>Partidos con mayor ROI primero</strong><br />El mercado y lado que determinan el orden aparecen bajo cada partido.
+            {roiMinimum === null && ' Sin muestra suficiente: al final.'}
+          </p>}
           <div className="ws-tree-scroll">
             {catalog.isLoading && [0, 1, 2, 3, 4].map((i) => <div key={i} className="skeleton skeleton-line" style={{ height: 38, margin: '8px 0' }} />)}
             {catalog.isError && !catalog.data && (
@@ -530,60 +558,27 @@ export function Explorer() {
                 {catalog.error instanceof Error ? catalog.error.message : 'Error desconocido.'}
               </Notice>
             )}
-            {markets && grouped.length === 0 && (
+            {waitingForRoi && <div className="ws-empty small" data-testid="catalog-roi-pending" role="status">
+              <p>{roi.isError ? 'El orden y filtro ROI no están disponibles hasta actualizar los datos.' : 'Preparando partidos con su ROI histórico…'}</p>
+              <button type="button" className="button secondary" onClick={() => change({ order: 'time', minRoi: '' })}>Ver sin filtro ROI</button>
+            </div>}
+            {markets && !waitingForRoi && list.games === 0 && (
               <div className="ws-empty small" data-testid="empty-catalog">
-                {q ? 'Ningún mercado coincide con la búsqueda.' : `No hay mercados guardados para este filtro (${band === 'small' ? '$1k–$5k' : band === 'medium' ? 'medianas' : 'grandes'}, ${scope === 'active' ? 'activos' : 'historial'}).`}
+                {roiMinimum !== null && markets.length ? `Ningún mercado coincide con tus filtros y un ROI bruto de al menos ${roiMinimum}%. Solo cuentan muestras suficientes.`
+                  : q ? 'Ningún mercado coincide con la búsqueda.' : `No hay mercados guardados para este filtro (${band === 'small' ? '$1k–$5k' : band === 'medium' ? 'medianas' : 'grandes'}, ${scope === 'active' ? 'activos' : 'historial'}).`}
               </div>
             )}
-            {grouped.map((s) => {
-              const sOpen = !!q.trim() || openSports.has(s.sport) || (selected?.sport === s.sport && !openSports.has(`-${s.sport}`));
-              return (
-                <div key={s.sport} className="ws-sport">
-                  <button className="ws-row sport" aria-expanded={sOpen} onClick={() => {
-                    const next = new Set(openSports);
-                    if (sOpen) { next.delete(s.sport); next.add(`-${s.sport}`); } else { next.add(s.sport); next.delete(`-${s.sport}`); }
-                    setOpenSports(next);
-                  }} data-testid={`button-sport-${s.sport}`}>
-                    <ChevronRight className={sOpen ? 'open' : ''} size={14} />
-                    <span className="name">{s.sport}</span><span className="count">{s.trades.toLocaleString('en-US')}</span>
-                  </button>
-                  {sOpen && s.games.map((g) => {
-                    const gOpen = !!q.trim() || openGames.has(g.key) ||
-                      (g.markets.some((m) => m.ticker === ticker) && !openGames.has(`-${g.key}`));
-                    return (
-                      <div key={g.key} className="ws-game">
-                        <button className="ws-row game" aria-expanded={gOpen} onClick={() => {
-                          const next = new Set(openGames);
-                          if (gOpen) { next.delete(g.key); next.add(`-${g.key}`); }
-                          else { next.add(g.key); next.delete(`-${g.key}`); }
-                          setOpenGames(next);
-                        }} data-testid={`button-game-${g.key}`}>
-                          <ChevronRight className={gOpen ? 'open' : ''} size={13} />
-                          <span className="name">{g.name}<small>{g.date}</small>
-                            {scope === 'history' && <small className="ws-history-result">{g.markets.find(m => m.gameResult)?.gameResult ??
-                              g.markets.find(m => m.scoreMessage)?.scoreMessage ??
-                              (g.markets.every(m => m.scoreStatus === 'unavailable') ? 'Marcador no disponible' : 'Marcador pendiente de cargar')}</small>}
-                          </span><span className="count">{g.trades}</span>
-                        </button>
-                        {gOpen && g.markets.map((m) => (
-                          <button key={m.ticker} className={`ws-row market ${m.ticker === ticker ? 'sel' : ''}`} onClick={() => change({ ticker: m.ticker })} aria-current={m.ticker === ticker} data-testid={`button-market-${m.ticker}`}>
-                            <span className={`ws-state ${m.state}`}>{STATE_LABEL[m.state]}</span>
-                            <span className="name">{m.betLabel}
-                              <MarketRoiBadges view={roiView(m.ticker)} direction={direction} />
-                            </span><span className="count">{m.trades}</span>
-                          </button>
-                        ))}
-                      </div>
-                    );
-                  })}
-                </div>
-              );
-            })}
+            {!waitingForRoi && <ExplorerCatalog sports={list.sports} rankedGames={list.rankedGames}
+              order={order} showRoi={needsRoi} ticker={ticker} query={q} scope={scope} direction={direction}
+              roiView={roiView} onSelect={value => change({ ticker: value })} />}
           </div>
-          {markets && <div className="ws-tree-foot">{markets.length} mercados · actualizado {fmtTime(catalog.data?.generatedAt ?? '', false)}</div>}
+          {markets && <div className="ws-tree-foot">{waitingForRoi ? 'ROI pendiente' : `${list.games} partidos · ${list.markets.length} de ${markets.length} mercados`} · actualizado {fmtTime(catalog.data?.generatedAt ?? '', false)}</div>}
         </aside>
 
         <div className="ws-main">
+          {paused && !waitingForRoi && !visibleTickers.has(ticker) && <Notice title="La gráfica sigue en pausa">
+            El mercado de esta vista congelada ya no coincide con los filtros. Reanuda o elige otro mercado para actualizar la selección.
+          </Notice>}
           {!ticker && (
             <div className="ws-empty" data-testid="empty-no-selection">
               <h3>Elige un mercado</h3>
