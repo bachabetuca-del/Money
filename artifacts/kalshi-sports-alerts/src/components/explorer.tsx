@@ -519,7 +519,7 @@ export function Explorer() {
           {order === 'roi' ? 'Todos los deportes, de mayor a menor ROI bruto histórico. ' : ''}
           {roiMinimum !== null ? `Solo mercados con ROI bruto ≥ ${roiMinimum.toLocaleString('es-US')}%. ` : ''}
           Se usa el mejor mercado y lado {direction === 'all' ? 'SÍ/NO' : direction === 'yes' ? 'SÍ' : 'NO'} que cumple tus filtros,
-          con al menos {roi.data?.minimumGames ?? 10} partidos y {roi.data?.minimumTrades ?? 30} operaciones verificadas.
+          con al menos {roi.data?.minimumGames ?? 50} partidos y {roi.data?.minimumTrades ?? 30} operaciones verificadas.
           No es el ROI del partido actual ni una garantía de ganancia. Se actualiza cada minuto.
         </p>}
         {marketType !== 'all' && <span className="ws-filter-note">Tipo: {MARKET_TYPES.find(([key]) => key === marketType)?.[1]}. Solo se muestran mercados de este tipo; la IA y el histórico completo conservan todos los tipos.</span>}

@@ -6,13 +6,13 @@ import { buildExplorerRoi } from "./explorer-roi";
 
 const now = new Date("2026-10-31T12:00:00Z");
 const expectedGross = (roiPct: number): NotificationRoi =>
-  ({ roiPct, trades: 30, games: 10, basis: "gross", grossRoiPct: roiPct, netRoiPct: null });
+  ({ roiPct, trades: 150, games: 50, basis: "gross", grossRoiPct: roiPct, netRoiPct: null });
 const trade = {
   ticker: "KXEPLGAME-LIVE-A", sport: "Soccer", eventTitle: "A vs B", marketTitle: "A wins",
   outcomeSide: "yes", bookSide: "bid", price: .5, notional: 15000,
 };
 const history = (roi = 7, patch: Partial<RoiRollup> = {}): RoiRollup[] =>
-  Array.from({ length: 10 }, (_, i) => ({
+  Array.from({ length: 50 }, (_, i) => ({
     ticker: `KXEPLGAME-HIST${i}-A`, sport: "Soccer", eventTitle: "A vs B", marketTitle: "A wins",
     gameId: `game-${i}`, marketUrl: "", bucket: 5, side: "yes", moneyBand: "large",
     weekStart: "2026-10-26", category: "settled", historyVerified: true,
@@ -121,7 +121,7 @@ test("both bases honor sample minima and exact amount boundaries", () => {
       [9999.9999, false], [10000, true], [100000, true]] as const) {
       assert.equal(qualifiesForNotificationRoi(lookup({ ...trade, notional })), allowed);
     }
-    for (const patch of [{ gameId: "one-game" }, { trades: 2, feeTrades: 2 }]) {
+    for (const patch of [{ gameId: "one-game" }, { trades: 0, feeTrades: 0 }]) {
       assert.equal(qualifiesForNotificationRoi(buildNotificationRoiLookup(history(80, { fees: 0, feeTrades: 3, ...patch }), basis)(trade)), false);
     }
   }
@@ -130,11 +130,11 @@ test("both bases honor sample minima and exact amount boundaries", () => {
 test("a profitable different amount band cannot substitute for missing evidence or increase its sample", () => {
   const lookup = buildNotificationRoiLookup([
     ...history(50, { moneyBand: "large", trades: 1000 }),
-    ...history(8, { moneyBand: "small", trades: 2 }),
+    ...history(8, { moneyBand: "small", trades: 2 }).slice(0, 49),
   ]);
   assert.equal(lookup({ ...trade, notional: 7500 }), null);
   const small = lookup({ ...trade, notional: 1000 });
-  assert.equal(small?.trades, 20);
+  assert.equal(small?.trades, 98);
   assert.equal(qualifiesForNotificationRoi(small), false);
 });
 
@@ -161,7 +161,7 @@ test("unverified, unfinished, unsupported and invalid history never supports a n
 
 test("distinct game and execution sample minimums cannot be bypassed with a high ROI", () => {
   for (const rows of [
-    history(100).slice(0, 9), history(100, { trades: 2 }),
+    history(100).slice(0, 49), history(100, { trades: 0 }),
     history(100, { gameId: "one-game", trades: 1000 }),
   ]) assert.equal(qualifiesForNotificationRoi(buildNotificationRoiLookup(rows)(trade)), false);
 });

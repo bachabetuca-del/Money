@@ -7,7 +7,7 @@ const now = new Date("2026-10-31T12:00:00Z");
 const market = { ticker: "KXEPLGAME-LIVE-A", sport: "Soccer", marketType: "winner" };
 const price: RoiReferencePrice = { ticker: market.ticker, side: "yes", price: .5, observedAt: "2026-10-31T11:00:00Z" };
 function history(roi = 10, patch: Partial<RoiRollup> = {}): RoiRollup[] {
-  return Array.from({ length: 10 }, (_, i) => ({
+  return Array.from({ length: 50 }, (_, i) => ({
     ticker: `KXEPLGAME-HIST${i}-A`, sport: "Soccer", eventTitle: "A vs B",
     marketTitle: "A wins", gameId: `game${i}`, marketUrl: "", bucket: 5, side: "yes",
     moneyBand: "small", weekStart: "2026-10-26",
@@ -24,8 +24,8 @@ test("ROI color boundaries: +10 inclusive green, 0 inclusive yellow, negative re
     const [yes, no] = signals(history(roi));
     assert.equal(yes.level, level);
     assert.equal(yes.roiPct, roi);
-    assert.equal(yes.games, 10);
-    assert.equal(yes.trades, 30);
+    assert.equal(yes.games, 50);
+    assert.equal(yes.trades, 150);
     assert.equal(yes.reason, null);
     assert.equal(no.level, "insufficient");
     assert.equal(no.reason, "no_price");
@@ -60,7 +60,7 @@ test("pending, excluded, partial and unverified history cannot receive ROI color
 });
 
 test("small samples stay gray with their number visible, not misleadingly green or red", () => {
-  for (const rows of [history(300).slice(0, 9), history(-100, { trades: 2 }),
+  for (const rows of [history(300).slice(0, 49), history(-100, { trades: 1 }).slice(0, 29),
     history(300, { gameId: "same-game", trades: 1000 })]) {
     const [s] = signals(rows);
     assert.equal(s.level, "insufficient");

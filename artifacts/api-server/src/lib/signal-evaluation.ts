@@ -8,7 +8,7 @@ import { publicDirection } from "./telegram-trade-direction";
 import { NOTIFICATION_MIN_ROI_PCT, qualifiesForNotificationRoi, type NotificationRoi } from "./telegram-notification-roi";
 import type { NotificationJob } from "./telegram-trade-notifications";
 
-export const SIGNAL_RULE_VERSION = "comparable-roi-v1";
+export const SIGNAL_RULE_VERSION = "comparable-roi-50-games-v2";
 export const SIGNAL_FEE_ASSUMPTIONS = "Una entrada taker hipotética de $100, cantidad teórica 100/precio, " +
   "comisión cuadrática 0,07 × multiplicador × contratos × precio × (1−precio). " +
   "Precisión de comisión 6 decimales y débito directo redondeado hacia arriba a $0,0001. " +

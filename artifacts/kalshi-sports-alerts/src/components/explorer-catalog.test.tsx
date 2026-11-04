@@ -12,7 +12,7 @@ const market = (ticker: string, sport: string): ExplorerMarket => ({
   gameResult: null, marketResult: null,
 });
 const signal = (roiPct: number, side: 'yes' | 'no'): ExplorerRoiSignal => ({
-  side, roiPct, level: 'good', reason: null, games: 12, trades: 40, price: .5,
+  side, roiPct, level: 'good', reason: null, games: 50, trades: 60, price: .5,
   observedAt: '2026-11-03T12:00:00Z', oddsMin: .5, oddsMax: .6,
   net: { roiPct: null, fees: null, profit: null, cashOutlay: null, coveredTrades: 0, missingTrades: 40 },
 });

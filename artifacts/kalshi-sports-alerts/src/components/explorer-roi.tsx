@@ -59,7 +59,7 @@ export function MarketRoiBadges({ view, direction }: { view: RoiView; direction:
   </span>;
 }
 
-export function RoiColorLegend({ minimumGames = 10, minimumTrades = 30, greenMin = 10 }: {
+export function RoiColorLegend({ minimumGames = 50, minimumTrades = 30, greenMin = 10 }: {
   minimumGames?: number; minimumTrades?: number; greenMin?: number;
 }) {
   return <section className="mr-legend" aria-label="Leyenda de colores ROI" data-testid="roi-color-legend">

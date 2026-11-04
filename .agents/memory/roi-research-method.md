@@ -5,6 +5,12 @@ description: Interpretation, historical coverage and prospective evidence bounda
 
 Use equal hypothetical stakes per observed execution, held to official final binary market settlement, as the default research comparison—not volume-weighted trader profitability. The user delegated the choice to our recommendation to assess whether an approach could make money.
 
+Require at least 50 distinct verified settled games for the market explorer's comparable ROI eligibility and new Telegram ROI signals, rather than 10.
+
+**Why:** The user asked to increase the sample to at least 50 games for a stronger historical basis.
+
+**How to apply:** Count distinct games, not executions. Apply the minimum to ROI ordering/filtering, color eligibility and new alert qualification. Keep previously frozen alert evidence unchanged; a larger sample is not proof of profitability.
+
 **Why:** Public activity does not reveal actual portfolios, opening versus closing transactions, attainable fills, or realized profits. Large operations and correlated executions from one game otherwise distort comparisons.
 
 **How to apply:** Keep the stake and the distinction between gross and estimated net explicit. Resolve each bet from its official market settlement, never the game's score or its last traded price. Pending, provisional, unsupported payouts and invalid observations cannot become losses or fabricated returns. Show coverage, distinct-game estimates and recent performance with sample-size and hindsight warnings; none establishes future profitability. Use only saved monitor history, not a claim of complete exchange coverage. Keep enrichment inside the existing singleton production runtime, with development workers disabled and no new Telegram notifications.

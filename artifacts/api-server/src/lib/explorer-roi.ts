@@ -3,7 +3,7 @@ import { buildRoiRanking, oddsBucket, type RoiRollup } from "./roi-ranking";
 import { netEstimate } from "./roi-performance";
 
 export const ROI_COLOR_POLICY = {
-  minimumGames: 10,
+  minimumGames: 50,
   minimumTrades: 30,
   greenMinRoiPct: 10,
 } as const;

@@ -73,7 +73,7 @@ class FakeNotificationsApi implements NotificationApi {
   failDelete = false;
   failContext = false;
   failRoi = false;
-  roiResult: NotificationRoi | null = grossRoi({ roiPct: 7, games: 10, trades: 30 });
+  roiResult: NotificationRoi | null = grossRoi({ roiPct: 7, games: 50, trades: 30 });
   roiTrades: NotificationJob[] = [];
   roiBases: RoiBasis[] = [];
   async roi(trade: NotificationJob, basis: RoiBasis) {
@@ -132,7 +132,7 @@ test("a new qualifying trade sends a push-enabled text alert, not another graph"
   assert.match(String(body.text), /A favor de «Chicago gana»/);
   assert.match(String(body.text), /ROI histórico comparable \(SÍ\)/);
   assert.match(String(body.text), /Bruto: \+7,00% · Neto estimado: no disponible/);
-  assert.match(String(body.text), /10 partidos · 30 operaciones verificadas/);
+  assert.match(String(body.text), /50 partidos · 30 operaciones verificadas/);
   assert.match(String(body.text), /neto con comisión taker actual/);
   assert.match(String(body.text), /No son ganancias del trader ni una garantía/);
   assert.doesNotMatch(String(body.text), /KXNFLGAME/);
@@ -286,7 +286,7 @@ test("notification wording escapes names and distinguishes against/unknown direc
 });
 
 test("ROI +7% is inclusive; lower or unavailable ROI and insufficient samples never notify", async () => {
-  const base = { games: 10, trades: 30 };
+  const base = { games: 50, trades: 30 };
   for (const [roi, allowed] of [
     [{ ...base, roiPct: 6.99 }, false],
     [{ ...base, roiPct: 6.99999999 }, false],
@@ -313,10 +313,10 @@ test("filtered trades keep the last notice and are not replayed when ROI later i
   const { store, api, worker, now } = setup();
   store.add(sample());
   await worker.tick(settings);
-  api.roiResult = grossRoi({ roiPct: 6.9, trades: 30, games: 10 });
+  api.roiResult = grossRoi({ roiPct: 6.9, trades: 30, games: 50 });
   store.add(sample("filtered"));
   await worker.tick(settings);
-  api.roiResult = grossRoi({ roiPct: 20, trades: 30, games: 10 });
+  api.roiResult = grossRoi({ roiPct: 20, trades: 30, games: 50 });
   await new TelegramTradeNotifications(store, api, now).tick(settings);
   assert.deepEqual(api.calls.map(call => call.method), ["sendMessage"]);
   assert.equal(store.row(settings.chatId, "trade-1").removedAt, undefined);
@@ -344,7 +344,7 @@ test("ROI lookup errors fail closed and retry without removing the last notice",
 
 test("checks the actual NO execution and enriched market, never the opposite side's better ROI", async () => {
   const { store, api, worker } = setup();
-  const history: RoiRollup[] = Array.from({ length: 10 }, (_, i) => ({
+  const history: RoiRollup[] = Array.from({ length: 50 }, (_, i) => ({
     ticker: `KXNFLGAME-HIST${i}-CHI`, sport: "Football", eventTitle: "A vs B", marketTitle: "A wins",
     gameId: `game-${i}`, marketUrl: "", bucket: 6, side: "yes", moneyBand: "large",
     weekStart: "2026-10-19", category: "settled", historyVerified: true, trades: 3, wins: 2,
@@ -375,7 +375,7 @@ test("filter draining is bounded and still sends at most one notice per tick", a
   assert.equal(api.calls.length, 0);
   await worker.tick(settings);
   assert.equal(api.roiTrades.length, 12);
-  api.roiResult = grossRoi({ roiPct: 7, games: 10, trades: 30 });
+  api.roiResult = grossRoi({ roiPct: 7, games: 50, trades: 30 });
   store.add(sample("eligible-1"));
   store.add(sample("eligible-2"));
   await worker.tick(settings);
@@ -389,7 +389,7 @@ test("selected basis reaches the worker, cannot silently revert, and filtered tr
   assert.equal(api.roiBases[0], "net");
   assert.equal(api.calls.length, 0, "A gross-only lookup cannot satisfy a net request");
   assert.ok(store.row(settings.chatId, "gross-only").skippedAt);
-  api.roiResult = { roiPct: 7, grossRoiPct: 11, netRoiPct: 7, basis: "net", games: 10, trades: 30 };
+  api.roiResult = { roiPct: 7, grossRoiPct: 11, netRoiPct: 7, basis: "net", games: 50, trades: 30 };
   store.add(sample("net-pass"));
   await worker.tick({ ...settings, notificationRoiBasis: "net" });
   assert.equal(api.calls.filter(c => c.method === "sendMessage").length, 1);
@@ -405,7 +405,7 @@ const prospectiveJob = (id = "prospective") => ({
   createdTime: new Date(clock.getTime() - 2000), queuedAt: new Date(clock.getTime() - 1000),
 });
 const prospectiveRoi = (): NotificationRoi => ({
-  ...grossRoi({ roiPct: 7, games: 10, trades: 30 })!,
+  ...grossRoi({ roiPct: 7, games: 50, trades: 30 })!,
   evidence: {
     historyAsOf: new Date(clock.getTime() - 60000).toISOString(), gameId: "game", gameIdentity: "milestone",
     feeModel: feeModel(null, clock), feeAssumptions: SIGNAL_FEE_ASSUMPTIONS,

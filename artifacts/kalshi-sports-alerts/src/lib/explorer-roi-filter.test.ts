@@ -11,7 +11,7 @@ const market = (ticker: string, changes: Partial<ExplorerMarket> = {}): Explorer
 });
 const signal = (roiPct: number | null, changes: Partial<ExplorerRoiSignal> = {}): ExplorerRoiSignal => ({
   side: 'yes', level: roiPct === null ? 'insufficient' : roiPct < 0 ? 'bad' : roiPct < 10 ? 'medium' : 'good',
-  reason: roiPct === null ? 'no_history' : null, roiPct, trades: 40, games: 12,
+  reason: roiPct === null ? 'no_history' : null, roiPct, trades: 60, games: 50,
   price: 0.5, observedAt: '2026-11-03T12:00:00Z', oddsMin: 0.5, oddsMax: 0.6,
   net: { roiPct: null, fees: null, profit: null, cashOutlay: null, coveredTrades: 0, missingTrades: 40 },
   ...changes,
@@ -98,8 +98,13 @@ test('refreshed ROI reorders current markets and applies the server sample polic
   const next = references(['A', [signal(15)]], ['B', [signal(10)]]);
   assert.equal(buildExplorerList(markets, '', first, options).markets[0].ticker, 'B');
   assert.equal(buildExplorerList(markets, '', next, options).markets[0].ticker, 'A');
-  assert.equal(buildExplorerList(markets, '', next, { ...options, minimum: 7, minimumGames: 15 }).games, 0);
-  assert.equal(buildExplorerList(markets, '', next, { ...options, minimum: 7, minimumTrades: 50 }).games, 0);
+  assert.equal(buildExplorerList(markets, '', next, { ...options, minimum: 7, minimumGames: 51 }).games, 0);
+  assert.equal(buildExplorerList(markets, '', next, { ...options, minimum: 7, minimumTrades: 61 }).games, 0);
+});
+
+test('49 distinct games cannot qualify by default even with thousands of executions', () => {
+  const roi = references(['A', [signal(40, { games: 49, trades: 5000 })]]);
+  assert.equal(buildExplorerList([market('A')], '', roi, { ...options, minimum: 7 }).games, 0);
 });
 
 test('selection stays visible and stable across sorting, filters, empty results, reload and pause', () => {

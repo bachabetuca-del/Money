@@ -59,7 +59,7 @@ export function buildExplorerList(
       (options.direction === 'all' || signal.side === options.direction) &&
       signal.level !== 'insufficient' && signal.reason === null &&
       signal.roiPct !== null && Number.isFinite(signal.roiPct) &&
-      signal.games >= (options.minimumGames ?? 10) && signal.trades >= (options.minimumTrades ?? 30),
+      signal.games >= (options.minimumGames ?? 50) && signal.trades >= (options.minimumTrades ?? 30),
     ).map(signal => ({ market, signal }));
     bestByTicker.set(market.ticker, bestMatch(candidates));
   }

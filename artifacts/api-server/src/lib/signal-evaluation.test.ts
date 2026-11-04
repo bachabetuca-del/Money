@@ -13,7 +13,7 @@ const job: NotificationJob = {
   eventTitle: "Team A vs Team B", marketTitle: "Team A wins", marketUrl: "https://kalshi.com/markets/fixture",
 };
 const roi: NotificationRoi = {
-  roiPct: 7, basis: "gross", grossRoiPct: 7, netRoiPct: null, games: 10, trades: 30,
+  roiPct: 7, basis: "gross", grossRoiPct: 7, netRoiPct: null, games: 50, trades: 30,
   evidence: {
     historyAsOf: new Date(now.getTime() - 60000).toISOString(), ...signalGameIdentity(job.ticker),
     feeModel: feeModel(null, now), feeAssumptions: SIGNAL_FEE_ASSUMPTIONS,
@@ -29,7 +29,7 @@ test("freezes the exact side, price, rule, unrounded ROI, sample, observation ti
   const signal = buildSignalEvidence(job, roi, now);
   assert.equal(signal.rule.basis, "gross");
   assert.equal(signal.rule.minimumRoiPct, 7);
-  assert.equal(signal.rule.minimumGames, 10);
+  assert.equal(signal.rule.minimumGames, 50);
   assert.equal(signal.rule.minimumTrades, 30);
   assert.equal(signal.rule.coverage, "verified");
   assert.equal(signal.rule.window, "all");
@@ -41,7 +41,7 @@ test("freezes the exact side, price, rule, unrounded ROI, sample, observation ti
   assert.equal(signal.price, .5);
   assert.equal(signal.notional, 10000);
   assert.equal(signal.historicalRoiPct, 7);
-  assert.equal(signal.historicalGames, 10);
+  assert.equal(signal.historicalGames, 50);
   assert.equal(signal.historicalTrades, 30);
   assert.equal(signal.observedAt, job.createdTime.toISOString());
   assert.equal(signal.queuedAt, job.queuedAt!.toISOString());
