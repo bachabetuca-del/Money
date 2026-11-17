@@ -26,9 +26,12 @@ export type ExplorerFilters = {
 
 const settingsCache = new AsyncTtlCache<number>(5_000, 1);
 const catalogCache = new AsyncTtlCache<Awaited<ReturnType<typeof loadExplorerCatalog>>>(10_000, 8);
+// Scope/direction changes reuse the expensive band summary, not a new full-history scan.
+const summaryCache = new AsyncTtlCache<Awaited<ReturnType<typeof telegramDashboardStore.markets>>>(10_000, 4);
 
 async function loadExplorerCatalog(range: TradeRange, filters: ExplorerFilters, now: Date) {
-  const catalog = scopedCatalog(buildCatalog(await telegramDashboardStore.markets(range)), filters.scope, now);
+  const summaries = await summaryCache.get(JSON.stringify(range), () => telegramDashboardStore.markets(range));
+  const catalog = scopedCatalog(buildCatalog(summaries), filters.scope, now);
   const games = new Map<string, CatalogMarket[]>();
   for (const market of catalog) {
     const group = games.get(market.gameKey) ?? [];
@@ -39,15 +42,18 @@ async function loadExplorerCatalog(range: TradeRange, filters: ExplorerFilters, 
     ? eq(explorerDirection(kalshiAlertsTable.outcomeSide, kalshiAlertsTable.bookSide), filters.direction)
     : undefined;
   // Filter before aggregation/pagination, not just the newest 5,000 chart rows.
-  const directionCounts = directionCondition ? await db.select({
+  const directionCounts = directionCondition && catalog.length ? await db.select({
     ticker: kalshiAlertsTable.ticker, total: count(),
     latest: sql<string>`max(${kalshiAlertsTable.createdTime})::text`,
   }).from(kalshiAlertsTable).where(and(
     directionCondition,
+    // Especially in the active 48-hour view, do not scan archived markets
+    // merely to count YES/NO executions that cannot appear in the response.
+    sql`${kalshiAlertsTable.ticker} = ANY(${sql.param(catalog.map(m => m.ticker))}::text[])`,
     range.minimumInclusive ? gte(kalshiAlertsTable.notional, range.minimum) : gt(kalshiAlertsTable.notional, range.minimum),
     range.maximum === null ? undefined : range.maximumInclusive
       ? lte(kalshiAlertsTable.notional, range.maximum) : lt(kalshiAlertsTable.notional, range.maximum),
-  )).groupBy(kalshiAlertsTable.ticker) : null;
+  )).groupBy(kalshiAlertsTable.ticker) : directionCondition ? [] : null;
   const countsByTicker = new Map(directionCounts?.map(row => [row.ticker, row]));
   const markets = catalog.filter(m => !directionCounts || countsByTicker.has(m.ticker)).map(m => {
     const scheduled = games.get(m.gameKey)?.find(game =>
@@ -79,8 +85,9 @@ export async function getKalshiExplorer(filters: ExplorerFilters, now = new Date
     return settings?.minimumNotional ?? 10_000;
   });
   const range = tradeRange(filters.band, minimum);
-  // Window/ticker/type share a snapshot. The time bucket keeps lifecycle boundaries bounded.
-  const key = JSON.stringify([range, filters.scope, filters.direction ?? "all", Math.floor(now.getTime() / 10_000)]);
+  // TTL already bounds lifecycle freshness. A time bucket in the key would start
+  // duplicate scans when an in-flight query crosses a wall-clock boundary.
+  const key = JSON.stringify([range, filters.scope, filters.direction ?? "all"]);
   const snapshot = await catalogCache.get(key, () => loadExplorerCatalog(range, filters, now));
   const markets = snapshot.markets.filter(m =>
     !filters.marketType || filters.marketType === "all" || m.marketType === filters.marketType);

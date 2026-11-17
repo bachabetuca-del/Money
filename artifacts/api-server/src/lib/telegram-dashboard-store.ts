@@ -32,13 +32,15 @@ export const telegramDashboardStore: DashboardStore = {
   },
   async markets(range) {
     const [rows, statuses, results] = await Promise.all([db.select({
-      ticker: kalshiAlertsTable.ticker, sport: kalshiAlertsTable.sport,
-      eventTitle: kalshiAlertsTable.eventTitle, marketTitle: kalshiAlertsTable.marketTitle,
-      marketUrl: kalshiAlertsTable.marketUrl, trades: count(),
+      ticker: kalshiAlertsTable.ticker, sport: sql<string>`max(${kalshiAlertsTable.sport})`,
+      eventTitle: sql<string | null>`max(${kalshiAlertsTable.eventTitle})`,
+      marketTitle: sql<string | null>`max(${kalshiAlertsTable.marketTitle})`,
+      marketUrl: sql<string>`max(${kalshiAlertsTable.marketUrl})`, trades: count(),
       lastTradeAt: sql<string>`max(${kalshiAlertsTable.createdTime})::text`,
     }).from(kalshiAlertsTable).where(rangeCondition(range))
-      .groupBy(kalshiAlertsTable.ticker, kalshiAlertsTable.sport, kalshiAlertsTable.eventTitle,
-        kalshiAlertsTable.marketTitle, kalshiAlertsTable.marketUrl),
+      // One row per market: grouping long display strings wastes memory and
+      // splits one ticker into multiple rows when provider metadata is repaired.
+      .groupBy(kalshiAlertsTable.ticker),
       // Do not transfer provider errors, retry scheduling or unused metadata on every read.
       db.select({
         ticker: kalshiGameStatusTable.ticker, milestoneId: kalshiGameStatusTable.milestoneId,
