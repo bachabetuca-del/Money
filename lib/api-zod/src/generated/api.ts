@@ -8,6 +8,413 @@
 import * as zod from 'zod';
 
 
+export const getPaperDashboardQueryPageDefault = 1;
+export const getPaperDashboardQueryPageMax = 2000;
+
+
+
+export const GetPaperDashboardQueryParams = zod.object({
+  "runId": zod.coerce.string().uuid().optional(),
+  "page": zod.coerce.number().int().min(1).max(getPaperDashboardQueryPageMax).default(getPaperDashboardQueryPageDefault)
+})
+
+export const getPaperDashboardResponseRunsItemProtocolOneNameMax = 80;
+
+export const getPaperDashboardResponseRunsItemProtocolOneStakeUsdDefault = 100;
+export const getPaperDashboardResponseRunsItemProtocolOneStakeUsdMax = 10000;
+
+export const getPaperDashboardResponseRunsItemProtocolOneCapitalUsdDefault = 10000;
+export const getPaperDashboardResponseRunsItemProtocolOneCapitalUsdMin = 100;
+export const getPaperDashboardResponseRunsItemProtocolOneCapitalUsdMax = 1000000;
+
+export const getPaperDashboardResponseRunsItemProtocolOneMaxGameUsdDefault = 110;
+export const getPaperDashboardResponseRunsItemProtocolOneMaxGameUsdMax = 100000;
+
+export const getPaperDashboardResponseRunsItemProtocolOneDelaySecondsDefault = 30;
+export const getPaperDashboardResponseRunsItemProtocolOneDelaySecondsMin = 0;
+export const getPaperDashboardResponseRunsItemProtocolOneDelaySecondsMax = 300;
+
+export const getPaperDashboardResponseRunsItemProtocolOneLimitCentsDefault = 1;
+export const getPaperDashboardResponseRunsItemProtocolOneLimitCentsMin = 0;
+export const getPaperDashboardResponseRunsItemProtocolOneLimitCentsMax = 10;
+
+export const getPaperDashboardResponseRunsItemProtocolOneRunDaysDefault = 28;
+export const getPaperDashboardResponseRunsItemProtocolOneRunDaysMin = 2;
+export const getPaperDashboardResponseRunsItemProtocolOneRunDaysMax = 90;
+
+export const getPaperDashboardResponseRunsItemProtocolOneHoldoutDaysDefault = 7;
+export const getPaperDashboardResponseRunsItemProtocolOneHoldoutDaysMax = 89;
+
+export const getPaperDashboardResponseRunsItemProtocolOneRepetitionsDefault = `first`;
+export const getPaperDashboardResponseRunsItemProtocolOneMaxMarketsDefault = 8;
+export const getPaperDashboardResponseRunsItemProtocolOneMaxMarketsMax = 20;
+
+
+
+export const GetPaperDashboardResponse = zod.object({
+  "generatedAt": zod.string(),
+  "activationAllowed": zod.boolean(),
+  "runs": zod.array(zod.object({
+  "id": zod.string(),
+  "status": zod.enum(['draft', 'active', 'paused', 'finished']),
+  "createdAt": zod.string(),
+  "activatedAt": zod.string().nullable(),
+  "endsAt": zod.string().nullable(),
+  "holdoutAt": zod.string().nullable(),
+  "pausedAt": zod.string().nullable(),
+  "protocol": zod.object({
+  "requestId": zod.string().uuid(),
+  "name": zod.string().min(1).max(getPaperDashboardResponseRunsItemProtocolOneNameMax),
+  "stakeUsd": zod.number().min(1).max(getPaperDashboardResponseRunsItemProtocolOneStakeUsdMax).default(getPaperDashboardResponseRunsItemProtocolOneStakeUsdDefault),
+  "capitalUsd": zod.number().min(getPaperDashboardResponseRunsItemProtocolOneCapitalUsdMin).max(getPaperDashboardResponseRunsItemProtocolOneCapitalUsdMax).default(getPaperDashboardResponseRunsItemProtocolOneCapitalUsdDefault),
+  "maxGameUsd": zod.number().min(1).max(getPaperDashboardResponseRunsItemProtocolOneMaxGameUsdMax).default(getPaperDashboardResponseRunsItemProtocolOneMaxGameUsdDefault),
+  "delaySeconds": zod.number().int().min(getPaperDashboardResponseRunsItemProtocolOneDelaySecondsMin).max(getPaperDashboardResponseRunsItemProtocolOneDelaySecondsMax).default(getPaperDashboardResponseRunsItemProtocolOneDelaySecondsDefault),
+  "limitCents": zod.number().min(getPaperDashboardResponseRunsItemProtocolOneLimitCentsMin).max(getPaperDashboardResponseRunsItemProtocolOneLimitCentsMax).default(getPaperDashboardResponseRunsItemProtocolOneLimitCentsDefault),
+  "runDays": zod.number().int().min(getPaperDashboardResponseRunsItemProtocolOneRunDaysMin).max(getPaperDashboardResponseRunsItemProtocolOneRunDaysMax).default(getPaperDashboardResponseRunsItemProtocolOneRunDaysDefault),
+  "holdoutDays": zod.number().int().min(1).max(getPaperDashboardResponseRunsItemProtocolOneHoldoutDaysMax).default(getPaperDashboardResponseRunsItemProtocolOneHoldoutDaysDefault),
+  "repetitions": zod.enum(['first', 'all']).default(getPaperDashboardResponseRunsItemProtocolOneRepetitionsDefault),
+  "maxMarkets": zod.number().int().min(1).max(getPaperDashboardResponseRunsItemProtocolOneMaxMarketsMax).default(getPaperDashboardResponseRunsItemProtocolOneMaxMarketsDefault)
+}).and(zod.object({
+  "version": zod.string(),
+  "ruleVersion": zod.string(),
+  "basis": zod.enum(['gross', 'net']).describe('Explicit Telegram filter basis. Existing settings remain gross; an omitted update never changes the saved choice.'),
+  "minimumRoiPct": zod.number(),
+  "minimumGames": zod.number().int(),
+  "minimumTrades": zod.number().int(),
+  "assumptions": zod.array(zod.string())
+})),
+  "dropped": zod.number().int(),
+  "heartbeatAt": zod.string().nullable(),
+  "workerError": zod.string().nullable()
+})),
+  "selectedRunId": zod.string().nullable(),
+  "stats": zod.array(zod.object({
+  "policy": zod.enum(['first', 'all']),
+  "delaySeconds": zod.number().int(),
+  "cohort": zod.enum(['alerts', 'controls']),
+  "phase": zod.enum(['calibration', 'holdout']),
+  "opportunities": zod.number().int(),
+  "full": zod.number().int(),
+  "partial": zod.number().int(),
+  "none": zod.number().int(),
+  "unknown": zod.number().int(),
+  "pending": zod.number().int(),
+  "settled": zod.number().int(),
+  "games": zod.number().int(),
+  "approximateGames": zod.number().int(),
+  "deployedUsd": zod.number(),
+  "feesUsd": zod.number(),
+  "committedUsd": zod.number(),
+  "freeCapitalUsd": zod.number(),
+  "netProfitUsd": zod.number().nullable(),
+  "netRoiPct": zod.number().nullable(),
+  "profitPerAlertUsd": zod.number().nullable(),
+  "coveragePct": zod.number(),
+  "withoutBestGameRoiPct": zod.number().nullable(),
+  "unknownLossScenarioRoiPct": zod.number().nullable(),
+  "unknownWinScenarioRoiPct": zod.number().nullable(),
+  "interval": zod.object({
+  "lower": zod.number(),
+  "upper": zod.number(),
+  "clusters": zod.number().int()
+}).optional(),
+  "dateInterval": zod.object({
+  "lower": zod.number(),
+  "upper": zod.number(),
+  "clusters": zod.number().int()
+}).optional()
+})),
+  "comparisons": zod.array(zod.object({
+  "phase": zod.string(),
+  "pairs": zod.number().int(),
+  "coveragePct": zod.number(),
+  "deltaNetRoiPct": zod.number().nullable(),
+  "interval": zod.object({
+  "lower": zod.number(),
+  "upper": zod.number(),
+  "clusters": zod.number().int()
+}).optional(),
+  "conclusion": zod.string(),
+  "residuals": zod.array(zod.string())
+})),
+  "rows": zod.array(zod.object({
+  "id": zod.string(),
+  "tradeId": zod.string(),
+  "ticker": zod.string(),
+  "eventTitle": zod.string(),
+  "marketTitle": zod.string(),
+  "sport": zod.string(),
+  "side": zod.string(),
+  "gameId": zod.string(),
+  "gameIdentity": zod.string(),
+  "observedAt": zod.string(),
+  "queuedAt": zod.string().nullable(),
+  "decidedAt": zod.string(),
+  "confirmedAt": zod.string().nullable(),
+  "phase": zod.string(),
+  "eligible": zod.boolean(),
+  "reason": zod.string(),
+  "price": zod.number(),
+  "historicalRoiPct": zod.number().nullable(),
+  "historicalGames": zod.number().int(),
+  "matchedId": zod.string().nullable(),
+  "evidence": zod.record(zod.string(), zod.unknown()),
+  "executions": zod.array(zod.object({
+  "delaySeconds": zod.number().int(),
+  "policy": zod.enum(['first', 'all']),
+  "dueAt": zod.string(),
+  "capturedAt": zod.string().nullable(),
+  "status": zod.enum(['pending', 'full', 'partial', 'none', 'unknown']),
+  "reason": zod.string(),
+  "contracts": zod.number(),
+  "costUsd": zod.number(),
+  "feeUsd": zod.number().nullable(),
+  "averagePrice": zod.number().nullable(),
+  "bestAsk": zod.number().nullable(),
+  "settlement": zod.string(),
+  "netProfitUsd": zod.number().nullable(),
+  "evidence": zod.record(zod.string(), zod.unknown())
+}))
+})),
+  "page": zod.number().int(),
+  "totalPages": zod.number().int(),
+  "recorded": zod.number().int(),
+  "holdoutHidden": zod.boolean(),
+  "limitations": zod.array(zod.string())
+})
+
+
+export const createPaperRunBodyNameMax = 80;
+
+export const createPaperRunBodyStakeUsdDefault = 100;
+export const createPaperRunBodyStakeUsdMax = 10000;
+
+export const createPaperRunBodyCapitalUsdDefault = 10000;
+export const createPaperRunBodyCapitalUsdMin = 100;
+export const createPaperRunBodyCapitalUsdMax = 1000000;
+
+export const createPaperRunBodyMaxGameUsdDefault = 110;
+export const createPaperRunBodyMaxGameUsdMax = 100000;
+
+export const createPaperRunBodyDelaySecondsDefault = 30;
+export const createPaperRunBodyDelaySecondsMin = 0;
+export const createPaperRunBodyDelaySecondsMax = 300;
+
+export const createPaperRunBodyLimitCentsDefault = 1;
+export const createPaperRunBodyLimitCentsMin = 0;
+export const createPaperRunBodyLimitCentsMax = 10;
+
+export const createPaperRunBodyRunDaysDefault = 28;
+export const createPaperRunBodyRunDaysMin = 2;
+export const createPaperRunBodyRunDaysMax = 90;
+
+export const createPaperRunBodyHoldoutDaysDefault = 7;
+export const createPaperRunBodyHoldoutDaysMax = 89;
+
+export const createPaperRunBodyRepetitionsDefault = `first`;
+export const createPaperRunBodyMaxMarketsDefault = 8;
+export const createPaperRunBodyMaxMarketsMax = 20;
+
+
+
+export const CreatePaperRunBody = zod.object({
+  "requestId": zod.string().uuid(),
+  "name": zod.string().min(1).max(createPaperRunBodyNameMax),
+  "stakeUsd": zod.number().min(1).max(createPaperRunBodyStakeUsdMax).default(createPaperRunBodyStakeUsdDefault),
+  "capitalUsd": zod.number().min(createPaperRunBodyCapitalUsdMin).max(createPaperRunBodyCapitalUsdMax).default(createPaperRunBodyCapitalUsdDefault),
+  "maxGameUsd": zod.number().min(1).max(createPaperRunBodyMaxGameUsdMax).default(createPaperRunBodyMaxGameUsdDefault),
+  "delaySeconds": zod.number().int().min(createPaperRunBodyDelaySecondsMin).max(createPaperRunBodyDelaySecondsMax).default(createPaperRunBodyDelaySecondsDefault),
+  "limitCents": zod.number().min(createPaperRunBodyLimitCentsMin).max(createPaperRunBodyLimitCentsMax).default(createPaperRunBodyLimitCentsDefault),
+  "runDays": zod.number().int().min(createPaperRunBodyRunDaysMin).max(createPaperRunBodyRunDaysMax).default(createPaperRunBodyRunDaysDefault),
+  "holdoutDays": zod.number().int().min(1).max(createPaperRunBodyHoldoutDaysMax).default(createPaperRunBodyHoldoutDaysDefault),
+  "repetitions": zod.enum(['first', 'all']).default(createPaperRunBodyRepetitionsDefault),
+  "maxMarkets": zod.number().int().min(1).max(createPaperRunBodyMaxMarketsMax).default(createPaperRunBodyMaxMarketsDefault)
+})
+
+export const createPaperRunResponseProtocolOneNameMax = 80;
+
+export const createPaperRunResponseProtocolOneStakeUsdDefault = 100;
+export const createPaperRunResponseProtocolOneStakeUsdMax = 10000;
+
+export const createPaperRunResponseProtocolOneCapitalUsdDefault = 10000;
+export const createPaperRunResponseProtocolOneCapitalUsdMin = 100;
+export const createPaperRunResponseProtocolOneCapitalUsdMax = 1000000;
+
+export const createPaperRunResponseProtocolOneMaxGameUsdDefault = 110;
+export const createPaperRunResponseProtocolOneMaxGameUsdMax = 100000;
+
+export const createPaperRunResponseProtocolOneDelaySecondsDefault = 30;
+export const createPaperRunResponseProtocolOneDelaySecondsMin = 0;
+export const createPaperRunResponseProtocolOneDelaySecondsMax = 300;
+
+export const createPaperRunResponseProtocolOneLimitCentsDefault = 1;
+export const createPaperRunResponseProtocolOneLimitCentsMin = 0;
+export const createPaperRunResponseProtocolOneLimitCentsMax = 10;
+
+export const createPaperRunResponseProtocolOneRunDaysDefault = 28;
+export const createPaperRunResponseProtocolOneRunDaysMin = 2;
+export const createPaperRunResponseProtocolOneRunDaysMax = 90;
+
+export const createPaperRunResponseProtocolOneHoldoutDaysDefault = 7;
+export const createPaperRunResponseProtocolOneHoldoutDaysMax = 89;
+
+export const createPaperRunResponseProtocolOneRepetitionsDefault = `first`;
+export const createPaperRunResponseProtocolOneMaxMarketsDefault = 8;
+export const createPaperRunResponseProtocolOneMaxMarketsMax = 20;
+
+
+
+export const CreatePaperRunResponse = zod.object({
+  "id": zod.string(),
+  "status": zod.enum(['draft', 'active', 'paused', 'finished']),
+  "createdAt": zod.string(),
+  "activatedAt": zod.string().nullable(),
+  "endsAt": zod.string().nullable(),
+  "holdoutAt": zod.string().nullable(),
+  "pausedAt": zod.string().nullable(),
+  "protocol": zod.object({
+  "requestId": zod.string().uuid(),
+  "name": zod.string().min(1).max(createPaperRunResponseProtocolOneNameMax),
+  "stakeUsd": zod.number().min(1).max(createPaperRunResponseProtocolOneStakeUsdMax).default(createPaperRunResponseProtocolOneStakeUsdDefault),
+  "capitalUsd": zod.number().min(createPaperRunResponseProtocolOneCapitalUsdMin).max(createPaperRunResponseProtocolOneCapitalUsdMax).default(createPaperRunResponseProtocolOneCapitalUsdDefault),
+  "maxGameUsd": zod.number().min(1).max(createPaperRunResponseProtocolOneMaxGameUsdMax).default(createPaperRunResponseProtocolOneMaxGameUsdDefault),
+  "delaySeconds": zod.number().int().min(createPaperRunResponseProtocolOneDelaySecondsMin).max(createPaperRunResponseProtocolOneDelaySecondsMax).default(createPaperRunResponseProtocolOneDelaySecondsDefault),
+  "limitCents": zod.number().min(createPaperRunResponseProtocolOneLimitCentsMin).max(createPaperRunResponseProtocolOneLimitCentsMax).default(createPaperRunResponseProtocolOneLimitCentsDefault),
+  "runDays": zod.number().int().min(createPaperRunResponseProtocolOneRunDaysMin).max(createPaperRunResponseProtocolOneRunDaysMax).default(createPaperRunResponseProtocolOneRunDaysDefault),
+  "holdoutDays": zod.number().int().min(1).max(createPaperRunResponseProtocolOneHoldoutDaysMax).default(createPaperRunResponseProtocolOneHoldoutDaysDefault),
+  "repetitions": zod.enum(['first', 'all']).default(createPaperRunResponseProtocolOneRepetitionsDefault),
+  "maxMarkets": zod.number().int().min(1).max(createPaperRunResponseProtocolOneMaxMarketsMax).default(createPaperRunResponseProtocolOneMaxMarketsDefault)
+}).and(zod.object({
+  "version": zod.string(),
+  "ruleVersion": zod.string(),
+  "basis": zod.enum(['gross', 'net']).describe('Explicit Telegram filter basis. Existing settings remain gross; an omitted update never changes the saved choice.'),
+  "minimumRoiPct": zod.number(),
+  "minimumGames": zod.number().int(),
+  "minimumTrades": zod.number().int(),
+  "assumptions": zod.array(zod.string())
+})),
+  "dropped": zod.number().int(),
+  "heartbeatAt": zod.string().nullable(),
+  "workerError": zod.string().nullable()
+})
+
+
+export const ChangePaperRunStateParams = zod.object({
+  "id": zod.coerce.string().uuid()
+})
+
+export const ChangePaperRunStateBody = zod.object({
+  "action": zod.enum(['start', 'pause'])
+})
+
+export const changePaperRunStateResponseProtocolOneNameMax = 80;
+
+export const changePaperRunStateResponseProtocolOneStakeUsdDefault = 100;
+export const changePaperRunStateResponseProtocolOneStakeUsdMax = 10000;
+
+export const changePaperRunStateResponseProtocolOneCapitalUsdDefault = 10000;
+export const changePaperRunStateResponseProtocolOneCapitalUsdMin = 100;
+export const changePaperRunStateResponseProtocolOneCapitalUsdMax = 1000000;
+
+export const changePaperRunStateResponseProtocolOneMaxGameUsdDefault = 110;
+export const changePaperRunStateResponseProtocolOneMaxGameUsdMax = 100000;
+
+export const changePaperRunStateResponseProtocolOneDelaySecondsDefault = 30;
+export const changePaperRunStateResponseProtocolOneDelaySecondsMin = 0;
+export const changePaperRunStateResponseProtocolOneDelaySecondsMax = 300;
+
+export const changePaperRunStateResponseProtocolOneLimitCentsDefault = 1;
+export const changePaperRunStateResponseProtocolOneLimitCentsMin = 0;
+export const changePaperRunStateResponseProtocolOneLimitCentsMax = 10;
+
+export const changePaperRunStateResponseProtocolOneRunDaysDefault = 28;
+export const changePaperRunStateResponseProtocolOneRunDaysMin = 2;
+export const changePaperRunStateResponseProtocolOneRunDaysMax = 90;
+
+export const changePaperRunStateResponseProtocolOneHoldoutDaysDefault = 7;
+export const changePaperRunStateResponseProtocolOneHoldoutDaysMax = 89;
+
+export const changePaperRunStateResponseProtocolOneRepetitionsDefault = `first`;
+export const changePaperRunStateResponseProtocolOneMaxMarketsDefault = 8;
+export const changePaperRunStateResponseProtocolOneMaxMarketsMax = 20;
+
+
+
+export const ChangePaperRunStateResponse = zod.object({
+  "id": zod.string(),
+  "status": zod.enum(['draft', 'active', 'paused', 'finished']),
+  "createdAt": zod.string(),
+  "activatedAt": zod.string().nullable(),
+  "endsAt": zod.string().nullable(),
+  "holdoutAt": zod.string().nullable(),
+  "pausedAt": zod.string().nullable(),
+  "protocol": zod.object({
+  "requestId": zod.string().uuid(),
+  "name": zod.string().min(1).max(changePaperRunStateResponseProtocolOneNameMax),
+  "stakeUsd": zod.number().min(1).max(changePaperRunStateResponseProtocolOneStakeUsdMax).default(changePaperRunStateResponseProtocolOneStakeUsdDefault),
+  "capitalUsd": zod.number().min(changePaperRunStateResponseProtocolOneCapitalUsdMin).max(changePaperRunStateResponseProtocolOneCapitalUsdMax).default(changePaperRunStateResponseProtocolOneCapitalUsdDefault),
+  "maxGameUsd": zod.number().min(1).max(changePaperRunStateResponseProtocolOneMaxGameUsdMax).default(changePaperRunStateResponseProtocolOneMaxGameUsdDefault),
+  "delaySeconds": zod.number().int().min(changePaperRunStateResponseProtocolOneDelaySecondsMin).max(changePaperRunStateResponseProtocolOneDelaySecondsMax).default(changePaperRunStateResponseProtocolOneDelaySecondsDefault),
+  "limitCents": zod.number().min(changePaperRunStateResponseProtocolOneLimitCentsMin).max(changePaperRunStateResponseProtocolOneLimitCentsMax).default(changePaperRunStateResponseProtocolOneLimitCentsDefault),
+  "runDays": zod.number().int().min(changePaperRunStateResponseProtocolOneRunDaysMin).max(changePaperRunStateResponseProtocolOneRunDaysMax).default(changePaperRunStateResponseProtocolOneRunDaysDefault),
+  "holdoutDays": zod.number().int().min(1).max(changePaperRunStateResponseProtocolOneHoldoutDaysMax).default(changePaperRunStateResponseProtocolOneHoldoutDaysDefault),
+  "repetitions": zod.enum(['first', 'all']).default(changePaperRunStateResponseProtocolOneRepetitionsDefault),
+  "maxMarkets": zod.number().int().min(1).max(changePaperRunStateResponseProtocolOneMaxMarketsMax).default(changePaperRunStateResponseProtocolOneMaxMarketsDefault)
+}).and(zod.object({
+  "version": zod.string(),
+  "ruleVersion": zod.string(),
+  "basis": zod.enum(['gross', 'net']).describe('Explicit Telegram filter basis. Existing settings remain gross; an omitted update never changes the saved choice.'),
+  "minimumRoiPct": zod.number(),
+  "minimumGames": zod.number().int(),
+  "minimumTrades": zod.number().int(),
+  "assumptions": zod.array(zod.string())
+})),
+  "dropped": zod.number().int(),
+  "heartbeatAt": zod.string().nullable(),
+  "workerError": zod.string().nullable()
+})
+
+
+export const GetPaperAuditResponse = zod.object({
+  "generatedAt": zod.string(),
+  "environment": zod.string(),
+  "screenshotStatus": zod.string(),
+  "notes": zod.array(zod.string()),
+  "screenshotArithmetic": zod.record(zod.string(), zod.number()),
+  "rows": zod.array(zod.object({
+  "tradeId": zod.string(),
+  "eventTitle": zod.string(),
+  "side": zod.string(),
+  "price": zod.number(),
+  "publicAmountUsd": zod.number(),
+  "observedAt": zod.string(),
+  "queuedAt": zod.string().nullable(),
+  "capturedAt": zod.string().nullable(),
+  "confirmedAt": zod.string().nullable(),
+  "exchangeToQueueSeconds": zod.number().nullable(),
+  "queueToDecisionSeconds": zod.number().nullable(),
+  "decisionToConfirmSeconds": zod.number().nullable(),
+  "totalSeconds": zod.number().nullable(),
+  "attempts": zod.number().int(),
+  "historicalGames": zod.number().int().nullable(),
+  "historicalTrades": zod.number().int().nullable(),
+  "frozenRoiPct": zod.number().nullable(),
+  "entryFeeUsd": zod.number().nullable(),
+  "result": zod.string().nullable(),
+  "hypotheticalGrossProfitUsd": zod.number().nullable(),
+  "notes": zod.array(zod.string())
+}))
+})
+
+
+export const ExportPaperRunQueryParams = zod.object({
+  "id": zod.coerce.string().uuid(),
+  "format": zod.enum(['json', 'csv'])
+})
+
+export const ExportPaperRunResponse = zod.unknown()
+
+
 /**
  * @summary Readable owner-chat history of confirmed Telegram notifications
  */

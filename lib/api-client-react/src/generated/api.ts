@@ -28,6 +28,7 @@ import type {
   ApiError,
   DownloadKalshiHistoryParams,
   ExplorerRoi,
+  ExportPaperRunParams,
   GameAnalysis,
   GameAnalysisInput,
   GameAnalysisState,
@@ -37,12 +38,18 @@ import type {
   GetKalshiLeaderboardParams,
   GetKalshiNotificationsParams,
   GetKalshiSignalsParams,
+  GetPaperDashboardParams,
   HealthStatus,
   KalshiDashboard,
   KalshiExplorer,
   KalshiSettingsInput,
   OwnerRequiredResponse,
   OwnerUnavailableResponse,
+  PaperAudit,
+  PaperDashboard,
+  PaperProtocolInput,
+  PaperRun,
+  PaperStateInput,
   RoiLeaderboard,
   SignInRequiredResponse,
   SignalEvaluation,
@@ -78,6 +85,470 @@ const withQueryKey = <T extends object, K>(query: T, queryKey: K): T & { queryKe
   }
   return result;
 };
+
+export const getGetPaperDashboardUrl = (params?: GetPaperDashboardParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/api/kalshi/paper?${stringifiedParams}` : `/api/kalshi/paper`
+}
+
+export const getPaperDashboard = async (params?: GetPaperDashboardParams, options?: Parameters<typeof customFetch>[1]): Promise<PaperDashboard> => {
+
+  return customFetch<PaperDashboard>(getGetPaperDashboardUrl(params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetPaperDashboardQueryKey = (params?: GetPaperDashboardParams,) => {
+    return [
+    `/api/kalshi/paper`, ...(params ? [params] : [])
+    ] as const;
+    }
+
+
+export const getGetPaperDashboardQueryOptions = <TData = Awaited<ReturnType<typeof getPaperDashboard>>, TError = ErrorType<unknown>>(params?: GetPaperDashboardParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getPaperDashboard>>, TError, TData>>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetPaperDashboardQueryKey(params);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getPaperDashboard>>> = ({ signal }) => getPaperDashboard(params, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getPaperDashboard>>, TError, TData> & { queryKey: DataTag<QueryKey, TData, TError> }
+}
+
+export type GetPaperDashboardQueryResult = NonNullable<Awaited<ReturnType<typeof getPaperDashboard>>>
+export type GetPaperDashboardQueryError = ErrorType<unknown>
+
+
+export function useGetPaperDashboard<TData = Awaited<ReturnType<typeof getPaperDashboard>>, TError = ErrorType<unknown>>(
+ params: undefined |  GetPaperDashboardParams, options: { query:Partial<UseQueryOptions<Awaited<ReturnType<typeof getPaperDashboard>>, TError, TData>> & Pick<
+        DefinedInitialDataOptions<
+          Awaited<ReturnType<typeof getPaperDashboard>>,
+          TError,
+          Awaited<ReturnType<typeof getPaperDashboard>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient
+  ):  DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useGetPaperDashboard<TData = Awaited<ReturnType<typeof getPaperDashboard>>, TError = ErrorType<unknown>>(
+ params?: GetPaperDashboardParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getPaperDashboard>>, TError, TData>> & Pick<
+        UndefinedInitialDataOptions<
+          Awaited<ReturnType<typeof getPaperDashboard>>,
+          TError,
+          Awaited<ReturnType<typeof getPaperDashboard>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useGetPaperDashboard<TData = Awaited<ReturnType<typeof getPaperDashboard>>, TError = ErrorType<unknown>>(
+ params?: GetPaperDashboardParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getPaperDashboard>>, TError, TData>>, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+
+export function useGetPaperDashboard<TData = Awaited<ReturnType<typeof getPaperDashboard>>, TError = ErrorType<unknown>>(
+ params?: GetPaperDashboardParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getPaperDashboard>>, TError, TData>>, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient
+ ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
+
+  const queryOptions = getGetPaperDashboardQueryOptions(params,options)
+
+  const query = useQuery(queryOptions, queryClient) as  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getCreatePaperRunUrl = () => {
+
+
+
+
+  return `/api/kalshi/paper/runs`
+}
+
+export const createPaperRun = async (paperProtocolInput: PaperProtocolInput, options?: Parameters<typeof customFetch>[1]): Promise<PaperRun> => {
+
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Symbol.iterator in h) {
+      return Object.fromEntries(
+        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
+      );
+    }
+    const headers: Record<string, string | readonly string[]> = {};
+    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
+      if (value !== undefined) headers[name] = value;
+    }
+    return headers;
+  };
+return customFetch<PaperRun>(getCreatePaperRunUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    body: JSON.stringify(paperProtocolInput)
+  }
+);}
+
+
+
+
+
+export const getCreatePaperRunMutationKey = () => ['createPaperRun'] as const;
+
+export const getCreatePaperRunMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof createPaperRun>>, TError,CreatePaperRunMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof createPaperRun>>, TError,CreatePaperRunMutationVariables, TContext> => {
+
+const mutationKey = getCreatePaperRunMutationKey();
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof createPaperRun>>, CreatePaperRunMutationVariables> = (props) => {
+          const {data} = props ?? {};
+
+          return  createPaperRun(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type CreatePaperRunMutationResult = NonNullable<Awaited<ReturnType<typeof createPaperRun>>>
+    export type CreatePaperRunMutationBody = BodyType<PaperProtocolInput>
+    export type CreatePaperRunMutationError = ErrorType<unknown>
+    export type CreatePaperRunMutationVariables = {data: BodyType<PaperProtocolInput>}
+
+    export const useCreatePaperRun = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof createPaperRun>>, TError,CreatePaperRunMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient): UseMutationResult<
+        Awaited<ReturnType<typeof createPaperRun>>,
+        TError,
+        CreatePaperRunMutationVariables,
+        TContext
+      > => {
+      return useMutation(getCreatePaperRunMutationOptions(options), queryClient);
+    }
+
+export const getChangePaperRunStateUrl = (id: string,) => {
+
+
+
+
+  return `/api/kalshi/paper/runs/${id}/state`
+}
+
+export const changePaperRunState = async (id: string,
+    paperStateInput: PaperStateInput, options?: Parameters<typeof customFetch>[1]): Promise<PaperRun> => {
+
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Symbol.iterator in h) {
+      return Object.fromEntries(
+        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
+      );
+    }
+    const headers: Record<string, string | readonly string[]> = {};
+    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
+      if (value !== undefined) headers[name] = value;
+    }
+    return headers;
+  };
+return customFetch<PaperRun>(getChangePaperRunStateUrl(id),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    body: JSON.stringify(paperStateInput)
+  }
+);}
+
+
+
+
+
+export const getChangePaperRunStateMutationKey = () => ['changePaperRunState'] as const;
+
+export const getChangePaperRunStateMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof changePaperRunState>>, TError,ChangePaperRunStateMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof changePaperRunState>>, TError,ChangePaperRunStateMutationVariables, TContext> => {
+
+const mutationKey = getChangePaperRunStateMutationKey();
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof changePaperRunState>>, ChangePaperRunStateMutationVariables> = (props) => {
+          const {id,data} = props ?? {};
+
+          return  changePaperRunState(id,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type ChangePaperRunStateMutationResult = NonNullable<Awaited<ReturnType<typeof changePaperRunState>>>
+    export type ChangePaperRunStateMutationBody = BodyType<PaperStateInput>
+    export type ChangePaperRunStateMutationError = ErrorType<unknown>
+    export type ChangePaperRunStateMutationVariables = {id: string;data: BodyType<PaperStateInput>}
+
+    export const useChangePaperRunState = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof changePaperRunState>>, TError,ChangePaperRunStateMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient): UseMutationResult<
+        Awaited<ReturnType<typeof changePaperRunState>>,
+        TError,
+        ChangePaperRunStateMutationVariables,
+        TContext
+      > => {
+      return useMutation(getChangePaperRunStateMutationOptions(options), queryClient);
+    }
+
+export const getGetPaperAuditUrl = () => {
+
+
+
+
+  return `/api/kalshi/paper/audit`
+}
+
+export const getPaperAudit = async ( options?: Parameters<typeof customFetch>[1]): Promise<PaperAudit> => {
+
+  return customFetch<PaperAudit>(getGetPaperAuditUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetPaperAuditQueryKey = () => {
+    return [
+    `/api/kalshi/paper/audit`
+    ] as const;
+    }
+
+
+export const getGetPaperAuditQueryOptions = <TData = Awaited<ReturnType<typeof getPaperAudit>>, TError = ErrorType<unknown>>( options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getPaperAudit>>, TError, TData>>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetPaperAuditQueryKey();
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getPaperAudit>>> = ({ signal }) => getPaperAudit({ signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getPaperAudit>>, TError, TData> & { queryKey: DataTag<QueryKey, TData, TError> }
+}
+
+export type GetPaperAuditQueryResult = NonNullable<Awaited<ReturnType<typeof getPaperAudit>>>
+export type GetPaperAuditQueryError = ErrorType<unknown>
+
+
+export function useGetPaperAudit<TData = Awaited<ReturnType<typeof getPaperAudit>>, TError = ErrorType<unknown>>(
+  options: { query:Partial<UseQueryOptions<Awaited<ReturnType<typeof getPaperAudit>>, TError, TData>> & Pick<
+        DefinedInitialDataOptions<
+          Awaited<ReturnType<typeof getPaperAudit>>,
+          TError,
+          Awaited<ReturnType<typeof getPaperAudit>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient
+  ):  DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useGetPaperAudit<TData = Awaited<ReturnType<typeof getPaperAudit>>, TError = ErrorType<unknown>>(
+  options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getPaperAudit>>, TError, TData>> & Pick<
+        UndefinedInitialDataOptions<
+          Awaited<ReturnType<typeof getPaperAudit>>,
+          TError,
+          Awaited<ReturnType<typeof getPaperAudit>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useGetPaperAudit<TData = Awaited<ReturnType<typeof getPaperAudit>>, TError = ErrorType<unknown>>(
+  options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getPaperAudit>>, TError, TData>>, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+
+export function useGetPaperAudit<TData = Awaited<ReturnType<typeof getPaperAudit>>, TError = ErrorType<unknown>>(
+  options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getPaperAudit>>, TError, TData>>, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient
+ ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
+
+  const queryOptions = getGetPaperAuditQueryOptions(options)
+
+  const query = useQuery(queryOptions, queryClient) as  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getExportPaperRunUrl = (params: ExportPaperRunParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/api/kalshi/paper/export?${stringifiedParams}` : `/api/kalshi/paper/export`
+}
+
+export const exportPaperRun = async (params: ExportPaperRunParams, options?: Parameters<typeof customFetch>[1]): Promise<Blob> => {
+
+  return customFetch<Blob>(getExportPaperRunUrl(params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getExportPaperRunQueryKey = (params?: ExportPaperRunParams,) => {
+    return [
+    `/api/kalshi/paper/export`, ...(params ? [params] : [])
+    ] as const;
+    }
+
+
+export const getExportPaperRunQueryOptions = <TData = Awaited<ReturnType<typeof exportPaperRun>>, TError = ErrorType<unknown>>(params: ExportPaperRunParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof exportPaperRun>>, TError, TData>>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getExportPaperRunQueryKey(params);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof exportPaperRun>>> = ({ signal }) => exportPaperRun(params, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof exportPaperRun>>, TError, TData> & { queryKey: DataTag<QueryKey, TData, TError> }
+}
+
+export type ExportPaperRunQueryResult = NonNullable<Awaited<ReturnType<typeof exportPaperRun>>>
+export type ExportPaperRunQueryError = ErrorType<unknown>
+
+
+export function useExportPaperRun<TData = Awaited<ReturnType<typeof exportPaperRun>>, TError = ErrorType<unknown>>(
+ params: ExportPaperRunParams, options: { query:Partial<UseQueryOptions<Awaited<ReturnType<typeof exportPaperRun>>, TError, TData>> & Pick<
+        DefinedInitialDataOptions<
+          Awaited<ReturnType<typeof exportPaperRun>>,
+          TError,
+          Awaited<ReturnType<typeof exportPaperRun>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient
+  ):  DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useExportPaperRun<TData = Awaited<ReturnType<typeof exportPaperRun>>, TError = ErrorType<unknown>>(
+ params: ExportPaperRunParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof exportPaperRun>>, TError, TData>> & Pick<
+        UndefinedInitialDataOptions<
+          Awaited<ReturnType<typeof exportPaperRun>>,
+          TError,
+          Awaited<ReturnType<typeof exportPaperRun>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useExportPaperRun<TData = Awaited<ReturnType<typeof exportPaperRun>>, TError = ErrorType<unknown>>(
+ params: ExportPaperRunParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof exportPaperRun>>, TError, TData>>, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+
+export function useExportPaperRun<TData = Awaited<ReturnType<typeof exportPaperRun>>, TError = ErrorType<unknown>>(
+ params: ExportPaperRunParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof exportPaperRun>>, TError, TData>>, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient
+ ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
+
+  const queryOptions = getExportPaperRunQueryOptions(params,options)
+
+  const query = useQuery(queryOptions, queryClient) as  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
 
 export const getGetKalshiNotificationsUrl = (params?: GetKalshiNotificationsParams,) => {
   const normalizedParams = new URLSearchParams();

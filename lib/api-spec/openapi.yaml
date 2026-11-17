@@ -15,6 +15,87 @@ tags:
   - name: kalshi
     description: Kalshi sports trade monitoring and Telegram alerts
 paths:
+  /kalshi/paper:
+    get:
+      operationId: getPaperDashboard
+      tags: [kalshi]
+      parameters:
+        - in: query
+          name: runId
+          schema: { type: string, format: uuid }
+        - in: query
+          name: page
+          schema: { type: integer, minimum: 1, maximum: 2000, default: 1 }
+      responses:
+        "200":
+          description: Owner-only paper experiment, no trading
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/PaperDashboard" }
+  /kalshi/paper/runs:
+    post:
+      operationId: createPaperRun
+      tags: [kalshi]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/PaperProtocolInput" }
+      responses:
+        "201":
+          description: Immutable draft protocol, not activated
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/PaperRun" }
+  /kalshi/paper/runs/{id}/state:
+    post:
+      operationId: changePaperRunState
+      tags: [kalshi]
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string, format: uuid }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/PaperStateInput" }
+      responses:
+        "200":
+          description: Start or pause; start is only available in the published runtime
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/PaperRun" }
+  /kalshi/paper/audit:
+    get:
+      operationId: getPaperAudit
+      tags: [kalshi]
+      responses:
+        "200":
+          description: Bounded read-only reconciliation of stored evidence
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/PaperAudit" }
+  /kalshi/paper/export:
+    get:
+      operationId: exportPaperRun
+      tags: [kalshi]
+      parameters:
+        - in: query
+          name: id
+          required: true
+          schema: { type: string, format: uuid }
+        - in: query
+          name: format
+          required: true
+          schema: { type: string, enum: [json, csv] }
+      responses:
+        "200":
+          description: Complete evidence export; no secrets or chat identifiers
+          content:
+            application/octet-stream:
+              schema: { type: string, format: binary }
   /kalshi/notifications:
     get:
       operationId: getKalshiNotifications
@@ -924,6 +1005,197 @@ components:
           type: string
       required:
         - status
+    PaperProtocolInput:
+      type: object
+      required: [requestId, name, stakeUsd, capitalUsd, maxGameUsd, delaySeconds, limitCents, runDays, holdoutDays, repetitions, maxMarkets]
+      properties:
+        requestId: { type: string, format: uuid }
+        name: { type: string, minLength: 1, maxLength: 80 }
+        stakeUsd: { type: number, minimum: 1, maximum: 10000, default: 100 }
+        capitalUsd: { type: number, minimum: 100, maximum: 1000000, default: 10000 }
+        maxGameUsd: { type: number, minimum: 1, maximum: 100000, default: 110 }
+        delaySeconds: { type: integer, minimum: 0, maximum: 300, default: 30 }
+        limitCents: { type: number, minimum: 0, maximum: 10, default: 1 }
+        runDays: { type: integer, minimum: 2, maximum: 90, default: 28 }
+        holdoutDays: { type: integer, minimum: 1, maximum: 89, default: 7 }
+        repetitions: { type: string, enum: [first, all], default: first }
+        maxMarkets: { type: integer, minimum: 1, maximum: 20, default: 8 }
+    PaperStateInput:
+      type: object
+      required: [action]
+      properties:
+        action: { type: string, enum: [start, pause] }
+    PaperProtocol:
+      allOf:
+        - $ref: "#/components/schemas/PaperProtocolInput"
+        - type: object
+          required: [version, ruleVersion, basis, minimumRoiPct, minimumGames, minimumTrades, assumptions]
+          properties:
+            version: { type: string }
+            ruleVersion: { type: string }
+            basis: { $ref: "#/components/schemas/RoiBasis" }
+            minimumRoiPct: { type: number }
+            minimumGames: { type: integer }
+            minimumTrades: { type: integer }
+            assumptions: { type: array, items: { type: string } }
+    PaperRun:
+      type: object
+      required: [id, status, createdAt, activatedAt, endsAt, holdoutAt, pausedAt, protocol, dropped, heartbeatAt, workerError]
+      properties:
+        id: { type: string }
+        status: { type: string, enum: [draft, active, paused, finished] }
+        createdAt: { type: string }
+        activatedAt: { type: [string, "null"] }
+        endsAt: { type: [string, "null"] }
+        holdoutAt: { type: [string, "null"] }
+        pausedAt: { type: [string, "null"] }
+        protocol: { $ref: "#/components/schemas/PaperProtocol" }
+        dropped: { type: integer }
+        heartbeatAt: { type: [string, "null"] }
+        workerError: { type: [string, "null"] }
+    PaperInterval:
+      type: object
+      required: [lower, upper, clusters]
+      properties:
+        lower: { type: number }
+        upper: { type: number }
+        clusters: { type: integer }
+    PaperStats:
+      type: object
+      required: [policy, delaySeconds, cohort, phase, opportunities, full, partial, none, unknown, pending, settled, games, approximateGames, deployedUsd, feesUsd, committedUsd, freeCapitalUsd, netProfitUsd, netRoiPct, profitPerAlertUsd, coveragePct, withoutBestGameRoiPct, unknownLossScenarioRoiPct, unknownWinScenarioRoiPct]
+      properties:
+        policy: { type: string, enum: [first, all] }
+        delaySeconds: { type: integer }
+        cohort: { type: string, enum: [alerts, controls] }
+        phase: { type: string, enum: [calibration, holdout] }
+        opportunities: { type: integer }
+        full: { type: integer }
+        partial: { type: integer }
+        none: { type: integer }
+        unknown: { type: integer }
+        pending: { type: integer }
+        settled: { type: integer }
+        games: { type: integer }
+        approximateGames: { type: integer }
+        deployedUsd: { type: number }
+        feesUsd: { type: number }
+        committedUsd: { type: number }
+        freeCapitalUsd: { type: number }
+        netProfitUsd: { type: [number, "null"] }
+        netRoiPct: { type: [number, "null"] }
+        profitPerAlertUsd: { type: [number, "null"] }
+        coveragePct: { type: number }
+        withoutBestGameRoiPct: { type: [number, "null"] }
+        unknownLossScenarioRoiPct: { type: [number, "null"] }
+        unknownWinScenarioRoiPct: { type: [number, "null"] }
+        interval: { $ref: "#/components/schemas/PaperInterval" }
+        dateInterval: { $ref: "#/components/schemas/PaperInterval" }
+    PaperExecution:
+      type: object
+      required: [delaySeconds, policy, dueAt, capturedAt, status, reason, contracts, costUsd, feeUsd, averagePrice, bestAsk, settlement, netProfitUsd, evidence]
+      properties:
+        delaySeconds: { type: integer }
+        policy: { type: string, enum: [first, all] }
+        dueAt: { type: string }
+        capturedAt: { type: [string, "null"] }
+        status: { type: string, enum: [pending, full, partial, none, unknown] }
+        reason: { type: string }
+        contracts: { type: number }
+        costUsd: { type: number }
+        feeUsd: { type: [number, "null"] }
+        averagePrice: { type: [number, "null"] }
+        bestAsk: { type: [number, "null"] }
+        settlement: { type: string }
+        netProfitUsd: { type: [number, "null"] }
+        evidence: { type: object, additionalProperties: true }
+    PaperOpportunity:
+      type: object
+      required: [id, tradeId, ticker, eventTitle, marketTitle, sport, side, gameId, gameIdentity, observedAt, queuedAt, decidedAt, confirmedAt, phase, eligible, reason, price, historicalRoiPct, historicalGames, matchedId, evidence, executions]
+      properties:
+        id: { type: string }
+        tradeId: { type: string }
+        ticker: { type: string }
+        eventTitle: { type: string }
+        marketTitle: { type: string }
+        sport: { type: string }
+        side: { type: string }
+        gameId: { type: string }
+        gameIdentity: { type: string }
+        observedAt: { type: string }
+        queuedAt: { type: [string, "null"] }
+        decidedAt: { type: string }
+        confirmedAt: { type: [string, "null"] }
+        phase: { type: string }
+        eligible: { type: boolean }
+        reason: { type: string }
+        price: { type: number }
+        historicalRoiPct: { type: [number, "null"] }
+        historicalGames: { type: integer }
+        matchedId: { type: [string, "null"] }
+        evidence: { type: object, additionalProperties: true }
+        executions: { type: array, items: { $ref: "#/components/schemas/PaperExecution" } }
+    PaperComparison:
+      type: object
+      required: [phase, pairs, coveragePct, deltaNetRoiPct, conclusion, residuals]
+      properties:
+        phase: { type: string }
+        pairs: { type: integer }
+        coveragePct: { type: number }
+        deltaNetRoiPct: { type: [number, "null"] }
+        interval: { $ref: "#/components/schemas/PaperInterval" }
+        conclusion: { type: string }
+        residuals: { type: array, items: { type: string } }
+    PaperDashboard:
+      type: object
+      required: [generatedAt, activationAllowed, runs, selectedRunId, stats, comparisons, rows, page, totalPages, recorded, holdoutHidden, limitations]
+      properties:
+        generatedAt: { type: string }
+        activationAllowed: { type: boolean }
+        runs: { type: array, items: { $ref: "#/components/schemas/PaperRun" } }
+        selectedRunId: { type: [string, "null"] }
+        stats: { type: array, items: { $ref: "#/components/schemas/PaperStats" } }
+        comparisons: { type: array, items: { $ref: "#/components/schemas/PaperComparison" } }
+        rows: { type: array, items: { $ref: "#/components/schemas/PaperOpportunity" } }
+        page: { type: integer }
+        totalPages: { type: integer }
+        recorded: { type: integer }
+        holdoutHidden: { type: boolean }
+        limitations: { type: array, items: { type: string } }
+    PaperAuditRow:
+      type: object
+      required: [tradeId, eventTitle, side, price, publicAmountUsd, observedAt, queuedAt, capturedAt, confirmedAt, exchangeToQueueSeconds, queueToDecisionSeconds, decisionToConfirmSeconds, totalSeconds, attempts, historicalGames, historicalTrades, frozenRoiPct, entryFeeUsd, result, hypotheticalGrossProfitUsd, notes]
+      properties:
+        tradeId: { type: string }
+        eventTitle: { type: string }
+        side: { type: string }
+        price: { type: number }
+        publicAmountUsd: { type: number }
+        observedAt: { type: string }
+        queuedAt: { type: [string, "null"] }
+        capturedAt: { type: [string, "null"] }
+        confirmedAt: { type: [string, "null"] }
+        exchangeToQueueSeconds: { type: [number, "null"] }
+        queueToDecisionSeconds: { type: [number, "null"] }
+        decisionToConfirmSeconds: { type: [number, "null"] }
+        totalSeconds: { type: [number, "null"] }
+        attempts: { type: integer }
+        historicalGames: { type: [integer, "null"] }
+        historicalTrades: { type: [integer, "null"] }
+        frozenRoiPct: { type: [number, "null"] }
+        entryFeeUsd: { type: [number, "null"] }
+        result: { type: [string, "null"] }
+        hypotheticalGrossProfitUsd: { type: [number, "null"] }
+        notes: { type: array, items: { type: string } }
+    PaperAudit:
+      type: object
+      required: [generatedAt, environment, screenshotStatus, notes, screenshotArithmetic, rows]
+      properties:
+        generatedAt: { type: string }
+        environment: { type: string }
+        screenshotStatus: { type: string }
+        notes: { type: array, items: { type: string } }
+        screenshotArithmetic: { type: object, additionalProperties: { type: number } }
+        rows: { type: array, items: { $ref: "#/components/schemas/PaperAuditRow" } }
     ApiError:
       type: object
       properties:

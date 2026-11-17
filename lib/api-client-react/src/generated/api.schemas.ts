@@ -850,6 +850,330 @@ export interface HealthStatus {
   status: string;
 }
 
+export type PaperProtocolInputRepetitions = typeof PaperProtocolInputRepetitions[keyof typeof PaperProtocolInputRepetitions];
+
+
+export const PaperProtocolInputRepetitions = {
+  first: 'first',
+  all: 'all',
+} as const;
+
+export interface PaperProtocolInput {
+  requestId: string;
+  /**
+     * @minLength 1
+     * @maxLength 80
+     */
+  name: string;
+  /**
+     * @minimum 1
+     * @maximum 10000
+     */
+  stakeUsd: number;
+  /**
+     * @minimum 100
+     * @maximum 1000000
+     */
+  capitalUsd: number;
+  /**
+     * @minimum 1
+     * @maximum 100000
+     */
+  maxGameUsd: number;
+  /**
+     * @minimum 0
+     * @maximum 300
+     */
+  delaySeconds: number;
+  /**
+     * @minimum 0
+     * @maximum 10
+     */
+  limitCents: number;
+  /**
+     * @minimum 2
+     * @maximum 90
+     */
+  runDays: number;
+  /**
+     * @minimum 1
+     * @maximum 89
+     */
+  holdoutDays: number;
+  repetitions: PaperProtocolInputRepetitions;
+  /**
+     * @minimum 1
+     * @maximum 20
+     */
+  maxMarkets: number;
+}
+
+export type PaperStateInputAction = typeof PaperStateInputAction[keyof typeof PaperStateInputAction];
+
+
+export const PaperStateInputAction = {
+  start: 'start',
+  pause: 'pause',
+} as const;
+
+export interface PaperStateInput {
+  action: PaperStateInputAction;
+}
+
+export type PaperProtocol = PaperProtocolInput & {
+  version: string;
+  ruleVersion: string;
+  basis: RoiBasis;
+  minimumRoiPct: number;
+  minimumGames: number;
+  minimumTrades: number;
+  assumptions: string[];
+};
+
+export type PaperRunStatus = typeof PaperRunStatus[keyof typeof PaperRunStatus];
+
+
+export const PaperRunStatus = {
+  draft: 'draft',
+  active: 'active',
+  paused: 'paused',
+  finished: 'finished',
+} as const;
+
+export interface PaperRun {
+  id: string;
+  status: PaperRunStatus;
+  createdAt: string;
+  /** @nullable */
+  activatedAt: string | null;
+  /** @nullable */
+  endsAt: string | null;
+  /** @nullable */
+  holdoutAt: string | null;
+  /** @nullable */
+  pausedAt: string | null;
+  protocol: PaperProtocol;
+  dropped: number;
+  /** @nullable */
+  heartbeatAt: string | null;
+  /** @nullable */
+  workerError: string | null;
+}
+
+export interface PaperInterval {
+  lower: number;
+  upper: number;
+  clusters: number;
+}
+
+export type PaperStatsPolicy = typeof PaperStatsPolicy[keyof typeof PaperStatsPolicy];
+
+
+export const PaperStatsPolicy = {
+  first: 'first',
+  all: 'all',
+} as const;
+
+export type PaperStatsCohort = typeof PaperStatsCohort[keyof typeof PaperStatsCohort];
+
+
+export const PaperStatsCohort = {
+  alerts: 'alerts',
+  controls: 'controls',
+} as const;
+
+export type PaperStatsPhase = typeof PaperStatsPhase[keyof typeof PaperStatsPhase];
+
+
+export const PaperStatsPhase = {
+  calibration: 'calibration',
+  holdout: 'holdout',
+} as const;
+
+export interface PaperStats {
+  policy: PaperStatsPolicy;
+  delaySeconds: number;
+  cohort: PaperStatsCohort;
+  phase: PaperStatsPhase;
+  opportunities: number;
+  full: number;
+  partial: number;
+  none: number;
+  unknown: number;
+  pending: number;
+  settled: number;
+  games: number;
+  approximateGames: number;
+  deployedUsd: number;
+  feesUsd: number;
+  committedUsd: number;
+  freeCapitalUsd: number;
+  /** @nullable */
+  netProfitUsd: number | null;
+  /** @nullable */
+  netRoiPct: number | null;
+  /** @nullable */
+  profitPerAlertUsd: number | null;
+  coveragePct: number;
+  /** @nullable */
+  withoutBestGameRoiPct: number | null;
+  /** @nullable */
+  unknownLossScenarioRoiPct: number | null;
+  /** @nullable */
+  unknownWinScenarioRoiPct: number | null;
+  interval?: PaperInterval;
+  dateInterval?: PaperInterval;
+}
+
+export type PaperExecutionPolicy = typeof PaperExecutionPolicy[keyof typeof PaperExecutionPolicy];
+
+
+export const PaperExecutionPolicy = {
+  first: 'first',
+  all: 'all',
+} as const;
+
+export type PaperExecutionStatus = typeof PaperExecutionStatus[keyof typeof PaperExecutionStatus];
+
+
+export const PaperExecutionStatus = {
+  pending: 'pending',
+  full: 'full',
+  partial: 'partial',
+  none: 'none',
+  unknown: 'unknown',
+} as const;
+
+export type PaperExecutionEvidence = { [key: string]: unknown };
+
+export interface PaperExecution {
+  delaySeconds: number;
+  policy: PaperExecutionPolicy;
+  dueAt: string;
+  /** @nullable */
+  capturedAt: string | null;
+  status: PaperExecutionStatus;
+  reason: string;
+  contracts: number;
+  costUsd: number;
+  /** @nullable */
+  feeUsd: number | null;
+  /** @nullable */
+  averagePrice: number | null;
+  /** @nullable */
+  bestAsk: number | null;
+  settlement: string;
+  /** @nullable */
+  netProfitUsd: number | null;
+  evidence: PaperExecutionEvidence;
+}
+
+export type PaperOpportunityEvidence = { [key: string]: unknown };
+
+export interface PaperOpportunity {
+  id: string;
+  tradeId: string;
+  ticker: string;
+  eventTitle: string;
+  marketTitle: string;
+  sport: string;
+  side: string;
+  gameId: string;
+  gameIdentity: string;
+  observedAt: string;
+  /** @nullable */
+  queuedAt: string | null;
+  decidedAt: string;
+  /** @nullable */
+  confirmedAt: string | null;
+  phase: string;
+  eligible: boolean;
+  reason: string;
+  price: number;
+  /** @nullable */
+  historicalRoiPct: number | null;
+  historicalGames: number;
+  /** @nullable */
+  matchedId: string | null;
+  evidence: PaperOpportunityEvidence;
+  executions: PaperExecution[];
+}
+
+export interface PaperComparison {
+  phase: string;
+  pairs: number;
+  coveragePct: number;
+  /** @nullable */
+  deltaNetRoiPct: number | null;
+  interval?: PaperInterval;
+  conclusion: string;
+  residuals: string[];
+}
+
+export interface PaperDashboard {
+  generatedAt: string;
+  activationAllowed: boolean;
+  runs: PaperRun[];
+  /** @nullable */
+  selectedRunId: string | null;
+  stats: PaperStats[];
+  comparisons: PaperComparison[];
+  rows: PaperOpportunity[];
+  page: number;
+  totalPages: number;
+  recorded: number;
+  holdoutHidden: boolean;
+  limitations: string[];
+}
+
+export interface PaperAuditRow {
+  tradeId: string;
+  eventTitle: string;
+  side: string;
+  price: number;
+  publicAmountUsd: number;
+  observedAt: string;
+  /** @nullable */
+  queuedAt: string | null;
+  /** @nullable */
+  capturedAt: string | null;
+  /** @nullable */
+  confirmedAt: string | null;
+  /** @nullable */
+  exchangeToQueueSeconds: number | null;
+  /** @nullable */
+  queueToDecisionSeconds: number | null;
+  /** @nullable */
+  decisionToConfirmSeconds: number | null;
+  /** @nullable */
+  totalSeconds: number | null;
+  attempts: number;
+  /** @nullable */
+  historicalGames: number | null;
+  /** @nullable */
+  historicalTrades: number | null;
+  /** @nullable */
+  frozenRoiPct: number | null;
+  /** @nullable */
+  entryFeeUsd: number | null;
+  /** @nullable */
+  result: string | null;
+  /** @nullable */
+  hypotheticalGrossProfitUsd: number | null;
+  notes: string[];
+}
+
+export type PaperAuditScreenshotArithmetic = {[key: string]: number};
+
+export interface PaperAudit {
+  generatedAt: string;
+  environment: string;
+  screenshotStatus: string;
+  notes: string[];
+  screenshotArithmetic: PaperAuditScreenshotArithmetic;
+  rows: PaperAuditRow[];
+}
+
 export interface ApiError {
   error: string;
 }
@@ -932,6 +1256,28 @@ export type OwnerRequiredResponse = ApiError;
  * Owner authorization is unavailable or not configured
  */
 export type OwnerUnavailableResponse = ApiError;
+
+export type GetPaperDashboardParams = {
+runId?: string;
+/**
+ * @minimum 1
+ * @maximum 2000
+ */
+page?: number;
+};
+
+export type ExportPaperRunParams = {
+id: string;
+format: ExportPaperRunFormat;
+};
+
+export type ExportPaperRunFormat = typeof ExportPaperRunFormat[keyof typeof ExportPaperRunFormat];
+
+
+export const ExportPaperRunFormat = {
+  json: 'json',
+  csv: 'csv',
+} as const;
 
 export type GetKalshiNotificationsParams = {
 /**

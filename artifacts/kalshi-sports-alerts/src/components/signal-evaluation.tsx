@@ -11,6 +11,7 @@ import {
   type SignalRule,
 } from '@workspace/api-client-react';
 import { errorText } from '@/components/history-export';
+import { PaperValidation } from '@/components/paper-validation';
 import './signal-evaluation.css';
 
 const TZ = 'America/New_York';
@@ -98,6 +99,7 @@ export function SignalEvaluation() {
 
       {q.isLoading && <Loading />}
       {data && <Body data={data} stale={stale} setPage={setPage} />}
+      <PaperValidation />
     </div>
   );
 }
