@@ -8,8 +8,8 @@ export function NotificationRoiChoice({ value, saved, disabled, onChange }: {
     <select id="notification-roi-basis" data-testid="select-notification-roi-basis"
       value={value} disabled={disabled} aria-describedby="notification-roi-help"
       onChange={event => onChange(event.target.value as RoiBasis)}>
-      <option value="gross">ROI bruto ≥ +7,0% · cálculo original</option>
-      <option value="net">ROI neto estimado ≥ +7,0% · después de comisión</option>
+      <option value="gross">ROI bruto ≥ +15,0% · cálculo original</option>
+      <option value="net">ROI neto estimado ≥ +15,0% · después de comisión</option>
     </select>
     <p className="small-note" id="notification-roi-help">
       Guardado: <strong>{saved === 'gross' ? 'bruto, antes de comisiones' : 'neto estimado'}</strong>.

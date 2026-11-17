@@ -73,7 +73,7 @@ class FakeNotificationsApi implements NotificationApi {
   failDelete = false;
   failContext = false;
   failRoi = false;
-  roiResult: NotificationRoi | null = grossRoi({ roiPct: 7, games: 50, trades: 30 });
+  roiResult: NotificationRoi | null = grossRoi({ roiPct: 15, games: 50, trades: 30 });
   roiTrades: NotificationJob[] = [];
   roiBases: RoiBasis[] = [];
   async roi(trade: NotificationJob, basis: RoiBasis) {
@@ -131,7 +131,8 @@ test("a new qualifying trade sends a push-enabled text alert, not another graph"
   assert.match(String(body.text), /New England &amp; Chicago/);
   assert.match(String(body.text), /A favor de «Chicago gana»/);
   assert.match(String(body.text), /ROI histórico comparable \(SÍ\)/);
-  assert.match(String(body.text), /Bruto: \+7,00% · Neto estimado: no disponible/);
+  assert.match(String(body.text), /Bruto: \+15,00% · Neto estimado: no disponible/);
+  assert.match(String(body.text), /Filtro elegido: bruto ≥ \+15,0%/);
   assert.match(String(body.text), /50 partidos · 30 operaciones verificadas/);
   assert.match(String(body.text), /neto con comisión taker actual/);
   assert.match(String(body.text), /No son ganancias del trader ni una garantía/);
@@ -213,7 +214,7 @@ test("paused monitoring, missing destinations, foreign chats and trades below th
   assert.equal(other.api.calls.length, 0);
 });
 
-test("all three amount bands can notify at +7%, including exact $1k, $5k and $10k boundaries", async () => {
+test("all three amount bands can notify at +15%, including exact $1k, $5k and $10k boundaries", async () => {
   for (const notional of [1000, 2500, 5000, 5000.01, 7500, 9999.99, 10000, 10000.01, 25000]) {
     const { store, api, worker } = setup();
     store.add(sample("all-bands", notional));
@@ -285,13 +286,15 @@ test("notification wording escapes names and distinguishes against/unknown direc
   assert.match(notificationText(row), /no identifica al operador ni confirma una venta o cierre/);
 });
 
-test("ROI +7% is inclusive; lower or unavailable ROI and insufficient samples never notify", async () => {
+test("ROI +15% is inclusive; lower or unavailable ROI and insufficient samples never notify", async () => {
   const base = { games: 50, trades: 30 };
   for (const [roi, allowed] of [
     [{ ...base, roiPct: 6.99 }, false],
     [{ ...base, roiPct: 6.99999999 }, false],
-    [{ ...base, roiPct: 7 }, true],
-    [{ ...base, roiPct: 7.01 }, true],
+    [{ ...base, roiPct: 7 }, false],
+    [{ ...base, roiPct: 14.99999999 }, false],
+    [{ ...base, roiPct: 15 }, true],
+    [{ ...base, roiPct: 15.01 }, true],
     [{ ...base, roiPct: -10 }, false],
     [{ ...base, roiPct: 0 }, false],
     [{ ...base, roiPct: NaN }, false],
@@ -375,7 +378,7 @@ test("filter draining is bounded and still sends at most one notice per tick", a
   assert.equal(api.calls.length, 0);
   await worker.tick(settings);
   assert.equal(api.roiTrades.length, 12);
-  api.roiResult = grossRoi({ roiPct: 7, games: 50, trades: 30 });
+  api.roiResult = grossRoi({ roiPct: 15, games: 50, trades: 30 });
   store.add(sample("eligible-1"));
   store.add(sample("eligible-2"));
   await worker.tick(settings);
@@ -389,11 +392,11 @@ test("selected basis reaches the worker, cannot silently revert, and filtered tr
   assert.equal(api.roiBases[0], "net");
   assert.equal(api.calls.length, 0, "A gross-only lookup cannot satisfy a net request");
   assert.ok(store.row(settings.chatId, "gross-only").skippedAt);
-  api.roiResult = { roiPct: 7, grossRoiPct: 11, netRoiPct: 7, basis: "net", games: 50, trades: 30 };
+  api.roiResult = { roiPct: 15, grossRoiPct: 20, netRoiPct: 15, basis: "net", games: 50, trades: 30 };
   store.add(sample("net-pass"));
   await worker.tick({ ...settings, notificationRoiBasis: "net" });
   assert.equal(api.calls.filter(c => c.method === "sendMessage").length, 1);
-  assert.match(String(api.calls[0].body.text), /Bruto: \+11,00% · Neto estimado: \+7,00%/);
+  assert.match(String(api.calls[0].body.text), /Bruto: \+20,00% · Neto estimado: \+15,00%/);
   assert.match(String(api.calls[0].body.text), /Filtro elegido: neto estimado/);
   assert.match(String(api.calls[0].body.text), /No son ganancias del trader/);
   await new TelegramTradeNotifications(store, api, now).tick(settings);
@@ -405,7 +408,7 @@ const prospectiveJob = (id = "prospective") => ({
   createdTime: new Date(clock.getTime() - 2000), queuedAt: new Date(clock.getTime() - 1000),
 });
 const prospectiveRoi = (): NotificationRoi => ({
-  ...grossRoi({ roiPct: 7, games: 50, trades: 30 })!,
+  ...grossRoi({ roiPct: 15, games: 50, trades: 30 })!,
   evidence: {
     historyAsOf: new Date(clock.getTime() - 60000).toISOString(), gameId: "game", gameIdentity: "milestone",
     feeModel: feeModel(null, clock), feeAssumptions: SIGNAL_FEE_ASSUMPTIONS,
@@ -438,6 +441,31 @@ test("a new signal is frozen BEFORE sending; restarts/retries cannot replace its
   assert.match(String(requests[1].body.text), /60¢/);
   await new TelegramTradeNotifications(store, api, now).tick(settings);
   assert.equal(api.calls.filter(call => call.method === "sendMessage").length, 2);
+});
+
+test("frozen retries below the new cutoff are skipped without rewriting their original evidence", async () => {
+  const { store, api, worker, advance } = setup();
+  store.add(prospectiveJob("old-rule"));
+  api.roiResult = prospectiveRoi();
+  api.failSend = "Temporary failure";
+  await worker.tick(settings);
+  const row = store.row(settings.chatId, "old-rule");
+  assert.ok(row.evidence);
+  row.evidence = {
+    ...row.evidence,
+    rule: { ...row.evidence.rule, minimumRoiPct: 7, version: "previous-rule" },
+    historicalRoiPct: 14.999999,
+    historicalGrossRoiPct: 14.999999,
+  };
+  const original = JSON.stringify(row.evidence);
+  advance(15000);
+  api.failRoi = true;
+  await worker.tick(settings);
+  assert.ok(row.skippedAt);
+  assert.equal(row.sentAt, undefined);
+  assert.equal(JSON.stringify(row.evidence), original);
+  assert.equal(api.calls.filter(call => call.method === "sendMessage").length, 1);
+  assert.equal(api.roiTrades.length, 1);
 });
 
 test("failed evidence persistence prevents sending and preserves the outbox retry", async () => {

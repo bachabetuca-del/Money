@@ -349,7 +349,7 @@ function Home() {
                       />
                     </div>
                     <div id="notional-help" className={`small-note ${validMinimum ? '' : 'err'}`} style={{ marginTop: 7 }}>
-                      {validMinimum ? 'Las bandas menores conservan su propio rango. La sección grande nunca baja de $10,000. Este umbral no limita los avisos: pueden llegar de cualquiera de las tres bandas, desde $1,000, con ROI histórico comparable de +7,0% o más.' : 'Introduce un importe válido entre $1 y $999,999,999,999.99.'}
+                      {validMinimum ? 'Las bandas menores conservan su propio rango. La sección grande nunca baja de $10,000. Este umbral no limita los avisos: pueden llegar de cualquiera de las tres bandas, desde $1,000, con ROI histórico comparable de +15,0% o más.' : 'Introduce un importe válido entre $1 y $999,999,999,999.99.'}
                     </div>
                   </div>
 
@@ -404,7 +404,7 @@ function Home() {
                     </div>
                     <p className="setup-copy">
                       {dashboard.telegramConfigured
-                        ? <>Navega por Deporte → Partido → Mercado. La gráfica se actualiza en el mismo mensaje. Se avisan operaciones nuevas de <strong>cualquiera de las tres bandas, desde $1,000</strong>, con <strong>ROI histórico {dashboard.notificationRoiBasis === 'net' ? 'neto estimado' : 'bruto'} ≥ +7,0%</strong>, respaldado por al menos 50 partidos distintos y 30 operaciones verificadas. Se compara el mismo deporte, tipo de apuesta, lado SÍ/NO y rango de odds dentro de su propio rango de monto. Sin muestra suficiente no hay aviso. {dashboard.notificationRoiBasis === 'net' ? 'El neto descuenta la comisión taker estimada; sin tarifas completas no se avisa. No incluye deslizamiento ni todos los costes personales.' : 'El bruto no descuenta comisiones; +7% bruto no significa +7% de beneficio neto.'} No es una garantía de ganancias. Se conserva únicamente el último aviso; el historial y las gráficas no se filtran por ROI.</>
+                        ? <>Navega por Deporte → Partido → Mercado. La gráfica se actualiza en el mismo mensaje. Se avisan operaciones nuevas de <strong>cualquiera de las tres bandas, desde $1,000</strong>, con <strong>ROI histórico {dashboard.notificationRoiBasis === 'net' ? 'neto estimado' : 'bruto'} ≥ +15,0%</strong>, respaldado por al menos 50 partidos distintos y 30 operaciones verificadas. Se compara el mismo deporte, tipo de apuesta, lado SÍ/NO y rango de odds dentro de su propio rango de monto. Sin muestra suficiente no hay aviso. {dashboard.notificationRoiBasis === 'net' ? 'El neto descuenta la comisión taker estimada; sin tarifas completas no se avisa. No incluye deslizamiento ni todos los costes personales.' : 'El bruto no descuenta comisiones; +15% bruto no significa +15% de beneficio neto.'} No es una garantía de ganancias. Se conserva únicamente el último aviso; el historial y las gráficas no se filtran por ROI.</>
                         : <>Abre tu bot en Telegram y envía <strong>/start</strong>. Después comprueba la vinculación del chat.</>}
                     </p>
                     {!dashboard.telegramConfigured && (

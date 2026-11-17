@@ -7,7 +7,7 @@ import { ROI_MONEY_BANDS, rawNetRoiPct, validatedFees } from "./roi-performance"
 import type { RoiBasis, SignalEvidence } from "@workspace/api-zod";
 export type { RoiBasis } from "@workspace/api-zod";
 
-export const NOTIFICATION_MIN_ROI_PCT = 7;
+export const NOTIFICATION_MIN_ROI_PCT = 15;
 export type NotificationRoi = {
   roiPct: number; games: number; trades: number;
   basis: RoiBasis; grossRoiPct: number; netRoiPct: number | null;

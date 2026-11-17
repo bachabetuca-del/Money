@@ -51,8 +51,8 @@ test("isolated PostgreSQL fixtures: activation, live-only enrollment, immutable 
       });
     };
     const roi = (fee: number | null = 3.5, net = false): NotificationRoi => ({
-      roiPct: net ? 7 : 10, grossRoiPct: 10, netRoiPct: 7, basis: net ? "net" : "gross",
-      games: 10, trades: 30,
+      roiPct: net ? 15 : 20, grossRoiPct: 20, netRoiPct: 15, basis: net ? "net" : "gross",
+      games: 50, trades: 30,
       evidence: {
         historyAsOf: at(-60).toISOString(), gameId: "same-game", gameIdentity: "milestone",
         feeModel: { ...feeModel(null, zero), version: net ? "frozen-model-two" : "frozen-model-one" },

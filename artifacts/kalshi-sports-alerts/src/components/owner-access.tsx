@@ -86,7 +86,7 @@ export function OwnerLanding() {
     <img src={`${basePath}/logo.svg`} width="240" height="52" alt="Fieldnote" />
     <p className="eyebrow">Private Kalshi sports monitor</p>
     <h1>Your sports signal.<br />One quiet dashboard.</h1>
-    <p>Live Telegram charts, separate trade-value sections, and notifications for fresh individual sports trades across all tracked amounts, starting at $1,000, with comparable historical ROI of at least +7.0% and a sufficient verified sample.</p>
+    <p>Live Telegram charts, separate trade-value sections, and notifications for fresh individual sports trades across all tracked amounts, starting at $1,000, with comparable historical ROI of at least +15.0% and a sufficient verified sample.</p>
     <p>Monitoring runs on the server—not in this browser. Dashboard settings and Telegram pairing are restricted to the owner.</p>
     <Link className="button" href="/sign-in">Owner sign in</Link>
   </section></div>;

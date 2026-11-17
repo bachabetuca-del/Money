@@ -1,6 +1,6 @@
 import { escapeHtml, betLabelEs, type MarketCardTrade } from "./telegram-market-card";
 import { directionLabel, directionMeaning, publicDirection, DIRECTION_NOTE } from "./telegram-trade-direction";
-import { notificationRoiBasis, qualifiesForNotificationRoi, type NotificationRoi, type RoiBasis } from "./telegram-notification-roi";
+import { NOTIFICATION_MIN_ROI_PCT, notificationRoiBasis, qualifiesForNotificationRoi, type NotificationRoi, type RoiBasis } from "./telegram-notification-roi";
 import { shouldCaptureTrade } from "./kalshi-trade-bands";
 import type { SignalEvidence } from "@workspace/api-zod";
 import { frozenNotification } from "./signal-evaluation";
@@ -57,7 +57,7 @@ export function notificationText(trade: NotificationTrade, roi?: NotificationRoi
     ...(roi ? [
       `<b>ROI histórico comparable (${direction === "yes" ? "SÍ" : "NO"})</b>`,
       `Bruto: ${pct(roi.grossRoiPct)} · Neto estimado: ${pct(roi.netRoiPct)}`,
-      `<b>Filtro elegido: ${roi.basis === "net" ? "neto estimado" : "bruto"} ≥ +7,0%</b>`,
+      `<b>Filtro elegido: ${roi.basis === "net" ? "neto estimado" : "bruto"} ≥ +${NOTIFICATION_MIN_ROI_PCT.toLocaleString("es-ES", { minimumFractionDigits: 1 })}%</b>`,
       `${roi.games.toLocaleString("es-ES")} partidos · ${roi.trades.toLocaleString("es-ES")} operaciones verificadas`,
       "<i>$100 por operación; neto con comisión taker actual, hasta liquidación y sin deslizamiento. No son ganancias del trader ni una garantía.</i>",
     ] : []),
@@ -117,6 +117,13 @@ export class TelegramTradeNotifications {
               frozen = frozenNotification(evidence, job);
               trade = frozen.trade; roi = frozen.roi;
             }
+          }
+          // A previously frozen retry keeps its original evidence, but cannot
+          // bypass a stricter current cutoff. Never recompute it from later history.
+          if (!roi || !Number.isFinite(roi.roiPct) || roi.roiPct < NOTIFICATION_MIN_ROI_PCT) {
+            await this.store.skipped(job, this.now());
+            this.log("filtered", job.tradeId);
+            continue;
           }
           const result = await this.api.request<{ message_id: number }>("sendMessage", {
             chat_id: chatId,

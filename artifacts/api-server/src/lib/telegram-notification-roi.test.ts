@@ -11,7 +11,7 @@ const trade = {
   ticker: "KXEPLGAME-LIVE-A", sport: "Soccer", eventTitle: "A vs B", marketTitle: "A wins",
   outcomeSide: "yes", bookSide: "bid", price: .5, notional: 15000,
 };
-const history = (roi = 7, patch: Partial<RoiRollup> = {}): RoiRollup[] =>
+const history = (roi = 15, patch: Partial<RoiRollup> = {}): RoiRollup[] =>
   Array.from({ length: 50 }, (_, i) => ({
     ticker: `KXEPLGAME-HIST${i}-A`, sport: "Soccer", eventTitle: "A vs B", marketTitle: "A wins",
     gameId: `game-${i}`, marketUrl: "", bucket: 5, side: "yes", moneyBand: "large",
@@ -23,17 +23,17 @@ const history = (roi = 7, patch: Partial<RoiRollup> = {}): RoiRollup[] =>
 
 test("notification ROI agrees with the ranking and website comparison, not a color category", () => {
   const rows = history(), result = buildNotificationRoiLookup(rows)(trade);
-  assert.deepEqual(result, expectedGross(7));
+  assert.deepEqual(result, expectedGross(15));
   assert.equal(result?.roiPct, buildRoiRanking(rows, "segment", 1, { now }).rows[0].roiPct);
   const [market] = buildExplorerRoi([{ ticker: trade.ticker, sport: trade.sport, marketType: "winner" }],
     [{ ticker: trade.ticker, side: "yes", price: trade.price, observedAt: now.toISOString() }], rows, now);
-  assert.equal(market.signals[0].level, "medium", "A +7% notice must not require the website's +10% green threshold");
+  assert.equal(market.signals[0].level, "good");
   assert.equal(qualifiesForNotificationRoi(result), true);
 });
 
-test("raw ROI below +7% cannot qualify even when presentation rounds it up to +7%", () => {
-  const rows = history(6.999999);
-  assert.equal(buildRoiRanking(rows, "segment", 1, { now }).rows[0].roiPct, 7);
+test("raw ROI below +15% cannot qualify even when presentation rounds it up to +15%", () => {
+  const rows = history(14.999999);
+  assert.equal(buildRoiRanking(rows, "segment", 1, { now }).rows[0].roiPct, 15);
   assert.equal(qualifiesForNotificationRoi(buildNotificationRoiLookup(rows)(trade)), false);
 });
 
@@ -58,7 +58,7 @@ test("small, medium and large executions use their own histories with nonoverlap
   ]) {
     const result = lookup({ ...trade, notional });
     assert.deepEqual(result, expectedGross(roiPct), String(notional));
-    assert.equal(qualifiesForNotificationRoi(result), roiPct >= 7);
+    assert.equal(qualifiesForNotificationRoi(result), roiPct >= 15);
   }
   for (const notional of [0, 999.99, NaN, Infinity, -Infinity]) {
     assert.equal(lookup({ ...trade, notional }), null);
@@ -73,11 +73,11 @@ test("legacy settings stay gross; a net choice is explicit and unknown settings 
   assert.throws(() => notificationRoiBasis("best"), /Unknown/);
 });
 
-test("the same +7% gross history passes gross but not net after commissions", () => {
-  const rows = history(7, { fees: 10.5, feeTrades: 3 });
+test("the same +15% gross history passes gross but not net after commissions", () => {
+  const rows = history(15, { fees: 10.5, feeTrades: 3 });
   const gross = buildNotificationRoiLookup(rows)(trade);
   const net = buildNotificationRoiLookup(rows, "net")(trade);
-  assert.equal(gross?.grossRoiPct, 7);
+  assert.equal(gross?.grossRoiPct, 15);
   assert.equal(qualifiesForNotificationRoi(gross), true);
   assert.equal(qualifiesForNotificationRoi(net), false);
   assert.equal(net?.basis, "net");
@@ -86,14 +86,14 @@ test("the same +7% gross history passes gross but not net after commissions", ()
     Number(net!.roiPct.toFixed(4)));
 });
 
-test("net +7% is inclusive before presentation rounding; a rounded-up result cannot qualify", () => {
-  for (const [roiPct, allowed] of [[6.999999, false], [7, true], [7.000001, true]] as const) {
+test("net +15% is inclusive before presentation rounding; a rounded-up result cannot qualify", () => {
+  for (const [roiPct, allowed] of [[7, false], [14.999999, false], [15, true], [15.000001, true]] as const) {
     assert.equal(qualifiesForNotificationRoi({
       ...expectedGross(20), basis: "net", netRoiPct: roiPct, roiPct,
     }), allowed);
   }
-  const below = history(0, { fees: 12, feeTrades: 3, profit: 33.83999999 });
-  assert.equal(buildRoiRanking(below, "segment", 1, { now }).rows[0].net.roiPct, 7);
+  const below = history(0, { fees: 12, feeTrades: 3, profit: 58.79999999 });
+  assert.equal(buildRoiRanking(below, "segment", 1, { now }).rows[0].net.roiPct, 15);
   assert.equal(qualifiesForNotificationRoi(buildNotificationRoiLookup(below, "net")(trade)), false);
 });
 
@@ -112,9 +112,9 @@ test("net never borrows gross, a different money band or incomplete fee coverage
 });
 
 test("both bases honor sample minima and exact amount boundaries", () => {
-  const rows = [...history(7, { moneyBand: "small", fees: 0, feeTrades: 3 }),
-    ...history(6.999999, { moneyBand: "medium", fees: 0, feeTrades: 3 }),
-    ...history(8, { moneyBand: "large", fees: 0, feeTrades: 3 })];
+  const rows = [...history(15, { moneyBand: "small", fees: 0, feeTrades: 3 }),
+    ...history(14.999999, { moneyBand: "medium", fees: 0, feeTrades: 3 }),
+    ...history(16, { moneyBand: "large", fees: 0, feeTrades: 3 })];
   for (const basis of ["gross", "net"] as const) {
     const lookup = buildNotificationRoiLookup(rows, basis);
     for (const [notional, allowed] of [[999.99, false], [1000, true], [5000, true], [5000.0001, false],
@@ -139,7 +139,7 @@ test("a profitable different amount band cannot substitute for missing evidence 
 });
 
 test("NO uses its own execution price, with canonical direction fallback only when needed", () => {
-  const lookup = buildNotificationRoiLookup(history(8, { side: "no", bucket: 2 }));
+  const lookup = buildNotificationRoiLookup(history(15, { side: "no", bucket: 2 }));
   assert.equal(qualifiesForNotificationRoi(lookup({ ...trade, outcomeSide: "no", price: .25 })), true);
   assert.equal(lookup({ ...trade, outcomeSide: "no", price: .75 }), null);
   assert.equal(qualifiesForNotificationRoi(lookup({
@@ -173,7 +173,7 @@ test("unknown market, side or sport and invalid prices fail closed; last odds bu
     { sport: "" }, { outcomeSide: "unknown", bookSide: "unknown" },
     { ticker: "UNKNOWN", eventTitle: null, marketTitle: null },
   ]) assert.equal(lookup({ ...trade, ...patch }), null);
-  assert.equal(qualifiesForNotificationRoi(buildNotificationRoiLookup(history(7, { bucket: 9 }))({
+  assert.equal(qualifiesForNotificationRoi(buildNotificationRoiLookup(history(15, { bucket: 9 }))({
     ...trade, price: 1,
   })), true);
 });

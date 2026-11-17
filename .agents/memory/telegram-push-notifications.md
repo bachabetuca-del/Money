@@ -15,7 +15,7 @@ Keep only the latest notification. Confirm and save delivery of a new notice bef
 
 **How to apply:** Track notification delivery separately from graph publication and trade ingestion. A trade appearing in history or a graph does not prove a notification was sent. Preserve delivery retries and notification message identities through restarts; retry old-notice cleanup separately without resending confirmed deliveries. Telegram/phone mute settings remain outside the bot's control.
 
-The user wants Telegram notifications “de +7.0 ROI en adelante”: require comparable historical ROI of at least +7.0%, inclusive, in addition to the fresh-trade conditions.
+The user selected “Solo ROI de +15% o más”: require comparable historical ROI of at least +15.0%, inclusive, in addition to the fresh-trade conditions. This supersedes the earlier +7.0% cutoff.
 
 **Why:** The user asked to restrict push notifications by historical performance, not to remove lower-ROI executions from charts or saved history.
 
