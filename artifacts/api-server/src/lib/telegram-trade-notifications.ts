@@ -36,7 +36,13 @@ export interface NotificationApi {
   context(ticker: string): Promise<{ eventTitle: string; marketTitle: string }>;
   roi(trade: NotificationJob, basis: RoiBasis): Promise<NotificationRoi | null>;
   active?(ticker: string): Promise<boolean>;
+  observe?(event: NotificationObservation): void;
 }
+export type NotificationObservation = {
+  stage: "dequeued" | "roi_started" | "roi_complete" | "decision" | "send_started" | "confirmed" | "failed";
+  job: NotificationJob; at: Date; roi?: NotificationRoi | null; accepted?: boolean;
+  reason?: string; telegramDate?: number; retryAfterMs?: number;
+};
 
 export function notificationText(trade: NotificationTrade, roi?: NotificationRoi) {
   const amount = trade.notional.toLocaleString("en-US", { style: "currency", currency: "USD" });
@@ -84,6 +90,11 @@ export class TelegramTradeNotifications {
     private now: () => Date = () => new Date(),
     private log: (event: "sent" | "filtered" | "failed" | "cleanup-failed", detail: string) => void = () => undefined,
   ) {}
+  private observe(event: Omit<NotificationObservation, "at">) {
+    // Research is observational. A slow/unavailable research store must never
+    // block, retry, suppress or duplicate an actual Telegram delivery.
+    try { this.api.observe?.({ ...event, at: this.now() }); } catch { /* isolated observer */ }
+  }
 
   async tick(settings: { enabled: boolean; chatId: string | null; notificationRoiBasis?: RoiBasis }) {
     if (this.busy || !settings.enabled || !settings.chatId) return;
@@ -96,11 +107,13 @@ export class TelegramTradeNotifications {
       for (let checked = 0; checked < 10; checked++) {
         const job = await this.store.next(chatId, this.now());
         if (!job) break;
+        this.observe({ stage: "dequeued", job });
         try {
           let frozen = job.evidence ? frozenNotification(job.evidence, job) : null;
           let trade = frozen?.trade ?? job;
           if (!shouldCaptureTrade(trade.notional)) throw new Error("Non-qualifying trade in notification queue.");
           if (this.api.active && !await this.api.active(trade.ticker)) {
+            this.observe({ stage: "decision", job: trade, accepted: false, reason: "inactive_market" });
             await this.store.skipped(job, this.now());
             continue;
           }
@@ -112,7 +125,12 @@ export class TelegramTradeNotifications {
               throw new Error("Readable game and bet details are not available yet.");
             }
             trade = { ...trade, ...context };
+            this.observe({ stage: "roi_started", job: trade });
             const currentRoi = await this.api.roi(trade, basis);
+            this.observe({ stage: "roi_complete", job: trade });
+            this.observe({ stage: "decision", job: trade, roi: currentRoi,
+              accepted: qualifiesForNotificationRoi(currentRoi) && currentRoi.basis === basis,
+              reason: "roi_or_sample" });
             if (!qualifiesForNotificationRoi(currentRoi) || currentRoi.basis !== basis) {
               await this.store.skipped(job, this.now());
               this.log("filtered", job.tradeId);
@@ -128,6 +146,8 @@ export class TelegramTradeNotifications {
               trade = frozen.trade; roi = frozen.roi;
             }
           }
+          if (job.evidence) this.observe({ stage: "decision", job: trade, roi: roi ?? null,
+            accepted: true, reason: "frozen_retry" });
           // A previously frozen retry keeps its original evidence, but cannot
           // bypass a stricter current cutoff. Never recompute it from later history.
           if (!roi || !Number.isFinite(roi.roiPct) || roi.roiPct < NOTIFICATION_MIN_ROI_PCT) {
@@ -135,7 +155,8 @@ export class TelegramTradeNotifications {
             this.log("filtered", job.tradeId);
             continue;
           }
-          const result = await this.api.request<{ message_id: number }>("sendMessage", {
+          this.observe({ stage: "send_started", job: trade });
+          const result = await this.api.request<{ message_id: number; date?: number }>("sendMessage", {
             chat_id: chatId,
             text: notificationText(trade, roi),
             parse_mode: "HTML",
@@ -144,6 +165,7 @@ export class TelegramTradeNotifications {
             reply_markup: { inline_keyboard: [[{ text: "Abrir en Kalshi", url: trade.marketUrl }]] },
           });
           if (!result.result?.message_id) throw new Error("Telegram did not confirm the notification message.");
+          this.observe({ stage: "confirmed", job: trade, telegramDate: result.result.date });
           await this.store.sent(job, result.result.message_id, this.now());
           this.log("sent", job.tradeId);
           break;
@@ -151,6 +173,7 @@ export class TelegramTradeNotifications {
           const message = error instanceof Error ? error.message : "Notification delivery failed.";
           const requestedDelay = Number(message.match(/retry after (\d+)/i)?.[1] ?? 0) * 1000;
           const delay = Math.max(requestedDelay, 15_000 * 2 ** Math.min(job.attempts, 5));
+          this.observe({ stage: "failed", job, reason: "notification_retry", retryAfterMs: delay });
           await this.store.failed(chatId, job.tradeId, message, new Date(this.now().getTime() + delay));
           this.log("failed", message);
           break;

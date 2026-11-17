@@ -17,7 +17,10 @@ export async function getTradeNotificationRoi(trade: NotificationJob, basis: Roi
       groupBy: "segment", window: "all", band: "all", direction: "all",
       coverage: "verified", minGames: 1, page: 1,
     }, now),
-    db.select({ milestoneId: kalshiGameStatusTable.milestoneId, eventTicker: kalshiGameStatusTable.eventTicker })
+    db.select({ milestoneId: kalshiGameStatusTable.milestoneId, eventTicker: kalshiGameStatusTable.eventTicker,
+      state: kalshiGameStatusTable.state, checkedAt: kalshiGameStatusTable.checkedAt,
+      startsAt: kalshiGameStatusTable.startsAt, marketStatus: kalshiGameStatusTable.marketStatus,
+      terminal: kalshiGameStatusTable.marketTerminal })
       .from(kalshiGameStatusTable).where(eq(kalshiGameStatusTable.ticker, trade.ticker)).limit(1),
   ]);
   let choices = lookups.get(snapshot.rows);
@@ -27,13 +30,17 @@ export async function getTradeNotificationRoi(trade: NotificationJob, basis: Roi
     lookup = buildNotificationRoiLookup(snapshot.rows, basis);
     choices.set(basis, lookup);
   }
-  const roi = lookup(trade);
+  const identity = signalGameIdentity(trade.ticker, game);
+  const roi = lookup(trade, identity.gameId);
   if (!roi) return null;
   const feeRule = marketFeeRule(fees, trade.ticker, game?.eventTicker ?? null, now);
   return {
     ...roi,
+    research: roi.research ? { ...roi.research, phase: game?.state ?? "unknown",
+      phaseAsOf: game?.checkedAt.toISOString() ?? null, startsAt: game?.startsAt?.toISOString() ?? null,
+      marketStatus: game?.marketStatus ?? null, terminal: game?.terminal ?? false } : undefined,
     evidence: {
-      historyAsOf: snapshot.generatedAt, ...signalGameIdentity(trade.ticker, game),
+      historyAsOf: snapshot.generatedAt, ...identity,
       feeModel: snapshot.feeModel, feeAssumptions: SIGNAL_FEE_ASSUMPTIONS,
       feeType: feeRule?.feeType ?? null, feeMultiplier: feeRule?.multiplier ?? null,
       entryFeeUsd: estimateHypotheticalEntryFee(trade.price, feeRule),

@@ -1,4 +1,5 @@
 import { and, count, desc, eq, gte, isNotNull } from "drizzle-orm";
+import { paperRuntime } from "./paper/runtime";
 import {
   db,
   kalshiAlertsTable,
@@ -198,6 +199,14 @@ const telegramDashboard = new TelegramDashboard(telegramDashboardStore, {
 const tradeNotifications = new TelegramTradeNotifications(tradeNotificationStore, {
   request: telegramRequest, context: getTradeContext, active: canMonitorMarket,
   roi: getTradeNotificationRoi,
+  observe: event => {
+    paperRuntime.observe(event);
+    if (event.stage === "confirmed") logger.info({
+      tradeId: event.job.tradeId, executionAt: event.job.createdTime.toISOString(),
+      queuedAt: event.job.queuedAt?.toISOString(), confirmationAt: event.at.toISOString(),
+      telegramServerDate: event.telegramDate ?? null, attempts: event.job.attempts,
+    }, "Telegram notice timing");
+  },
 }, () => new Date(), (event, detail) => {
   if (event === "sent") logger.info({ tradeId: detail }, "Telegram trade notification delivered");
   else if (event === "filtered") logger.debug({ tradeId: detail }, "Telegram notice skipped: historical ROI or sample below minimum");
@@ -609,6 +618,7 @@ async function startTradeStream() {
     await recoveryWorker.initialize();
     monitorInitialized = true;
     kalshiAuth = new KalshiAuth(process.env.KALSHI_API_KEY_ID ?? "", process.env.KALSHI_PRIVATE_KEY ?? "");
+    paperRuntime.start(kalshiAuth);
     await refreshAccountQuota();
     // Saved coverage is restored before opening the stream. Catch-up runs in
     // bounded background pages; it never holds the socket closed until finished.
@@ -624,7 +634,9 @@ async function startTradeStream() {
         // than lose them. Ingestion will validate sports before saving anything.
         if (!sportsSeries.size) {
           const execution = publicTradeExecution(trade);
-          return !!execution && shouldCaptureTrade(execution.notional);
+          const accepted = !!execution && shouldCaptureTrade(execution.notional);
+          if (accepted) paperRuntime.received(trade.trade_id);
+          return accepted;
         }
         const parsed = toPublicTrade(trade, sportsSeries);
         if (!parsed) {
@@ -633,7 +645,9 @@ async function startTradeStream() {
             rememberUnknownSeries(trade.ticker.split("-")[0], Date.parse(trade.created_time));
           }
         }
-        return !!parsed && shouldCaptureTrade(parsed.notional);
+        const accepted = !!parsed && shouldCaptureTrade(parsed.notional);
+        if (accepted) paperRuntime.received(trade.trade_id);
+        return accepted;
       },
       lifecycle: event => {
         if (event.series) rememberUnknownSeries(event.series, Date.now());

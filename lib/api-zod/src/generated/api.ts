@@ -111,6 +111,10 @@ export const GetPaperDashboardResponse = zod.object({
   "profitPerAlertUsd": zod.number().nullable(),
   "coveragePct": zod.number(),
   "withoutBestGameRoiPct": zod.number().nullable(),
+  "bestGameProfitUsd": zod.number().nullish(),
+  "bestGameSharePct": zod.number().nullish(),
+  "unresolvedExecutions": zod.number().int().optional(),
+  "settledCoveragePct": zod.number().optional(),
   "unknownLossScenarioRoiPct": zod.number().nullable(),
   "unknownWinScenarioRoiPct": zod.number().nullable(),
   "interval": zod.object({

@@ -1018,6 +1018,12 @@ export interface PaperStats {
   /** @nullable */
   withoutBestGameRoiPct: number | null;
   /** @nullable */
+  bestGameProfitUsd?: number | null;
+  /** @nullable */
+  bestGameSharePct?: number | null;
+  unresolvedExecutions?: number;
+  settledCoveragePct?: number;
+  /** @nullable */
   unknownLossScenarioRoiPct: number | null;
   /** @nullable */
   unknownWinScenarioRoiPct: number | null;

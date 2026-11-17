@@ -1086,6 +1086,10 @@ components:
         profitPerAlertUsd: { type: [number, "null"] }
         coveragePct: { type: number }
         withoutBestGameRoiPct: { type: [number, "null"] }
+        bestGameProfitUsd: { type: [number, "null"] }
+        bestGameSharePct: { type: [number, "null"] }
+        unresolvedExecutions: { type: integer }
+        settledCoveragePct: { type: number }
         unknownLossScenarioRoiPct: { type: [number, "null"] }
         unknownWinScenarioRoiPct: { type: [number, "null"] }
         interval: { $ref: "#/components/schemas/PaperInterval" }

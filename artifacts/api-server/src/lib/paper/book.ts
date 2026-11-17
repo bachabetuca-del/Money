@@ -47,7 +47,10 @@ export class PaperBook {
   remove(ticker: string) { this.books.delete(ticker); }
   /** False means reconnect/resubscribe. Never repair a gap with a later delta. */
   apply(message: Message, now: number): boolean {
-    if (!["orderbook_snapshot", "orderbook_delta"].includes(message.type ?? "")) return true;
+    const isBook = ["orderbook_snapshot", "orderbook_delta"].includes(message.type ?? "");
+    // Subscription acknowledgements can themselves consume a sequence number.
+    if (!isBook && !(["ok", "subscribed"].includes(message.type ?? "") &&
+        Number.isSafeInteger(message.sid) && Number.isSafeInteger(message.seq))) return true;
     if (!Number.isSafeInteger(message.seq) || !Number.isSafeInteger(message.sid) || !message.msg) {
       this.invalidate(); return false;
     }
@@ -55,6 +58,7 @@ export class PaperBook {
       this.invalidate(); return false;
     }
     this.sid = message.sid!; this.sequence = message.seq!;
+    if (!isBook) return true;
     const msg = message.msg, ticker = msg.market_ticker;
     if (typeof ticker !== "string") { this.invalidate(); return false; }
     const exchange = typeof message.sending_ts_ms === "number" ? message.sending_ts_ms :
@@ -90,10 +94,12 @@ export class PaperBook {
     const book = this.books.get(ticker);
     if (!book?.valid || this.sid === null || this.sequence === null ||
         now - book.receivedAt > 15000 || now - this.heartbeatAt > 15000 || now < book.receivedAt) return null;
+    const yes = top(book.yes), no = top(book.no);
+    if (yes[0] && no[0] && yes[0].price + no[0].price >= 1 - 1e-10) return null;
     return { ticker, session: this.session, sid: this.sid, seq: this.sequence, clock: book.clock,
       capturedAt: new Date(now).toISOString(), receivedAt: new Date(book.receivedAt).toISOString(),
       exchangeAt: book.exchangeAt === null ? null : new Date(book.exchangeAt).toISOString(),
-      yesBids: top(book.yes), noBids: top(book.no),
+      yesBids: yes, noBids: no,
       truncated: book.yes.size > 20 || book.no.size > 20 };
   }
 }

@@ -80,7 +80,7 @@ export function PaperValidation() {
 
       {d && (
         <>
-          {!d.activationAllowed && <div className="ws-notice warn" role="note" data-testid="notice-paper-activation"><div><strong>Este entorno no puede iniciar pruebas</strong><p>Puedes guardar borradores aquí, pero para registrar avisos hay que publicar la aplicación e iniciar la prueba desde la versión publicada. Nada se está registrando en este entorno.</p></div></div>}
+          {!d.activationAllowed && <div className="ws-notice warn" role="note" data-testid="notice-paper-activation"><div><strong>Este entorno no puede iniciar pruebas</strong><p>Puedes guardar borradores aquí, pero para registrar avisos hay que publicar la aplicación e iniciar la prueba desde la versión publicada. Nada se está registrando en este entorno. Un borrador guardado aquí no pasa a la versión publicada: allí tendrás que crear y revisar de nuevo el protocolo.</p></div></div>}
 
           <div className="pv-card">
             <div className="pv-runbar">
@@ -119,7 +119,7 @@ function RunPanel({ run, d, confirm, setConfirm, pending, onAct, error }: { run:
   const [dlErr, setDlErr] = useState('');
   async function download(format: 'json' | 'csv') {
     setDl(format); setDlErr('');
-    try { saveBlob(await exportPaperRun({ id: run.id, format }, { responseType: 'blob' } as never), `fieldnote-prueba-${run.id}.${format}`); }
+    try { saveBlob(await exportPaperRun({ id: run.id, format }, { responseType: 'blob' }), `fieldnote-prueba-${run.id}.${format}`); }
     catch (e) { setDlErr(errorText(e, 'No se pudo descargar.')); }
     finally { setDl(null); }
   }
@@ -195,7 +195,7 @@ function Comparisons({ list }: { list: PaperComparison[] }) {
   if (list.length === 0) return null;
   return (
     <div className="pv-card"><h3 className="pv-h3">Avisos frente a control</h3>
-      <p className="pv-sub">Diferencia de ROI neto entre avisos y operaciones de control emparejadas. Intervalos al 95% agrupando por partido. Ningún resultado garantiza beneficios futuros.</p>
+      <p className="pv-sub">Diferencia de ROI neto entre avisos y operaciones de control emparejadas. Intervalos al 95% agrupando por partido. Un ROI hipotético positivo no prueba rentabilidad, y 50 partidos no bastan para validar una regla. Ningún resultado garantiza beneficios futuros.</p>
       {list.map((c) => (
         <div key={c.phase} className="pv-cmp" data-testid={`card-paper-comparison-${c.phase}`}>
           <div><span className="sg-tag">{PHASE[c.phase] ?? c.phase}</span> <b className={tone(c.deltaNetRoiPct)}>{c.deltaNetRoiPct != null ? `${pct(c.deltaNetRoiPct)} de diferencia` : 'Evidencia insuficiente'}</b></div>
@@ -212,11 +212,11 @@ function Rows({ d, run, stale, go }: { d: PaperDashboard; run: PaperRun; stale: 
   return (
     <div className={`ws-card ${stale ? 'stale' : ''}`} aria-busy={stale}>
       <header><h3>Oportunidades registradas</h3><p>{n(d.recorded)} en total. Abre una fila para ver cada ejecución simulada y la evidencia guardada.</p></header>
-      {d.rows.length === 0 ? <div className="ws-empty small" data-testid="empty-paper-rows"><h3>{run.status === 'active' ? 'Esperando el primer aviso' : 'Sin oportunidades'}</h3><p>Sin filas no hay resultado: evidencia insuficiente.</p></div> : (
+      {d.rows.length === 0 ? <div className="ws-empty small" data-testid="empty-paper-rows"><h3>{run.status === 'active' ? 'Esperando el primer aviso' : 'Sin oportunidades'}</h3><p>Sin filas no hay resultado: evidencia insuficiente. Las ejecuciones nulas o desconocidas nunca cuentan como pérdidas.</p></div> : (
         <>
           <div className="ws-table-wrap" style={{ maxHeight: 'none' }}>
             <table className="ws-table pv-table" data-testid="table-paper-rows">
-              <thead><tr><th>Aviso</th><th className="r">Precio · ROI hist.</th><th>Fase</th><th>Ejecuciones</th><th /></tr></thead>
+              <thead><tr><th>Aviso</th><th className="r">Precio observado · ROI hist.</th><th>Fase</th><th>Ejecuciones</th><th /></tr></thead>
               <tbody>{d.rows.map((r) => <OppRow key={r.id} r={r} />)}</tbody>
             </table>
           </div>
@@ -242,7 +242,7 @@ function OppRow({ r }: { r: PaperOpportunity }) {
     <Fragment>
       <tr data-testid={`row-paper-${r.id}`}>
         <td className="wrap"><b>{r.eventTitle}</b><br /><small>{r.marketTitle}</small><br /><span className="time-text">{when(r.observedAt)}</span></td>
-        <td className="r"><span className="sg-tag">{r.side}</span> <span className="mono">{(r.price * 100).toFixed(0)}¢</span><br /><small>{pct(r.historicalRoiPct) ?? 'sin dato'} · {n(r.historicalGames)} part.</small></td>
+        <td className="r"><span className="sg-tag">{r.side}</span> <span className="mono" title="Precio observado en el aviso">{(r.price * 100).toFixed(0)}¢ obs.</span><br /><small>{pct(r.historicalRoiPct) ?? 'sin dato'} · {n(r.historicalGames)} part.</small></td>
         <td><span className="sg-tag">{PHASE[r.phase] ?? r.phase}</span>{!r.eligible && <><br /><small>No elegible: {r.reason}</small></>}</td>
         <td>{Object.entries(counts).map(([k, v]) => <span key={k} className={`sg-tag pv-ex ${k}`}>{EXEC[k as PaperExecution['status']] ?? k} {v}</span>)}{r.executions.length === 0 && <small>Ninguna</small>}</td>
         <td><button className="button ghost" aria-expanded={open} onClick={() => setOpen(!open)} data-testid={`button-paper-detail-${r.id}`}>{open ? 'Ocultar' : 'Detalle'}</button></td>
@@ -256,7 +256,7 @@ function OppRow({ r }: { r: PaperOpportunity }) {
             <dl>
               <div><dt>Previsto · capturado</dt><dd>{when(x.dueAt)} · {when(x.capturedAt)}</dd></div>
               <div><dt>Contratos · coste · comisión</dt><dd>{n(x.contracts)} · {usd(x.costUsd, false)} · {x.feeUsd != null ? usd(x.feeUsd, false) : 'desconocida'}</dd></div>
-              <div><dt>Precio medio · mejor oferta</dt><dd>{x.averagePrice != null ? `${(x.averagePrice * 100).toFixed(1)}¢` : 'n/d'} · {x.bestAsk != null ? `${(x.bestAsk * 100).toFixed(1)}¢` : 'n/d'}</dd></div>
+              <div><dt>Precio simulado medio · mejor oferta disponible</dt><dd>{x.averagePrice != null ? `${(x.averagePrice * 100).toFixed(1)}¢` : 'n/d'} · {x.bestAsk != null ? `${(x.bestAsk * 100).toFixed(1)}¢` : 'n/d'}</dd></div>
               <div><dt>Liquidación · neto</dt><dd>{x.settlement} · {usd(x.netProfitUsd) ?? 'sin resultado'}</dd></div>
             </dl>
           </div>

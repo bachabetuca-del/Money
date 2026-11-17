@@ -15,6 +15,12 @@ export type NotificationRoi = {
    * lookup tests/legacy jobs can still use the comparable ROI alone. */
   evidence?: Pick<SignalEvidence, "historyAsOf" | "gameId" | "gameIdentity" |
     "feeModel" | "feeAssumptions" | "feeType" | "feeMultiplier" | "entryFeeUsd">;
+  /** Research diagnostics only: never used to loosen or change delivery rules. */
+  research?: {
+    includesCandidateGame: boolean; latestHistoricalCheck: string | null;
+    phase: string; phaseAsOf: string | null; startsAt: string | null;
+    marketStatus: string | null; terminal: boolean;
+  };
 };
 export function notificationRoiBasis(value: unknown): RoiBasis {
   if (value === undefined || value === null) return "gross";
@@ -40,7 +46,7 @@ export function qualifiesForNotificationRoi(roi: NotificationRoi | null): roi is
  * Each amount band has its own history, independent of dashboard filters. */
 export function buildNotificationRoiLookup(history: RoiRollup[], basis: RoiBasis = "gross") {
   notificationRoiBasis(basis);
-  const groups = new Map<string, { profit: number; trades: number; games: Set<string>; fees: number; feeTrades: number }>();
+  const groups = new Map<string, { profit: number; trades: number; games: Set<string>; fees: number; feeTrades: number; latestCheck: string | null }>();
   for (const row of history) {
     if (row.category !== "settled" || row.historyVerified !== true || row.historyError ||
         !ROI_MONEY_BANDS.includes(row.moneyBand) || !["yes", "no"].includes(row.side) ||
@@ -49,15 +55,16 @@ export function buildNotificationRoiLookup(history: RoiRollup[], basis: RoiBasis
     const type = marketType(row);
     if (type === "other") continue;
     const key = JSON.stringify([row.moneyBand, row.sport, type, row.side, row.bucket]);
-    const group = groups.get(key) ?? { profit: 0, trades: 0, games: new Set<string>(), fees: 0, feeTrades: 0 };
+    const group = groups.get(key) ?? { profit: 0, trades: 0, games: new Set<string>(), fees: 0, feeTrades: 0, latestCheck: null };
     const costs = validatedFees(row);
     group.fees += costs.fees; group.feeTrades += costs.feeTrades;
     group.profit += row.profit;
     group.trades += row.trades;
     group.games.add(row.gameId);
+    if (row.checkedAt && (!group.latestCheck || row.checkedAt > group.latestCheck)) group.latestCheck = row.checkedAt;
     groups.set(key, group);
   }
-  return (trade: TradeReference): NotificationRoi | null => {
+  return (trade: TradeReference, candidateGameId?: string): NotificationRoi | null => {
     const side = publicDirection(trade.outcomeSide, undefined, trade.bookSide);
     const bucket = oddsBucket(trade.price), type = marketType(trade);
     const band = ROI_MONEY_BANDS.find(band => inTradeRange(trade.notional, tradeRange(band)));
@@ -71,6 +78,10 @@ export function buildNotificationRoiLookup(history: RoiRollup[], basis: RoiBasis
     return {
       roiPct, basis, grossRoiPct, netRoiPct,
       games: group.games.size, trades: group.trades,
+      ...(candidateGameId ? { research: {
+        includesCandidateGame: group.games.has(candidateGameId), latestHistoricalCheck: group.latestCheck,
+        phase: "unknown", phaseAsOf: null, startsAt: null, marketStatus: null, terminal: false,
+      } } : {}),
     };
   };
 }
