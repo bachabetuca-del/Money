@@ -7,6 +7,12 @@ Telegram alerts must describe the game and bet in plain language, not raw Kalshi
 
 **Why:** The user twice objected that the bet description was not easy to read; a graph containing technical identifiers and tiny text did not meet the request.
 
+Keep push notices compact: game and sport first, then bet, explicit SÍ/NO, price and historical ROI in separated sections. Keep methodology secondary rather than repeating long explanations in the main message.
+
+**Why:** The user again rejected the dense push notification screenshot as unacceptable and requested much easier reading.
+
+**How to apply:** Never confuse the execution timestamp with kickoff, historical ROI with realized profit, or public direction with a confirmed sale. Retain these distinctions with brief labels and secondary methodology.
+
 **How to apply:** Verify the actual image at phone width. Preserve the distinction between public taker direction and a literal identifiable buyer. When changing alert presentation, refresh existing saved messages as well as future messages. Historical metadata can contain old fallback identifiers even when live metadata lookup is now working; retry missing metadata rather than permanently caching lookup failures or sending raw identifiers.
 
 The user approved an earlier phone-readable card appearance: “Ok great I like it now.” They later explicitly requested a prettier, easier-to-read graph: “algo más bonito y fácil de leer.” Earlier approval is not a freeze on the layout when visual improvement is requested.

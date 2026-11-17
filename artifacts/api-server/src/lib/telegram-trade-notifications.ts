@@ -1,11 +1,11 @@
 import { escapeHtml, betLabelEs, type MarketCardTrade } from "./telegram-market-card";
-import { directionLabel, directionMeaning, publicDirection, DIRECTION_NOTE } from "./telegram-trade-direction";
+import { directionLabel, publicDirection } from "./telegram-trade-direction";
 import { NOTIFICATION_MIN_ROI_PCT, notificationRoiBasis, qualifiesForNotificationRoi, type NotificationRoi, type RoiBasis } from "./telegram-notification-roi";
 import { shouldCaptureTrade } from "./kalshi-trade-bands";
 import type { SignalEvidence } from "@workspace/api-zod";
 import { frozenNotification } from "./signal-evaluation";
 
-export type NotificationTrade = MarketCardTrade & { tradeId: string; ticker: string; marketUrl: string };
+export type NotificationTrade = MarketCardTrade & { tradeId: string; ticker: string; marketUrl: string; sport?: string };
 export type NotificationJob = NotificationTrade & {
   sport: string; chatId: string; attempts: number; queuedAt?: Date;
   evaluationId?: number | null; evidence?: SignalEvidence;
@@ -44,26 +44,36 @@ export function notificationText(trade: NotificationTrade, roi?: NotificationRoi
   const side = directionLabel(direction);
   const contracts = trade.count.toLocaleString("en-US", { maximumFractionDigits: 2 });
   const price = (trade.price * 100).toLocaleString("en-US", { maximumFractionDigits: 2 });
-  const time = trade.createdTime.toLocaleString("en-US", { timeZone: "America/New_York",
-    month: "short", day: "numeric", hour: "numeric", minute: "2-digit", timeZoneName: "short" });
+  const time = trade.createdTime.toLocaleString("es-ES", { timeZone: "America/New_York",
+    day: "numeric", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit", hour12: false });
+  const sports: Record<string, string> = {
+    Soccer: "Fútbol", Football: "Fútbol americano", Basketball: "Baloncesto", Tennis: "Tenis",
+    Baseball: "Béisbol", Hockey: "Hockey", Esports: "Esports", Golf: "Golf",
+    "Combat Sports": "Deportes de combate", Cricket: "Críquet", Motorsport: "Automovilismo",
+  };
   const pct = (value: number | null) => value === null ? "no disponible" :
     `${value >= 0 ? "+" : ""}${value.toLocaleString("es-ES", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}%`;
   return [
-    `<b>${amount} · operación deportiva</b>`,
     `<b>${escapeHtml(trade.eventTitle ?? "Game details unavailable")}</b>`,
-    `${side}${direction === "unknown" ? " · " : " «"}${escapeHtml(betLabelEs(trade.marketTitle ?? "Apuesta no disponible"))}${direction === "unknown" ? "" : "»"}`,
-    direction === "unknown" ? "" : `<b>${directionMeaning(direction)}</b>`,
-    `${contracts} contratos a ${price}¢`,
+    ...(trade.sport ? [escapeHtml(sports[trade.sport] ?? trade.sport)] : []),
+    "",
+    `<b>Apuesta:</b> ${escapeHtml(betLabelEs(trade.marketTitle ?? "Apuesta no disponible"))}`,
+    `<b>Posición:</b> ${direction === "yes" ? "SÍ · a favor" : direction === "no" ? "NO · en contra" : side}`,
+    `<b>Precio:</b> ${price}¢ por contrato`,
+    "",
     ...(roi ? [
-      `<b>ROI histórico comparable (${direction === "yes" ? "SÍ" : "NO"})</b>`,
-      `Bruto: ${pct(roi.grossRoiPct)} · Neto estimado: ${pct(roi.netRoiPct)}`,
-      `<b>Filtro elegido: ${roi.basis === "net" ? "neto estimado" : "bruto"} ≥ +${NOTIFICATION_MIN_ROI_PCT.toLocaleString("es-ES", { minimumFractionDigits: 1 })}%</b>`,
-      `${roi.games.toLocaleString("es-ES")} partidos · ${roi.trades.toLocaleString("es-ES")} operaciones verificadas`,
-      "<i>$100 por operación; neto con comisión taker actual, hasta liquidación y sin deslizamiento. No son ganancias del trader ni una garantía.</i>",
+      `<b>ROI histórico ${roi.basis === "net" ? "neto est." : "bruto"}: ${pct(roi.roiPct)}</b>`,
+      roi.basis === "net" ? `Bruto: ${pct(roi.grossRoiPct)}` : `Neto estimado: ${pct(roi.netRoiPct)}`,
+      `Base: ${roi.games.toLocaleString("es-ES")} partidos · ${roi.trades.toLocaleString("es-ES")} operaciones`,
+      "",
     ] : []),
-    time,
-    `<i>${DIRECTION_NOTE}</i>`,
-  ].filter(Boolean).join("\n");
+    `<b>Monto observado:</b> ${amount}`,
+    `${contracts} contratos`,
+    `Operación: ${time} · Nueva York`,
+    "",
+    "<i>No confirma una compra o venta. ROI histórico, no garantizado.</i>",
+    ...(roi ? ["<blockquote expandable>Simulación: $100 por operación hasta liquidación. Neto con comisión taker actual; sin deslizamiento ni todos los costes personales. No son ganancias del trader.</blockquote>"] : []),
+  ].join("\n");
 }
 
 /** Sends one short notification, then retires only older notification messages. */

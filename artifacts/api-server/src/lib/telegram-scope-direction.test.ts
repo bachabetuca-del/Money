@@ -306,7 +306,7 @@ test("both outcomes retain the correct price, large-band boundary and independen
         };
         assert.equal(liveNotificationTrades([{ ...notification, createdTime: now.toISOString() }],
           now.getTime() - 1).length, amount >= 1000 ? 1 : 0);
-        assert.match(notificationText(notification), outcome === "yes" ? /A favor de/ : /En contra de/);
+        assert.match(notificationText(notification), outcome === "yes" ? /SÍ · a favor/ : /NO · en contra/);
         assert.match(marketCardCaption(notification), outcome === "yes" ? /A favor de/ : /En contra de/);
       }
     }
@@ -344,7 +344,7 @@ test("canonical book-only trades retain the capture floor and direction in graph
       };
       assert.equal(liveNotificationTrades([{ ...trade, createdTime: now.toISOString() }], now.getTime() - 1).length,
         amount >= 1000 ? 1 : 0);
-      assert.match(notificationText(trade), book === "ask" ? /Compra de NO o venta de SÍ/ : /Compra de SÍ o venta de NO/);
+      assert.match(notificationText(trade), book === "ask" ? /NO · en contra/ : /SÍ · a favor/);
       const plot = bucketHistory([trade], now);
       assert.equal(plot.buckets[0].values[book === "ask" ? 4 : 3], amount);
     }
@@ -358,17 +358,19 @@ test("notifications, captions and plot totals share direction and explicit limit
     bookSide: "bid", notional: 15000, price: 0.6, count: 25000, createdTime: now,
   };
   const message = notificationText(base);
-  assert.match(message, /En contra de «Team A gana»/);
+  assert.match(message, /Apuesta:<\/b> Team A gana/);
+  assert.match(message, /NO · en contra/);
   assert.match(message, /\$15,000.00/);
-  assert.match(message, /25,000 contratos a 60¢/);
-  assert.match(message, /no identifica al operador ni confirma una venta o cierre/);
+  assert.match(message, /25,000 contratos/);
+  assert.match(message, /Precio:<\/b> 60¢ por contrato/);
+  assert.match(message, /No confirma una compra o venta/);
   assert.match(marketCardCaption(base), /En contra de/);
   const plot = bucketHistory([base], now);
   assert.equal(plot.buckets.reduce((n, bucket) => n + bucket.values[4], 0), 15000);
-  assert.match(message, /Compra de NO o venta de SÍ/);
+  assert.doesNotMatch(message, /Compra de NO o venta de SÍ/);
   assert.match(marketCardSvg([base], 10000), /Compra de NO o venta de SÍ/);
   const canonicalOnly = { ...base, outcomeSide: "unknown", bookSide: "ask" };
-  assert.match(notificationText(canonicalOnly), /En contra de/);
+  assert.match(notificationText(canonicalOnly), /NO · en contra/);
   assert.equal(bucketHistory([canonicalOnly], now).buckets[0].values[4], 15000);
   const unknown = { ...base, outcomeSide: "unknown", bookSide: "unknown" };
   assert.match(notificationText(unknown), /Dirección no disponible/);

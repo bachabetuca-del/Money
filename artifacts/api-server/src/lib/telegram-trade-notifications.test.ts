@@ -129,13 +129,16 @@ test("a new qualifying trade sends a push-enabled text alert, not another graph"
   assert.equal(body.parse_mode, "HTML");
   assert.match(String(body.text), /\$15,000\.00/);
   assert.match(String(body.text), /New England &amp; Chicago/);
-  assert.match(String(body.text), /A favor de «Chicago gana»/);
-  assert.match(String(body.text), /ROI histórico comparable \(SÍ\)/);
-  assert.match(String(body.text), /Bruto: \+15,00% · Neto estimado: no disponible/);
-  assert.match(String(body.text), /Filtro elegido: bruto ≥ \+15,0%/);
-  assert.match(String(body.text), /50 partidos · 30 operaciones verificadas/);
-  assert.match(String(body.text), /neto con comisión taker actual/);
-  assert.match(String(body.text), /No son ganancias del trader ni una garantía/);
+  assert.match(String(body.text), /Apuesta:<\/b> Chicago gana/);
+  assert.match(String(body.text), /Posición:<\/b> SÍ · a favor/);
+  assert.match(String(body.text), /ROI histórico bruto: \+15,00%/);
+  assert.match(String(body.text), /Neto estimado: no disponible/);
+  assert.match(String(body.text), /50 partidos · 30 operaciones/);
+  assert.match(String(body.text), /Neto con comisión taker actual/);
+  assert.match(String(body.text), /<blockquote expandable>.*No son ganancias del trader/);
+  assert.match(String(body.text), /Fútbol americano/);
+  assert.ok(String(body.text).includes("\n\n"), "Sections stay separated on a phone");
+  assert.doesNotMatch(String(body.text), /Filtro elegido|Compra de SÍ o venta de NO/);
   assert.doesNotMatch(String(body.text), /KXNFLGAME/);
   assert.deepEqual(body.link_preview_options, { is_disabled: true });
   assert.match(JSON.stringify(body.reply_markup), /Abrir en Kalshi/);
@@ -281,9 +284,28 @@ test("a queued trade from a now-finished game is retired without notification or
 test("notification wording escapes names and distinguishes against/unknown direction", () => {
   const row = { ...sample(), eventTitle: "Chicago <final> & New England", outcomeSide: "no" };
   assert.match(notificationText(row), /Chicago &lt;final&gt; &amp; New England/);
-  assert.match(notificationText(row), /En contra de «Chicago gana»/);
+  assert.match(notificationText(row), /Posición:<\/b> NO · en contra/);
   assert.match(notificationText({ ...row, outcomeSide: "unknown" }), /Dirección no disponible/);
-  assert.match(notificationText(row), /no identifica al operador ni confirma una venta o cierre/);
+  assert.match(notificationText(row), /No confirma una compra o venta/);
+});
+
+test("the phone alert keeps the screenshot's essentials above expandable methodology", () => {
+  const text = notificationText({
+    ...sample(), sport: "Soccer", eventTitle: "Wales vs Portugal", marketTitle: "Wales wins",
+    notional: 1462.5, count: 9750, price: .15,
+  }, { basis: "gross", roiPct: 61.42, grossRoiPct: 61.42, netRoiPct: 52.41, games: 100, trades: 379 });
+  const summary = text.split("<blockquote")[0];
+  assert.ok(text.startsWith("<b>Wales vs Portugal</b>\nFútbol\n\n"));
+  assert.match(summary, /Apuesta:<\/b> Wales gana/);
+  assert.match(summary, /Precio:<\/b> 15¢ por contrato/);
+  assert.match(summary, /ROI histórico bruto: \+61,42%/);
+  assert.match(summary, /Neto estimado: \+52,41%/);
+  assert.match(summary, /100 partidos · 379 operaciones/);
+  assert.match(summary, /Monto observado:<\/b> \$1,462\.50/);
+  assert.match(summary, /Operación: .*Nueva York/);
+  assert.ok(summary.replace(/<[^>]*>/g, "").length < 500);
+  assert.doesNotMatch(summary, /Simulación|Filtro elegido|Compra de|venta de/);
+  assert.match(text, /<blockquote expandable>Simulación: \$100/);
 });
 
 test("ROI +15% is inclusive; lower or unavailable ROI and insufficient samples never notify", async () => {
@@ -365,8 +387,8 @@ test("checks the actual NO execution and enriched market, never the opposite sid
   assert.equal(api.roiTrades[0].price, .4);
   assert.equal(api.roiTrades[0].outcomeSide, "no");
   assert.equal(api.roiTrades[0].eventTitle, "New England & Chicago");
-  assert.match(String(api.calls[0].body.text), /ROI histórico comparable \(SÍ\)/);
-  assert.match(String(api.calls[0].body.text), /Bruto: \+20,00%/);
+  assert.match(String(api.calls[0].body.text), /Posición:<\/b> SÍ · a favor/);
+  assert.match(String(api.calls[0].body.text), /ROI histórico bruto: \+20,00%/);
 });
 
 test("filter draining is bounded and still sends at most one notice per tick", async () => {
@@ -396,8 +418,8 @@ test("selected basis reaches the worker, cannot silently revert, and filtered tr
   store.add(sample("net-pass"));
   await worker.tick({ ...settings, notificationRoiBasis: "net" });
   assert.equal(api.calls.filter(c => c.method === "sendMessage").length, 1);
-  assert.match(String(api.calls[0].body.text), /Bruto: \+20,00% · Neto estimado: \+15,00%/);
-  assert.match(String(api.calls[0].body.text), /Filtro elegido: neto estimado/);
+  assert.match(String(api.calls[0].body.text), /Bruto: \+20,00%/);
+  assert.match(String(api.calls[0].body.text), /ROI histórico neto est.: \+15,00%/);
   assert.match(String(api.calls[0].body.text), /No son ganancias del trader/);
   await new TelegramTradeNotifications(store, api, now).tick(settings);
   assert.equal(api.calls.filter(c => c.method === "sendMessage").length, 1);
@@ -437,7 +459,7 @@ test("a new signal is frozen BEFORE sending; restarts/retries cannot replace its
   const requests = api.calls.filter(call => call.method === "sendMessage");
   assert.equal(requests.length, 2);
   assert.equal(requests[0].body.text, requests[1].body.text);
-  assert.match(String(requests[1].body.text), /Filtro elegido: bruto/);
+  assert.match(String(requests[1].body.text), /ROI histórico bruto:/);
   assert.match(String(requests[1].body.text), /60¢/);
   await new TelegramTradeNotifications(store, api, now).tick(settings);
   assert.equal(api.calls.filter(call => call.method === "sendMessage").length, 2);
