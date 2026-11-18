@@ -6,6 +6,10 @@ import type { DashboardState, DashboardStore } from "./telegram-dashboard";
 import { decodeScopeScreen, encodeScopeScreen } from "./telegram-game-scope";
 import type { TradeRange } from "./kalshi-trade-bands";
 import { scoreDisplay } from "./kalshi-score-queue";
+import { AsyncTtlCache } from "./async-ttl-cache";
+import { timedSavedRead } from "./saved-read-timing";
+
+const marketSummaries = new AsyncTtlCache<Awaited<ReturnType<DashboardStore["markets"]>>>(10_000, 4);
 
 function rangeCondition(range: TradeRange) {
   return and(
@@ -31,6 +35,7 @@ export const telegramDashboardStore: DashboardStore = {
       .onConflictDoUpdate({ target: telegramDashboardTable.chatId, set: saved });
   },
   async markets(range) {
+    return marketSummaries.get(JSON.stringify(range), () => timedSavedRead("catalog.summary.sql", async () => {
     const [rows, statuses, results] = await Promise.all([db.select({
       ticker: kalshiAlertsTable.ticker, sport: sql<string>`max(${kalshiAlertsTable.sport})`,
       eventTitle: sql<string | null>`max(${kalshiAlertsTable.eventTitle})`,
@@ -73,6 +78,7 @@ export const telegramDashboardStore: DashboardStore = {
         gameStartsAt: status?.startsAt?.toISOString(),
         gameCheckedAt: status?.checkedAt.toISOString(), marketTerminal: status?.marketTerminal };
     });
+    }));
   },
   async trades(ticker, range) {
     return db.select().from(kalshiAlertsTable)

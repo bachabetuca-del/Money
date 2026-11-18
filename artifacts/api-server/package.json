@@ -4,6 +4,8 @@
   "private": true,
   "type": "module",
   "scripts": {
+    "test:read-performance": "esbuild src/lib/roi-read-model.test.ts src/lib/async-ttl-cache.test.ts --bundle --platform=node --format=esm --packages=external --outdir=.local/read-tests --out-extension:.js=.mjs && node --test .local/read-tests/*test.mjs",
+    "benchmark:reads": "esbuild src/lib/read-performance-report.ts --bundle --platform=node --format=esm --packages=external --alias:@workspace/db=../../lib/db/src/index.ts --alias:@workspace/api-zod=../../lib/api-zod/src/index.ts --outfile=../../lib/db/.local/read-performance-report.mjs && node ../../lib/db/.local/read-performance-report.mjs",
     "test:connections": "esbuild src/lib/telegram-http.test.ts src/lib/kalshi-http.test.ts --bundle --platform=node --format=esm --packages=external --outdir=.local/connection-tests --out-extension:.js=.mjs && node --test .local/connection-tests/*test.mjs",
     "test:roi-method": "esbuild src/lib/roi-method.test.ts --bundle --platform=node --format=esm --packages=external --outfile=.local/roi-method-test.mjs && node --test .local/roi-method-test.mjs",
     "audit:roi-method": "esbuild src/lib/roi-method-report.ts --bundle --platform=node --format=esm --packages=external --alias:@workspace/db=../../lib/db/src/index.ts --alias:@workspace/api-zod=../../lib/api-zod/src/index.ts --outfile=../../lib/db/.local/roi-method-report.mjs && node ../../lib/db/.local/roi-method-report.mjs",

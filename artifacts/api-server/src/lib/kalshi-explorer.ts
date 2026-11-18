@@ -13,6 +13,7 @@ import { emptyFlow } from "./market-flow";
 import { explorerDirection } from "./explorer-direction";
 import { marketType, type MarketType } from "./market-type";
 import { AsyncTtlCache } from "./async-ttl-cache";
+import { timedSavedRead } from "./saved-read-timing";
 
 export type ExplorerFilters = {
   band: TradeBand;
@@ -27,10 +28,9 @@ export type ExplorerFilters = {
 const settingsCache = new AsyncTtlCache<number>(5_000, 1);
 const catalogCache = new AsyncTtlCache<Awaited<ReturnType<typeof loadExplorerCatalog>>>(10_000, 8);
 // Scope/direction changes reuse the expensive band summary, not a new full-history scan.
-const summaryCache = new AsyncTtlCache<Awaited<ReturnType<typeof telegramDashboardStore.markets>>>(10_000, 4);
 
 async function loadExplorerCatalog(range: TradeRange, filters: ExplorerFilters, now: Date) {
-  const summaries = await summaryCache.get(JSON.stringify(range), () => telegramDashboardStore.markets(range));
+  const summaries = await telegramDashboardStore.markets(range);
   const catalog = scopedCatalog(buildCatalog(summaries), filters.scope, now);
   const games = new Map<string, CatalogMarket[]>();
   for (const market of catalog) {
@@ -88,7 +88,7 @@ export async function getKalshiExplorer(filters: ExplorerFilters, now = new Date
   // TTL already bounds lifecycle freshness. A time bucket in the key would start
   // duplicate scans when an in-flight query crosses a wall-clock boundary.
   const key = JSON.stringify([range, filters.scope, filters.direction ?? "all"]);
-  const snapshot = await catalogCache.get(key, () => loadExplorerCatalog(range, filters, now));
+  const snapshot = await catalogCache.get(key, () => timedSavedRead("explorer.catalog", () => loadExplorerCatalog(range, filters, now)));
   const markets = snapshot.markets.filter(m =>
     !filters.marketType || filters.marketType === "all" || m.marketType === filters.marketType);
   const empty = {

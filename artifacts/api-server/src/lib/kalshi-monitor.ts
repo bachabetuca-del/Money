@@ -1,4 +1,4 @@
-import { and, count, desc, eq, gte, isNotNull } from "drizzle-orm";
+import { and, count, desc, eq, gte, isNotNull, sql } from "drizzle-orm";
 import { paperRuntime } from "./paper/runtime";
 import {
   db,
@@ -38,6 +38,8 @@ import { applyLifecycle } from "./kalshi-lifecycle-store";
 import { refreshStoredFees } from "./kalshi-fee-store";
 import { notificationRoiBasis, type RoiBasis } from "./telegram-notification-roi";
 import { TelegramHttpClient } from "./telegram-http";
+import { AsyncTtlCache } from "./async-ttl-cache";
+import { timedSavedRead } from "./saved-read-timing";
 
 const KALSHI_API = "https://external-api.kalshi.com/trade-api/v2";
 const DEFAULT_THRESHOLD = 10_000;
@@ -836,18 +838,24 @@ export function startKalshiMonitor() {
   logger.info({ intervalMs: POLL_INTERVAL_MS }, "Kalshi sports monitor started");
 }
 
+const dashboardCounts = new AsyncTtlCache<{ saved: number; published: number }>(5000, 4);
+
 export async function getKalshiDashboard() {
   const settings = await readSettings();
-  const [alertTotal] = await db
-    .select({ value: count() })
-    .from(kalshiAlertsTable)
-    .where(gte(kalshiAlertsTable.notional, settings.minimumNotional));
   // Use durable executions rather than only the latest polling batch, which
   // may be empty after a restart or when no qualifying trade just occurred.
-  const savedRecent = await db.select().from(kalshiAlertsTable)
+  const [totals, savedRecent] = await Promise.all([
+    dashboardCounts.get(String(settings.minimumNotional), () => timedSavedRead("dashboard.counts.sql", async () => {
+      const [row] = await db.select({ saved: count(),
+        published: sql<number>`count(*) FILTER (WHERE ${isNotNull(kalshiAlertsTable.alertedAt)})::int`,
+      }).from(kalshiAlertsTable).where(gte(kalshiAlertsTable.notional, settings.minimumNotional));
+      return { saved: row?.saved ?? 0, published: row?.published ?? 0 };
+    })),
+    timedSavedRead("dashboard.recent.sql", () => db.select().from(kalshiAlertsTable)
     .where(gte(kalshiAlertsTable.notional, settings.minimumNotional))
     .orderBy(desc(kalshiAlertsTable.createdTime))
-    .limit(50);
+    .limit(50)),
+  ]);
   const recentTrades: PublicTrade[] = savedRecent.map(trade => ({
     tradeId: trade.tradeId, ticker: trade.ticker, title: trade.title,
     eventTitle: trade.eventTitle ?? trade.title,
@@ -867,14 +875,6 @@ export async function getKalshiDashboard() {
 
   // The published count represents trades made available in the one live
   // Telegram dashboard, not the number of separate messages.
-  const [actuallySent] = await db
-    .select({ value: count() })
-    .from(kalshiAlertsTable)
-    .where(and(
-      isNotNull(kalshiAlertsTable.alertedAt),
-      gte(kalshiAlertsTable.notional, settings.minimumNotional),
-    ));
-
   return {
     workersPaused: process.env.BOT_WORKERS_ENABLED === "false",
     enabled: settings.enabled,
@@ -885,8 +885,8 @@ export async function getKalshiDashboard() {
     status,
     lastChecked,
     lastError: lastError ?? streamError,
-    qualifyingTrades: alertTotal?.value ?? 0,
-    alertsSent: actuallySent?.value ?? 0,
+    qualifyingTrades: totals.saved,
+    alertsSent: totals.published,
     recentTrades,
   };
 }

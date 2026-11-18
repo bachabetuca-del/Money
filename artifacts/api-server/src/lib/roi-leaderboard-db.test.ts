@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { roiSourceFilters, roiFilteredRows } from "./roi-read-model";
 import { after, test } from "node:test";
 import { db, pool } from "@workspace/db";
 import { sql, type SQLWrapper } from "drizzle-orm";
@@ -277,5 +278,24 @@ test("read-only PostgreSQL fixtures verify exact money boundaries, New York week
     assert.equal(buildRoiRanking(partial.rows, "sport", 1, { now: at }).summary.settledTrades, 7);
     const recent = await loadRoiRollups({ ...options, window: "7d" }, 10000, at, executor);
     assert.equal(buildRoiRanking(recent.rows, "sport", 1, { now: at }).summary.settledTrades, 3);
+    for (const threshold of [10000, 15000]) {
+      const sources = new Map<string, Awaited<ReturnType<typeof loadRoiRollups>>>();
+      for (const band of ["all", "small", "medium", "large"] as const) {
+        for (const direction of ["all", "yes", "no"] as const) {
+          const filters = { band, direction };
+          const sourceFilters = roiSourceFilters(filters, threshold);
+          const key = JSON.stringify(sourceFilters);
+          let source = sources.get(key);
+          if (!source) {
+            source = await loadRoiRollups({ ...options, ...sourceFilters }, threshold, at, executor);
+            sources.set(key, source);
+          }
+          const direct = await loadRoiRollups({ ...options, ...filters }, threshold, at, executor);
+          const normalize = (rows: typeof direct.rows) => rows.map(r => JSON.stringify(r)).sort();
+          assert.deepEqual(normalize(roiFilteredRows(source.rows, filters)), normalize(direct.rows),
+            `shared rollups must match filtered SQL for ${band}/${direction}/${threshold}`);
+        }
+      }
+    }
   }, { accessMode: "read only" });
 });

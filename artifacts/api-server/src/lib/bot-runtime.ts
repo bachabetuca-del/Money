@@ -5,8 +5,13 @@ import { startKalshiMonitor } from "./kalshi-monitor";
 import { activateSignalEvaluation } from "./kalshi-signal-store";
 import { SIGNAL_RULE_VERSION } from "./signal-evaluation";
 import { ROI_METHOD_VERSION } from "./roi-method";
+import { observeSlowSavedReads } from "./saved-read-timing";
 
 export function checkRuntimeConfiguration() {
+  observeSlowSavedReads(timing => logger.warn({
+    ...timing, databaseWaiting: pool.waitingCount,
+    databaseConnections: pool.totalCount, databaseIdle: pool.idleCount,
+  }, "Slow saved-data operation"));
   const required = ["OWNER_EMAIL", "CLERK_SECRET_KEY", "CLERK_PUBLISHABLE_KEY",
     "TELEGRAM_BOT_TOKEN", "TELEGRAM_OWNER_CHAT_ID"] as const;
   const missing = required.filter(key => !process.env[key]?.trim());

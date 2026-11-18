@@ -2,12 +2,14 @@ import { db, kalshiMonitorSettingsTable } from "@workspace/db";
 import { sql } from "drizzle-orm";
 import type { RoiLeaderboard } from "@workspace/api-zod";
 import { AsyncTtlCache } from "./async-ttl-cache";
-import { buildRoiRanking, ROI_STAKE, type RoiGroup, type RoiRollup, type RoiSort } from "./roi-ranking";
+import { ROI_STAKE, type RoiGroup, type RoiRollup, type RoiSort } from "./roi-ranking";
 import { HISTORY_AUDIT_VERSION } from "./kalshi-market-history";
 import { feeModel, feeSnapshotIsCurrent, FEE_MODEL_VERSION, type FeeSnapshot } from "./kalshi-fees";
 import { readStoredFees } from "./kalshi-fee-store";
-import { ROI_METHOD_VERSION, selectRoiEntries, type RoiUnit } from "./roi-method";
+import { ROI_METHOD_VERSION, type RoiUnit } from "./roi-method";
 import type { RoiPhase } from "@workspace/api-zod";
+import { roiSourceFilters, roiFilteredRows, preparedRoiRanking } from "./roi-read-model";
+import { timedSavedRead } from "./saved-read-timing";
 
 type Options = {
   unit?: RoiUnit; phase?: RoiPhase;
@@ -18,6 +20,7 @@ type Options = {
   coverage?: "verified" | "all";
 };
 const snapshots = new AsyncTtlCache<{ rows: RoiRollup[]; generatedAt: string; feeModel: RoiLeaderboard["feeModel"] }>(60_000, 4);
+const context = new AsyncTtlCache<{ threshold: number; fees: FeeSnapshot | null }>(5000, 1);
 const iso = (date: string | Date | null) => date === null ? null : new Date(date).toISOString();
 const windowStart = (window: Options["window"], now: Date) => window === "all" ? null :
   new Date(now.getTime() - (window === "7d" ? 7 : 30) * 86400_000);
@@ -36,7 +39,9 @@ export async function loadRoiRollups(
     WITH fee_catalog AS (
       SELECT ${JSON.stringify(feeSnapshotIsCurrent(feeSnapshot, now) ? feeSnapshot : null)}::jsonb AS rules
     ), base AS (
-      SELECT a.*, s.result, s.terminal, s.checked_at, s.error,
+      SELECT a.trade_id, a.ticker, a.sport, a.event_title, a.market_title, a.market_url,
+        a.price, a.count, a.notional, a.created_time,
+        s.result, s.terminal, s.checked_at, s.error,
         g.milestone_id IS NOT NULL AS identity_verified,
         CASE
           WHEN g.milestone_id IS NULL THEN 'unknown'
@@ -143,25 +148,28 @@ export async function loadRoiRollups(
 
 /** Shared by the ranking and explorer colors; one read-only historical snapshot. */
 export async function getRoiSnapshot(options: Options, now = new Date()) {
-  const [[settings], fees] = await Promise.all([
-    db.select({ minimum: kalshiMonitorSettingsTable.minimumNotional }).from(kalshiMonitorSettingsTable).limit(1),
-    readStoredFees(),
-  ]);
-  const threshold = Math.max(10_000, settings?.minimum ?? 10_000);
+  const { threshold, fees } = await context.get("settings-fees", async () => {
+    const [[settings], fees] = await Promise.all([
+      db.select({ minimum: kalshiMonitorSettingsTable.minimumNotional }).from(kalshiMonitorSettingsTable).limit(1),
+      readStoredFees(),
+    ]);
+    return { threshold: Math.max(10_000, settings?.minimum ?? 10_000), fees };
+  });
+  const source = { ...options, ...roiSourceFilters(options, threshold) };
   // Presentation grouping/pagination reuse the same short-lived, filter-isolated data.
-  const key = JSON.stringify([options.window, options.band, options.direction, threshold, options.coverage ?? "verified",
+  const key = JSON.stringify([source.window, source.band, source.direction, threshold, options.coverage ?? "verified",
     ROI_METHOD_VERSION, FEE_MODEL_VERSION, fees?.asOf, fees?.validUntil, feeSnapshotIsCurrent(fees, now)]);
-  const snapshot = await snapshots.get(key, () => loadRoiRollups(options, threshold, now, db, fees));
-  return { snapshot, threshold, fees };
+  const snapshot = await snapshots.get(key, () =>
+    timedSavedRead("roi.history.sql", () => loadRoiRollups(source, threshold, now, db, fees)));
+  return { snapshot: { ...snapshot, rows: roiFilteredRows(snapshot.rows, options) }, threshold, fees };
 }
 
 export async function getRoiLeaderboard(options: Options, now = new Date()): Promise<RoiLeaderboard> {
   const { snapshot, threshold } = await getRoiSnapshot(options, now);
   const asOf = new Date(snapshot.generatedAt), sortBy = options.sortBy ?? "roi";
-  const selected = selectRoiEntries(snapshot.rows, options.unit ?? "game", options.phase ?? "prematch");
-  const { rows, summary } = buildRoiRanking(selected.rows, options.groupBy, options.minGames, {
-    sortBy, now: asOf, since: windowStart(options.window, asOf), separatePatterns: options.unit !== "execution",
-  });
+  const { selected, ranking: { rows, summary } } = await timedSavedRead("roi.ranking.compute", () =>
+    preparedRoiRanking(snapshot.rows, { unit: options.unit ?? "game", phase: options.phase ?? "prematch",
+      groupBy: options.groupBy, minGames: options.minGames, sortBy, now: asOf, since: windowStart(options.window, asOf) }));
   const pageSize = 25, totalPages = Math.ceil(rows.length / pageSize);
   const page = Math.max(1, Math.min(options.page, totalPages || 1));
   return {
