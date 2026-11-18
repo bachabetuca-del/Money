@@ -36,8 +36,18 @@ export async function loadRoiRollups(
     options.band === "large" ? sql`a.notional >= ${threshold}` : sql`a.notional >= 1000`;
   // The full history is aggregated in PostgreSQL; no full execution download or graph cap.
   const result = await executor.execute(sql`
-    WITH fee_catalog AS (
+    -- Expand the fee document once. Repeated JSON lookups per execution
+    -- otherwise traverse the entire (large) rules object during the history scan.
+    WITH fee_catalog AS MATERIALIZED (
       SELECT ${JSON.stringify(feeSnapshotIsCurrent(feeSnapshot, now) ? feeSnapshot : null)}::jsonb AS rules
+    ), series_fees AS MATERIALIZED (
+      SELECT entry.key AS ticker, entry.value->>'feeType' AS fee_type,
+        entry.value->>'multiplier' AS fee_multiplier
+      FROM fee_catalog f CROSS JOIN LATERAL jsonb_each(f.rules->'series') entry
+    ), event_fees AS MATERIALIZED (
+      SELECT entry.key AS event_ticker, entry.value->>'feeType' AS fee_type,
+        entry.value->>'multiplier' AS fee_multiplier
+      FROM fee_catalog f CROSS JOIN LATERAL jsonb_each(f.rules->'events') entry
     ), base AS (
       SELECT a.trade_id, a.ticker, a.sport, a.event_title, a.market_title, a.market_url,
         a.price, a.count, a.notional, a.created_time,
@@ -52,11 +62,9 @@ export async function loadRoiRollups(
           WHEN g.starts_at IS NOT NULL AND a.created_time <= g.starts_at - interval '10 minutes' THEN 'prematch'
           WHEN g.starts_at IS NOT NULL AND a.created_time < g.starts_at THEN 'nearStart'
           ELSE 'unknown' END AS phase,
-        g.event_ticker IS NOT NULL AND (f.rules->'series'->split_part(a.ticker, '-', 1)) IS NOT NULL AS fee_known,
-        coalesce(f.rules->'events'->g.event_ticker->>'feeType',
-          f.rules->'series'->split_part(a.ticker, '-', 1)->>'feeType') AS fee_type,
-        coalesce(f.rules->'events'->g.event_ticker->>'multiplier',
-          f.rules->'series'->split_part(a.ticker, '-', 1)->>'multiplier')::numeric AS fee_multiplier,
+        g.event_ticker IS NOT NULL AND sf.ticker IS NOT NULL AS fee_known,
+        coalesce(ef.fee_type, sf.fee_type) AS fee_type,
+        coalesce(ef.fee_multiplier, sf.fee_multiplier)::numeric AS fee_multiplier,
         coalesce(h.phase = 'complete' AND h.final_pass = true AND h.audited_at IS NOT NULL
           AND h.error IS NULL AND h.audit_version >= ${HISTORY_AUDIT_VERSION} AND h.capture_minimum <= 1000
           AND h.since_at IS NULL AND h.snapshot_at >= s.checked_at, false) AS history_verified,
@@ -71,10 +79,11 @@ export async function loadRoiRollups(
         CASE WHEN a.notional <= 5000 THEN 'small' WHEN a.notional < 10000 THEN 'medium' ELSE 'large' END AS money_band,
         to_char(date_trunc('week', a.created_time AT TIME ZONE 'America/New_York'), 'YYYY-MM-DD') AS week_start
       FROM kalshi_alerts a
-      CROSS JOIN fee_catalog f
       LEFT JOIN kalshi_market_settlements s ON s.ticker = a.ticker
       LEFT JOIN kalshi_game_status g ON g.ticker = a.ticker
       LEFT JOIN kalshi_trade_history h ON h.ticker = a.ticker
+      LEFT JOIN series_fees sf ON sf.ticker = split_part(a.ticker, '-', 1)
+      LEFT JOIN event_fees ef ON ef.event_ticker = g.event_ticker
       WHERE ${amount} AND a.created_time <= ${now}
         ${since ? sql`AND a.created_time >= ${since}` : sql``}
     ), classified AS (

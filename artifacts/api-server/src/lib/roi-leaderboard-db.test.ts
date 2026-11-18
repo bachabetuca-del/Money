@@ -12,6 +12,7 @@ import { loadRoiReferencePrices } from "./kalshi-roi-reference-prices";
 import { tradeRange } from "./kalshi-trade-bands";
 import { buildExplorerRoi, ROI_COLOR_POLICY } from "./explorer-roi";
 import { createFeeSnapshot, estimateHypotheticalEntryFee, feeModel } from "./kalshi-fees";
+import { legacyRoiFeeQuery } from "./roi-sql-baseline.fixture";
 
 after(() => pool.end());
 
@@ -236,6 +237,16 @@ test("read-only PostgreSQL fixtures verify exact money boundaries, New York week
     const fees = createFeeSnapshot([...new Set(inputs.map(r => r[0].split("-")[0]))].map(ticker =>
       ({ ticker, fee_type: ticker === "MEDIUM" ? "quadratic_with_maker_fees" : "quadratic", fee_multiplier: 1 })), [], [], at);
     const withFees = await loadRoiRollups(options, 10000, at, executor, fees);
+    const legacyExecutor: Pick<typeof db, "execute"> = {
+      execute: <TRow extends Record<string, unknown> = Record<string, unknown>>(query: SQLWrapper | string) =>
+        executor.execute<TRow>(legacyRoiFeeQuery(query)),
+    };
+    const canonical = (value: Awaited<ReturnType<typeof loadRoiRollups>>) =>
+      value.rows.map(row => JSON.stringify(row)).sort();
+    assert.deepEqual(canonical(withFees), canonical(await loadRoiRollups(options, 10000, at, legacyExecutor, fees)),
+      "The relational fee lookup must preserve every rollup field, not just gross ROI");
+    assert.deepEqual(canonical(all), canonical(await loadRoiRollups(options, 10000, at, legacyExecutor, null)),
+      "Missing fees remain unknown without dropping any trades");
     const priced = buildRoiRanking(withFees.rows, "sport", 1, { now: at });
     assert.equal(priced.summary.net.coveredTrades, 6);
     assert.equal(priced.summary.net.missingTrades, 0);
@@ -252,9 +263,16 @@ test("read-only PostgreSQL fixtures verify exact money boundaries, New York week
       { event_ticker: "EVENT", scheduled_ts: at.toISOString(), fee_type_override: null, fee_multiplier_override: 0 },
     ], [], at);
     const free = buildRoiRanking((await loadRoiRollups(options, 10000, at, executor, override)).rows, "sport", 1, { now: at });
+    assert.deepEqual(canonical(await loadRoiRollups(options, 10000, at, executor, override)),
+      canonical(await loadRoiRollups(options, 10000, at, legacyExecutor, override)),
+      "Explicit zero event overrides must survive the optimization");
     assert.equal(free.summary.net.fees, 0, "An explicit zero event override must not fall through to series multiplier 1");
     assert.equal(free.summary.net.roiPct, free.summary.roiPct);
     override.events.EVENT.feeType = "flat";
+    delete override.series.SMALL;
+    assert.deepEqual(canonical(await loadRoiRollups(options, 10000, at, executor, override)),
+      canonical(await loadRoiRollups(options, 10000, at, legacyExecutor, override)),
+      "Unsupported event types and missing series keep their original cost coverage");
     assert.equal(buildRoiRanking((await loadRoiRollups(options, 10000, at, executor, override)).rows, "sport", 1, { now: at }).summary.net.roiPct, null);
     assert.deepEqual(row.moneyBands.map(b => [b.band, b.trades, b.games]), [
       ["small", 2, 1], ["medium", 2, 1], ["large", 2, 1],

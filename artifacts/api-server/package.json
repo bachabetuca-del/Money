@@ -4,6 +4,7 @@
   "private": true,
   "type": "module",
   "scripts": {
+    "test:roi-query": "esbuild src/lib/roi-query-performance.test.ts --bundle --platform=node --format=esm --packages=external --alias:@workspace/db=../../lib/db/src/index.ts --alias:@workspace/api-zod=../../lib/api-zod/src/index.ts --outfile=../../lib/db/.local/store-tests/roi-query-performance.mjs && node --test ../../lib/db/.local/store-tests/roi-query-performance.mjs",
     "test:read-performance": "esbuild src/lib/roi-read-model.test.ts src/lib/async-ttl-cache.test.ts --bundle --platform=node --format=esm --packages=external --outdir=.local/read-tests --out-extension:.js=.mjs && node --test .local/read-tests/*test.mjs",
     "benchmark:reads": "esbuild src/lib/read-performance-report.ts --bundle --platform=node --format=esm --packages=external --alias:@workspace/db=../../lib/db/src/index.ts --alias:@workspace/api-zod=../../lib/api-zod/src/index.ts --outfile=../../lib/db/.local/read-performance-report.mjs && node ../../lib/db/.local/read-performance-report.mjs",
     "test:connections": "esbuild src/lib/telegram-http.test.ts src/lib/kalshi-http.test.ts --bundle --platform=node --format=esm --packages=external --outdir=.local/connection-tests --out-extension:.js=.mjs && node --test .local/connection-tests/*test.mjs",
