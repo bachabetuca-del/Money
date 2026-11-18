@@ -51,6 +51,8 @@ export * from './getPaperDashboardParams';
 export * from './healthStatus';
 export * from './kalshiDashboard';
 export * from './kalshiExplorer';
+export * from './kalshiHistoryExportPart';
+export * from './kalshiHistoryExportParts';
 export * from './kalshiSettingsInput';
 export * from './kalshiTrade';
 export * from './marketFlowWindow';

@@ -42,6 +42,7 @@ import type {
   HealthStatus,
   KalshiDashboard,
   KalshiExplorer,
+  KalshiHistoryExportParts,
   KalshiSettingsInput,
   OwnerRequiredResponse,
   OwnerUnavailableResponse,
@@ -982,6 +983,107 @@ export function useGetKalshiLeaderboard<TData = Awaited<ReturnType<typeof getKal
 
 
 
+export const getGetKalshiHistoryExportPartsUrl = () => {
+
+
+
+
+  return `/api/kalshi/history/export/parts`
+}
+
+/**
+ * @summary Prepare a stable list of smaller AI-ready history downloads
+ */
+export const getKalshiHistoryExportParts = async ( options?: Parameters<typeof customFetch>[1]): Promise<KalshiHistoryExportParts> => {
+
+  return customFetch<KalshiHistoryExportParts>(getGetKalshiHistoryExportPartsUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetKalshiHistoryExportPartsQueryKey = () => {
+    return [
+    `/api/kalshi/history/export/parts`
+    ] as const;
+    }
+
+
+export const getGetKalshiHistoryExportPartsQueryOptions = <TData = Awaited<ReturnType<typeof getKalshiHistoryExportParts>>, TError = ErrorType<ApiError>>( options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getKalshiHistoryExportParts>>, TError, TData>>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetKalshiHistoryExportPartsQueryKey();
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getKalshiHistoryExportParts>>> = ({ signal }) => getKalshiHistoryExportParts({ signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getKalshiHistoryExportParts>>, TError, TData> & { queryKey: DataTag<QueryKey, TData, TError> }
+}
+
+export type GetKalshiHistoryExportPartsQueryResult = NonNullable<Awaited<ReturnType<typeof getKalshiHistoryExportParts>>>
+export type GetKalshiHistoryExportPartsQueryError = ErrorType<ApiError>
+
+
+export function useGetKalshiHistoryExportParts<TData = Awaited<ReturnType<typeof getKalshiHistoryExportParts>>, TError = ErrorType<ApiError>>(
+  options: { query:Partial<UseQueryOptions<Awaited<ReturnType<typeof getKalshiHistoryExportParts>>, TError, TData>> & Pick<
+        DefinedInitialDataOptions<
+          Awaited<ReturnType<typeof getKalshiHistoryExportParts>>,
+          TError,
+          Awaited<ReturnType<typeof getKalshiHistoryExportParts>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient
+  ):  DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useGetKalshiHistoryExportParts<TData = Awaited<ReturnType<typeof getKalshiHistoryExportParts>>, TError = ErrorType<ApiError>>(
+  options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getKalshiHistoryExportParts>>, TError, TData>> & Pick<
+        UndefinedInitialDataOptions<
+          Awaited<ReturnType<typeof getKalshiHistoryExportParts>>,
+          TError,
+          Awaited<ReturnType<typeof getKalshiHistoryExportParts>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useGetKalshiHistoryExportParts<TData = Awaited<ReturnType<typeof getKalshiHistoryExportParts>>, TError = ErrorType<ApiError>>(
+  options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getKalshiHistoryExportParts>>, TError, TData>>, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+/**
+ * @summary Prepare a stable list of smaller AI-ready history downloads
+ */
+
+export function useGetKalshiHistoryExportParts<TData = Awaited<ReturnType<typeof getKalshiHistoryExportParts>>, TError = ErrorType<ApiError>>(
+  options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getKalshiHistoryExportParts>>, TError, TData>>, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient
+ ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
+
+  const queryOptions = getGetKalshiHistoryExportPartsQueryOptions(options)
+
+  const query = useQuery(queryOptions, queryClient) as  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
 export const getDownloadKalshiHistoryUrl = (params: DownloadKalshiHistoryParams,) => {
   const normalizedParams = new URLSearchParams();
 
@@ -998,7 +1100,7 @@ export const getDownloadKalshiHistoryUrl = (params: DownloadKalshiHistoryParams,
 }
 
 /**
- * @summary Download every stored execution, without dashboard filters or row limits
+ * @summary Download saved executions, optionally as one JSON part
  */
 export const downloadKalshiHistory = async (params: DownloadKalshiHistoryParams, options?: Parameters<typeof customFetch>[1]): Promise<Blob> => {
 
@@ -1022,7 +1124,7 @@ export const getDownloadKalshiHistoryQueryKey = (params?: DownloadKalshiHistoryP
     }
 
 
-export const getDownloadKalshiHistoryQueryOptions = <TData = Awaited<ReturnType<typeof downloadKalshiHistory>>, TError = ErrorType<unknown>>(params: DownloadKalshiHistoryParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof downloadKalshiHistory>>, TError, TData>>, request?: SecondParameter<typeof customFetch>}
+export const getDownloadKalshiHistoryQueryOptions = <TData = Awaited<ReturnType<typeof downloadKalshiHistory>>, TError = ErrorType<ApiError>>(params: DownloadKalshiHistoryParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof downloadKalshiHistory>>, TError, TData>>, request?: SecondParameter<typeof customFetch>}
 ) => {
 
 const {query: queryOptions, request: requestOptions} = options ?? {};
@@ -1041,10 +1143,10 @@ const {query: queryOptions, request: requestOptions} = options ?? {};
 }
 
 export type DownloadKalshiHistoryQueryResult = NonNullable<Awaited<ReturnType<typeof downloadKalshiHistory>>>
-export type DownloadKalshiHistoryQueryError = ErrorType<unknown>
+export type DownloadKalshiHistoryQueryError = ErrorType<ApiError>
 
 
-export function useDownloadKalshiHistory<TData = Awaited<ReturnType<typeof downloadKalshiHistory>>, TError = ErrorType<unknown>>(
+export function useDownloadKalshiHistory<TData = Awaited<ReturnType<typeof downloadKalshiHistory>>, TError = ErrorType<ApiError>>(
  params: DownloadKalshiHistoryParams, options: { query:Partial<UseQueryOptions<Awaited<ReturnType<typeof downloadKalshiHistory>>, TError, TData>> & Pick<
         DefinedInitialDataOptions<
           Awaited<ReturnType<typeof downloadKalshiHistory>>,
@@ -1054,7 +1156,7 @@ export function useDownloadKalshiHistory<TData = Awaited<ReturnType<typeof downl
       >, request?: SecondParameter<typeof customFetch>}
  , queryClient?: QueryClient
   ):  DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
-export function useDownloadKalshiHistory<TData = Awaited<ReturnType<typeof downloadKalshiHistory>>, TError = ErrorType<unknown>>(
+export function useDownloadKalshiHistory<TData = Awaited<ReturnType<typeof downloadKalshiHistory>>, TError = ErrorType<ApiError>>(
  params: DownloadKalshiHistoryParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof downloadKalshiHistory>>, TError, TData>> & Pick<
         UndefinedInitialDataOptions<
           Awaited<ReturnType<typeof downloadKalshiHistory>>,
@@ -1064,15 +1166,15 @@ export function useDownloadKalshiHistory<TData = Awaited<ReturnType<typeof downl
       >, request?: SecondParameter<typeof customFetch>}
  , queryClient?: QueryClient
   ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
-export function useDownloadKalshiHistory<TData = Awaited<ReturnType<typeof downloadKalshiHistory>>, TError = ErrorType<unknown>>(
+export function useDownloadKalshiHistory<TData = Awaited<ReturnType<typeof downloadKalshiHistory>>, TError = ErrorType<ApiError>>(
  params: DownloadKalshiHistoryParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof downloadKalshiHistory>>, TError, TData>>, request?: SecondParameter<typeof customFetch>}
  , queryClient?: QueryClient
   ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
 /**
- * @summary Download every stored execution, without dashboard filters or row limits
+ * @summary Download saved executions, optionally as one JSON part
  */
 
-export function useDownloadKalshiHistory<TData = Awaited<ReturnType<typeof downloadKalshiHistory>>, TError = ErrorType<unknown>>(
+export function useDownloadKalshiHistory<TData = Awaited<ReturnType<typeof downloadKalshiHistory>>, TError = ErrorType<ApiError>>(
  params: DownloadKalshiHistoryParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof downloadKalshiHistory>>, TError, TData>>, request?: SecondParameter<typeof customFetch>}
  , queryClient?: QueryClient
  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {

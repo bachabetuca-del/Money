@@ -370,6 +370,8 @@ button { cursor: pointer; }
 .ws-export-copy strong { display: inline-flex; align-items: center; gap: 6px; color: #185b45; }
 .ws-export-copy p { margin: 4px 0 0; font-size: 11px; line-height: 1.55; color: #74807b; }
 .ws-export-copy p.err { color: #934c41; } .ws-export-copy p.ok { color: #28714e; }
+.ws-export-parts { flex: 1 0 100%; display: flex; flex-direction: column; gap: 8px; }
+.ws-export-parts p { margin: 0; font-size: 11px; line-height: 1.5; color: #74807b; }
 .ws-ai h3 { display: flex; align-items: center; gap: 7px; }
 .ws-ai-body { padding: 0 20px 18px; display: flex; flex-direction: column; gap: 10px; }
 .ws-ai-cost { font-size: 11.5px; line-height: 1.55; padding: 10px 13px; border-radius: 9px; background: #f6ecd6; color: #6f4f14; border-left: 4px solid #c9822b; }

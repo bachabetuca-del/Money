@@ -916,10 +916,38 @@ export const GetKalshiLeaderboardResponse = zod.object({
 
 
 /**
- * @summary Download every stored execution, without dashboard filters or row limits
+ * @summary Prepare a stable list of smaller AI-ready history downloads
  */
+export const getKalshiHistoryExportPartsResponseTotalTradesMin = 0;
+
+
+
+export const getKalshiHistoryExportPartsResponsePartsItemTradesMin = 0;
+
+
+
+export const GetKalshiHistoryExportPartsResponse = zod.object({
+  "totalTrades": zod.number().int().min(getKalshiHistoryExportPartsResponseTotalTradesMin),
+  "rowsPerPart": zod.number().int().min(1),
+  "snapshotAt": zod.coerce.date(),
+  "parts": zod.array(zod.object({
+  "part": zod.number().int().min(1),
+  "trades": zod.number().int().min(getKalshiHistoryExportPartsResponsePartsItemTradesMin)
+}))
+})
+
+
+/**
+ * @summary Download saved executions, optionally as one JSON part
+ */
+export const downloadKalshiHistoryQueryPartMax = 10000;
+
+
+
 export const DownloadKalshiHistoryQueryParams = zod.object({
-  "format": zod.enum(['json', 'csv'])
+  "format": zod.enum(['json', 'csv']),
+  "part": zod.coerce.number().int().min(1).max(downloadKalshiHistoryQueryPartMax).optional().describe('One-based part number from the export-parts manifest; JSON only'),
+  "snapshotAt": zod.date().optional().describe('Snapshot time returned by the export-parts manifest')
 })
 
 export const DownloadKalshiHistoryResponse = zod.instanceof(Blob)

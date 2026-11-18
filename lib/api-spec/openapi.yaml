@@ -230,24 +230,53 @@ paths:
           content:
             application/json:
               schema: { $ref: "#/components/schemas/ApiError" }
+  /kalshi/history/export/parts:
+    get:
+      operationId: getKalshiHistoryExportParts
+      tags: [kalshi]
+      summary: Prepare a stable list of smaller AI-ready history downloads
+      responses:
+        "200":
+          description: Download parts covering all executions saved at the snapshot time
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/KalshiHistoryExportParts" }
+        "503":
+          description: Could not prepare the export
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ApiError" }
   /kalshi/history/export:
     get:
       operationId: downloadKalshiHistory
       tags: [kalshi]
-      summary: Download every stored execution, without dashboard filters or row limits
+      summary: Download saved executions, optionally as one JSON part
       parameters:
         - in: query
           name: format
           required: true
           schema: { type: string, enum: [json, csv] }
+        - in: query
+          name: part
+          description: One-based part number from the export-parts manifest; JSON only
+          schema: { type: integer, minimum: 1, maximum: 10000 }
+        - in: query
+          name: snapshotAt
+          description: Snapshot time returned by the export-parts manifest
+          schema: { type: string, format: date-time }
       responses:
         "200":
-          description: Complete database snapshot; not a guarantee of complete Kalshi exchange history
+          description: Complete saved history or one valid part of its saved-at snapshot
           content:
             application/json:
               schema: { type: string, format: binary }
             text/csv:
               schema: { type: string, format: binary }
+        "400":
+          description: Invalid export part parameters
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ApiError" }
   /kalshi/analysis:
     get:
       operationId: getKalshiAnalysis
@@ -744,6 +773,22 @@ components:
         page: { type: integer }
         pageSize: { type: integer }
         totalPages: { type: integer }
+    KalshiHistoryExportPart:
+      type: object
+      required: [part, trades]
+      properties:
+        part: { type: integer, minimum: 1 }
+        trades: { type: integer, minimum: 0 }
+    KalshiHistoryExportParts:
+      type: object
+      required: [totalTrades, rowsPerPart, snapshotAt, parts]
+      properties:
+        totalTrades: { type: integer, minimum: 0 }
+        rowsPerPart: { type: integer, minimum: 1 }
+        snapshotAt: { type: string, format: date-time }
+        parts:
+          type: array
+          items: { $ref: "#/components/schemas/KalshiHistoryExportPart" }
     RoiCoverage:
       type: object
       required: [savedTrades, settledTrades, pendingTrades, excludedTrades, settledMarkets, pendingMarkets, games, roiPct, profit, recentRoiPct, recentTrades, firstTradeAt, lastTradeAt, lastSettlementCheckAt, settlementErrors, verifiedHistoryMarkets, incompleteHistoryMarkets, historyErrorMarkets, historyExcludedTrades, net, recentNet]

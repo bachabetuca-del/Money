@@ -625,6 +625,22 @@ export interface RoiLeaderboard {
   totalPages: number;
 }
 
+export interface KalshiHistoryExportPart {
+  /** @minimum 1 */
+  part: number;
+  /** @minimum 0 */
+  trades: number;
+}
+
+export interface KalshiHistoryExportParts {
+  /** @minimum 0 */
+  totalTrades: number;
+  /** @minimum 1 */
+  rowsPerPart: number;
+  snapshotAt: string;
+  parts: KalshiHistoryExportPart[];
+}
+
 export interface GameAnalysisInput {
   /**
      * @minLength 1
@@ -1409,6 +1425,16 @@ export const GetKalshiLeaderboardDirection = {
 
 export type DownloadKalshiHistoryParams = {
 format: DownloadKalshiHistoryFormat;
+/**
+ * One-based part number from the export-parts manifest; JSON only
+ * @minimum 1
+ * @maximum 10000
+ */
+part?: number;
+/**
+ * Snapshot time returned by the export-parts manifest
+ */
+snapshotAt?: string;
 };
 
 export type DownloadKalshiHistoryFormat = typeof DownloadKalshiHistoryFormat[keyof typeof DownloadKalshiHistoryFormat];

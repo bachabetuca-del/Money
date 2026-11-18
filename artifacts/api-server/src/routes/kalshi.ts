@@ -9,6 +9,7 @@ import {
   GetKalshiExplorerQueryParams,
   GetKalshiExplorerResponse,
   DownloadKalshiHistoryQueryParams,
+  GetKalshiHistoryExportPartsResponse,
   GetKalshiAnalysisQueryParams,
   GetKalshiAnalysisResponse,
   AnalyzeKalshiGameBody,
@@ -27,7 +28,7 @@ import {
 import { isOwnerChat } from "../lib/owner-policy";
 import { getKalshiExplorer } from "../lib/kalshi-explorer";
 import { kalshiLiveEvents } from "../lib/kalshi-live-events";
-import { streamHistoryExport } from "../lib/kalshi-history-export";
+import { getKalshiHistoryExportParts, streamHistoryExport } from "../lib/kalshi-history-export";
 import { analysisAvailable, gameAnalysisService, loadGameAnalysis } from "../lib/kalshi-game-analysis";
 import { AnalysisError } from "../lib/game-analysis";
 import { getRoiLeaderboard } from "../lib/kalshi-roi-leaderboard";
@@ -65,15 +66,31 @@ router.get("/kalshi/leaderboard", async (req, res): Promise<void> => {
   }
 });
 let exportInProgress = false;
+router.get("/kalshi/history/export/parts", async (_req, res): Promise<void> => {
+  try {
+    res.set("Cache-Control", "private, no-store");
+    res.json(GetKalshiHistoryExportPartsResponse.parse(await getKalshiHistoryExportParts()));
+  } catch {
+    res.status(503).json({ error: "No se pudo preparar la lista de partes. Inténtalo de nuevo." });
+  }
+});
 router.get("/kalshi/history/export", async (req, res): Promise<void> => {
   const parsed = DownloadKalshiHistoryQueryParams.safeParse(req.query);
   if (!parsed.success) { res.status(400).json({ error: "Elige JSON o CSV." }); return; }
+  const { part, snapshotAt, format } = parsed.data;
+  if ((part === undefined) !== (snapshotAt === undefined) || (part !== undefined && format !== "json")) {
+    res.status(400).json({ error: "Las partes requieren JSON y el corte de la lista preparada." });
+    return;
+  }
   if (exportInProgress) {
     res.status(429).json({ error: "Hay otra descarga en curso. Espera a que termine." });
     return;
   }
   exportInProgress = true;
-  try { await streamHistoryExport(req, res, parsed.data.format); }
+  try {
+    await streamHistoryExport(req, res, format,
+      part !== undefined && snapshotAt !== undefined ? { part, snapshotAt: new Date(snapshotAt) } : undefined);
+  }
   catch {
     if (res.headersSent) res.destroy();
     else res.status(500).json({ error: "No se pudo completar la descarga del histórico. Inténtalo de nuevo." });

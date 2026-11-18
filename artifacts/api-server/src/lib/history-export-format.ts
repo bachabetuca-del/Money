@@ -1,5 +1,7 @@
 import { publicDirection } from "./telegram-trade-direction";
 
+export const HISTORY_EXPORT_ROWS_PER_PART = 100_000;
+
 export type HistoryExportRow = {
   tradeId: string; ticker: string; title: string; eventTitle: string | null;
   marketTitle: string | null; sport: string; outcomeSide: string; bookSide: string;
@@ -56,6 +58,20 @@ export function serializeHistoryChunk(
   return rows.map((row, index) => format === "json"
     ? `${hasEarlierRows || index > 0 ? "," : ""}${JSON.stringify(row)}`
     : csvTrade(row)).join("");
+}
+
+export function buildHistoryExportParts(totalTrades: number, snapshotAt: string) {
+  const safeTotal = Math.max(0, Math.trunc(totalTrades));
+  const totalParts = Math.ceil(safeTotal / HISTORY_EXPORT_ROWS_PER_PART);
+  return {
+    totalTrades: safeTotal,
+    rowsPerPart: HISTORY_EXPORT_ROWS_PER_PART,
+    snapshotAt,
+    parts: Array.from({ length: totalParts }, (_, index) => ({
+      part: index + 1,
+      trades: Math.min(HISTORY_EXPORT_ROWS_PER_PART, safeTotal - index * HISTORY_EXPORT_ROWS_PER_PART),
+    })),
+  };
 }
 
 export function exportMetadata(total: number, markets: number, from: string | null, to: string | null, at: string) {

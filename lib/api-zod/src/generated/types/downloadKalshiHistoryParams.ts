@@ -9,4 +9,14 @@ import type { DownloadKalshiHistoryFormat } from './downloadKalshiHistoryFormat'
 
 export type DownloadKalshiHistoryParams = {
 format: DownloadKalshiHistoryFormat;
+/**
+ * One-based part number from the export-parts manifest; JSON only
+ * @minimum 1
+ * @maximum 10000
+ */
+part?: number;
+/**
+ * Snapshot time returned by the export-parts manifest
+ */
+snapshotAt?: Date;
 };

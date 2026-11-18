@@ -1,6 +1,9 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { csvCell, csvTrade, EXPORT_COLUMNS, exportMetadata, exportTrade, serializeHistoryChunk, valueBand } from "./history-export-format";
+import {
+  buildHistoryExportParts, csvCell, csvTrade, EXPORT_COLUMNS, exportMetadata, exportTrade,
+  HISTORY_EXPORT_ROWS_PER_PART, serializeHistoryChunk, valueBand,
+} from "./history-export-format";
 import { ANALYSIS_PROMPT, AnalysisError, GameAnalysisService, analysisGameState, type GameContext } from "./game-analysis";
 import type { GameAnalysis } from "@workspace/api-zod";
 
@@ -57,6 +60,16 @@ test("history export chunks preserve valid JSON separators and complete CSV rows
   assert.equal(csv.split("\r\n").filter(Boolean).length, 2);
   assert.match(csv, /first/);
   assert.match(csv, /second/);
+});
+test("AI export parts cover every saved operation with no oversized row-count segment", () => {
+  for (const total of [0, 1, HISTORY_EXPORT_ROWS_PER_PART, HISTORY_EXPORT_ROWS_PER_PART + 1, 1_036_316]) {
+    const manifest = buildHistoryExportParts(total, time.toISOString());
+    assert.equal(manifest.totalTrades, total);
+    assert.equal(manifest.parts.reduce((sum, part) => sum + part.trades, 0), total);
+    assert.ok(manifest.parts.every((part, index) =>
+      part.part === index + 1 && part.trades > 0 && part.trades <= HISTORY_EXPORT_ROWS_PER_PART));
+    assert.equal(manifest.parts.length, Math.ceil(total / HISTORY_EXPORT_ROWS_PER_PART));
+  }
 });
 test("export bands have no overlap and retain exact 5k/10k boundaries and legacy smaller trades", () => {
   assert.equal(valueBand(999), "below_1000");
