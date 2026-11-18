@@ -49,11 +49,15 @@ export async function streamHistoryExport(req: Request, res: Response, format: "
         .where(and(cursor ? gt(trades.tradeId, cursor) : undefined))
         .orderBy(asc(trades.tradeId)).limit(1000);
       if (!rows.length) break;
+      const output: string[] = [];
       for (const row of rows) {
         const record = exportTrade(row.trade, row);
-        await write(format === "json" ? (written ? "," : "") + JSON.stringify(record) : csvTrade(record));
+        output.push(format === "json"
+          ? (written ? "," : "") + JSON.stringify(record)
+          : csvTrade(record));
         written++;
       }
+      await write(output.join(""));
       cursor = rows.at(-1)!.trade.tradeId;
     }
     if (written !== counts.total) throw new Error("Incomplete history export");

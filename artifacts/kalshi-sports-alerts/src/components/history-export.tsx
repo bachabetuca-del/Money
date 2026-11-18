@@ -1,6 +1,6 @@
-import { useEffect, useRef, useState } from 'react';
-import { Download, FileJson, FileSpreadsheet, X } from 'lucide-react';
-import { downloadKalshiHistory } from '@workspace/api-client-react';
+import { useState } from 'react';
+import { Download, FileJson, FileSpreadsheet } from 'lucide-react';
+import { getDownloadKalshiHistoryUrl } from '@workspace/api-client-react';
 
 type Format = 'json' | 'csv';
 
@@ -22,41 +22,19 @@ export function errorText(err: unknown, fallback: string) {
 }
 
 export function HistoryExport() {
-  const [pending, setPending] = useState<Format | null>(null);
-  const [error, setError] = useState('');
   const [done, setDone] = useState('');
-  const busy = useRef(false);
-  const controller = useRef<AbortController | null>(null);
-  useEffect(() => () => {
-    controller.current?.abort();
-    controller.current = null;
-  }, []);
 
-  async function run(format: Format) {
-    if (busy.current) return;
-    busy.current = true;
-    setPending(format);
-    setError('');
+  function run(format: Format) {
     setDone('');
-    const ctrl = new AbortController();
-    controller.current = ctrl;
-    try {
-      const blob = await downloadKalshiHistory({ format }, { responseType: 'blob', signal: ctrl.signal });
-      if (ctrl.signal.aborted || controller.current !== ctrl) return;
-      const stamp = new Date().toISOString().slice(0, 19).replace(/[:T]/g, '-');
-      saveBlob(blob, `fieldnote-kalshi-historial-${stamp}.${format}`);
-      setDone(format === 'json' ? 'JSON descargado.' : 'CSV descargado.');
-    } catch (err) {
-      if (controller.current !== ctrl) return;
-      if (ctrl.signal.aborted) setDone('Descarga cancelada. Puedes volver a intentarlo.');
-      else setError(errorText(err, 'No se pudo descargar el historial. Inténtalo de nuevo.'));
-    } finally {
-      busy.current = false;
-      if (controller.current === ctrl) {
-        controller.current = null;
-        setPending(null);
-      }
-    }
+    const link = document.createElement('a');
+    link.href = getDownloadKalshiHistoryUrl({ format });
+    link.target = '_blank';
+    link.rel = 'noopener';
+    link.download = `kalshi-historico.${format}`;
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    setDone(`Se inició la descarga ${format.toUpperCase()}. Revisa Descargas; el navegador mostrará cualquier error.`);
   }
 
   return (
@@ -64,16 +42,14 @@ export function HistoryExport() {
       <div className="ws-export-copy">
         <strong><Download size={14} /> Exportar todo el historial guardado</strong>
         <p>Ignora los filtros de deporte, banda y ventana: incluye todas las bandas, partidos archivados y todas las ejecuciones almacenadas, no solo las filas de la gráfica. Es lo que este monitor guardó, no todo el historial de Kalshi. El JSON añade metadatos y limitaciones para IA; el CSV es para hojas de cálculo.</p>
-        {error && <p className="err" role="alert" data-testid="status-export-error">{error}</p>}
-        {done && !error && <p className="ok" role="status" data-testid="status-export-done">{done}</p>}
+        {done && <p className="ok" role="status" data-testid="status-export-done">{done}</p>}
       </div>
       <div className="ws-tools">
-        {pending && <button className="button secondary" onClick={() => controller.current?.abort()} data-testid="button-cancel-export"><X /> Cancelar descarga</button>}
-        <button className="button secondary" disabled={pending !== null} onClick={() => void run('json')} data-testid="button-export-json">
-          <FileJson /> {pending === 'json' ? 'Preparando JSON…' : 'JSON para IA'}
+        <button className="button secondary" onClick={() => run('json')} data-testid="button-export-json">
+          <FileJson /> JSON para IA
         </button>
-        <button className="button secondary" disabled={pending !== null} onClick={() => void run('csv')} data-testid="button-export-csv">
-          <FileSpreadsheet /> {pending === 'csv' ? 'Preparando CSV…' : 'CSV para hojas'}
+        <button className="button secondary" onClick={() => run('csv')} data-testid="button-export-csv">
+          <FileSpreadsheet /> CSV para hojas
         </button>
       </div>
     </section>
