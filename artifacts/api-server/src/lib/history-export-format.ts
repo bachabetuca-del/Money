@@ -2,6 +2,12 @@ import { publicDirection } from "./telegram-trade-direction";
 
 export const HISTORY_EXPORT_ROWS_PER_PART = 100_000;
 
+export function parseHistorySnapshotAt(value: string | undefined): Date | undefined {
+  if (value === undefined) return undefined;
+  const parsed = new Date(value);
+  return Number.isNaN(parsed.getTime()) ? undefined : parsed;
+}
+
 export type HistoryExportRow = {
   tradeId: string; ticker: string; title: string; eventTitle: string | null;
   marketTitle: string | null; sport: string; outcomeSide: string; bookSide: string;

@@ -17,6 +17,8 @@ format: DownloadKalshiHistoryFormat;
 part?: number;
 /**
  * Snapshot time returned by the export-parts manifest
+ * @minLength 20
+ * @maxLength 40
  */
-snapshotAt?: Date;
+snapshotAt?: string;
 };

@@ -29,6 +29,7 @@ import { isOwnerChat } from "../lib/owner-policy";
 import { getKalshiExplorer } from "../lib/kalshi-explorer";
 import { kalshiLiveEvents } from "../lib/kalshi-live-events";
 import { getKalshiHistoryExportParts, streamHistoryExport } from "../lib/kalshi-history-export";
+import { parseHistorySnapshotAt } from "../lib/history-export-format";
 import { analysisAvailable, gameAnalysisService, loadGameAnalysis } from "../lib/kalshi-game-analysis";
 import { AnalysisError } from "../lib/game-analysis";
 import { getRoiLeaderboard } from "../lib/kalshi-roi-leaderboard";
@@ -78,6 +79,11 @@ router.get("/kalshi/history/export", async (req, res): Promise<void> => {
   const parsed = DownloadKalshiHistoryQueryParams.safeParse(req.query);
   if (!parsed.success) { res.status(400).json({ error: "Elige JSON o CSV." }); return; }
   const { part, snapshotAt, format } = parsed.data;
+  const snapshotDate = parseHistorySnapshotAt(snapshotAt);
+  if (snapshotAt !== undefined && !snapshotDate) {
+    res.status(400).json({ error: "El corte de historial no es una fecha válida. Vuelve a preparar las partes." });
+    return;
+  }
   if ((part === undefined) !== (snapshotAt === undefined) || (part !== undefined && format !== "json")) {
     res.status(400).json({ error: "Las partes requieren JSON y el corte de la lista preparada." });
     return;
@@ -89,7 +95,7 @@ router.get("/kalshi/history/export", async (req, res): Promise<void> => {
   exportInProgress = true;
   try {
     await streamHistoryExport(req, res, format,
-      part !== undefined && snapshotAt !== undefined ? { part, snapshotAt: new Date(snapshotAt) } : undefined);
+      part !== undefined && snapshotDate ? { part, snapshotAt: snapshotDate } : undefined);
   }
   catch {
     if (res.headersSent) res.destroy();

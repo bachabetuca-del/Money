@@ -2,7 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import {
   buildHistoryExportParts, csvCell, csvTrade, EXPORT_COLUMNS, exportMetadata, exportTrade,
-  HISTORY_EXPORT_ROWS_PER_PART, serializeHistoryChunk, valueBand,
+  HISTORY_EXPORT_ROWS_PER_PART, parseHistorySnapshotAt, serializeHistoryChunk, valueBand,
 } from "./history-export-format";
 import { ANALYSIS_PROMPT, AnalysisError, GameAnalysisService, analysisGameState, type GameContext } from "./game-analysis";
 import type { GameAnalysis } from "@workspace/api-zod";
@@ -70,6 +70,11 @@ test("AI export parts cover every saved operation with no oversized row-count se
       part.part === index + 1 && part.trades > 0 && part.trades <= HISTORY_EXPORT_ROWS_PER_PART));
     assert.equal(manifest.parts.length, Math.ceil(total / HISTORY_EXPORT_ROWS_PER_PART));
   }
+});
+test("export route accepts manifest timestamps as URL strings and rejects invalid dates", () => {
+  assert.equal(parseHistorySnapshotAt("2026-11-18T02:49:30.000Z")?.toISOString(), "2026-11-18T02:49:30.000Z");
+  assert.equal(parseHistorySnapshotAt("not-a-date"), undefined);
+  assert.equal(parseHistorySnapshotAt(undefined), undefined);
 });
 test("export bands have no overlap and retain exact 5k/10k boundaries and legacy smaller trades", () => {
   assert.equal(valueBand(999), "below_1000");

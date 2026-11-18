@@ -942,12 +942,15 @@ export const GetKalshiHistoryExportPartsResponse = zod.object({
  */
 export const downloadKalshiHistoryQueryPartMax = 10000;
 
+export const downloadKalshiHistoryQuerySnapshotAtMin = 20;
+export const downloadKalshiHistoryQuerySnapshotAtMax = 40;
+
 
 
 export const DownloadKalshiHistoryQueryParams = zod.object({
   "format": zod.enum(['json', 'csv']),
   "part": zod.coerce.number().int().min(1).max(downloadKalshiHistoryQueryPartMax).optional().describe('One-based part number from the export-parts manifest; JSON only'),
-  "snapshotAt": zod.date().optional().describe('Snapshot time returned by the export-parts manifest')
+  "snapshotAt": zod.coerce.string().min(downloadKalshiHistoryQuerySnapshotAtMin).max(downloadKalshiHistoryQuerySnapshotAtMax).optional().describe('Snapshot time returned by the export-parts manifest')
 })
 
 export const DownloadKalshiHistoryResponse = zod.instanceof(Blob)

@@ -263,7 +263,7 @@ paths:
         - in: query
           name: snapshotAt
           description: Snapshot time returned by the export-parts manifest
-          schema: { type: string, format: date-time }
+          schema: { type: string, minLength: 20, maxLength: 40 }
       responses:
         "200":
           description: Complete saved history or one valid part of its saved-at snapshot
