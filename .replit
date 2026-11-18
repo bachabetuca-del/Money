@@ -31,3 +31,6 @@ TELEGRAM_OWNER_CHAT_ID = "2141494802"
 
 [userenv.development]
 BOT_WORKERS_ENABLED = "false"
+
+[userenv.production]
+BOT_WORKERS_ENABLED = "true"
