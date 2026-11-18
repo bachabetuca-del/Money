@@ -48,6 +48,16 @@ export function csvTrade(row: ReturnType<typeof exportTrade>) {
   return EXPORT_COLUMNS.map(key => csvCell(row[key])).join(",") + "\r\n";
 }
 
+export function serializeHistoryChunk(
+  rows: Array<ReturnType<typeof exportTrade>>,
+  format: "json" | "csv",
+  hasEarlierRows: boolean,
+) {
+  return rows.map((row, index) => format === "json"
+    ? `${hasEarlierRows || index > 0 ? "," : ""}${JSON.stringify(row)}`
+    : csvTrade(row)).join("");
+}
+
 export function exportMetadata(total: number, markets: number, from: string | null, to: string | null, at: string) {
   return {
     schemaVersion: 1, source: "Fieldnote / Kalshi public sports trades",

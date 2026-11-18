@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { csvCell, csvTrade, EXPORT_COLUMNS, exportMetadata, exportTrade, valueBand } from "./history-export-format";
+import { csvCell, csvTrade, EXPORT_COLUMNS, exportMetadata, exportTrade, serializeHistoryChunk, valueBand } from "./history-export-format";
 import { ANALYSIS_PROMPT, AnalysisError, GameAnalysisService, analysisGameState, type GameContext } from "./game-analysis";
 import type { GameAnalysis } from "@workspace/api-zod";
 
@@ -46,6 +46,17 @@ test("CSV quotes delimiters, newlines and quotes and blocks formula execution", 
   const record = exportTrade({ ...row, title: "=CMD()" }, extra);
   assert.equal(record.title, "=CMD()");
   assert.match(csvTrade(record), /"'=CMD\(\)"/);
+});
+test("history export chunks preserve valid JSON separators and complete CSV rows", () => {
+  const first = exportTrade({ ...row, tradeId: "first" }, extra);
+  const second = exportTrade({ ...row, tradeId: "second" }, extra);
+  const json = `{"trades":[${serializeHistoryChunk([first], "json", false)}${serializeHistoryChunk([second], "json", true)}]}`;
+  assert.deepEqual(JSON.parse(json).trades.map((trade: { trade_id: string }) => trade.trade_id), ["first", "second"]);
+
+  const csv = serializeHistoryChunk([first], "csv", false) + serializeHistoryChunk([second], "csv", true);
+  assert.equal(csv.split("\r\n").filter(Boolean).length, 2);
+  assert.match(csv, /first/);
+  assert.match(csv, /second/);
 });
 test("export bands have no overlap and retain exact 5k/10k boundaries and legacy smaller trades", () => {
   assert.equal(valueBand(999), "below_1000");

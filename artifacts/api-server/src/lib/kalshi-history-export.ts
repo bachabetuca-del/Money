@@ -2,7 +2,7 @@ import type { Request, Response } from "express";
 import { and, asc, eq, gt, sql } from "drizzle-orm";
 import { db, kalshiAlertsTable as trades, kalshiGameStatusTable as games,
   kalshiResultsTable as results, kalshiTradeHistoryTable as imports } from "@workspace/db";
-import { csvTrade, EXPORT_COLUMNS, exportMetadata, exportTrade } from "./history-export-format";
+import { EXPORT_COLUMNS, exportMetadata, exportTrade, serializeHistoryChunk } from "./history-export-format";
 
 /** Bounded server memory, backpressure and one consistent read-only snapshot. */
 export async function streamHistoryExport(req: Request, res: Response, format: "json" | "csv") {
@@ -49,15 +49,9 @@ export async function streamHistoryExport(req: Request, res: Response, format: "
         .where(and(cursor ? gt(trades.tradeId, cursor) : undefined))
         .orderBy(asc(trades.tradeId)).limit(1000);
       if (!rows.length) break;
-      const output: string[] = [];
-      for (const row of rows) {
-        const record = exportTrade(row.trade, row);
-        output.push(format === "json"
-          ? (written ? "," : "") + JSON.stringify(record)
-          : csvTrade(record));
-        written++;
-      }
-      await write(output.join(""));
+      const records = rows.map(row => exportTrade(row.trade, row));
+      await write(serializeHistoryChunk(records, format, written > 0));
+      written += records.length;
       cursor = rows.at(-1)!.trade.tradeId;
     }
     if (written !== counts.total) throw new Error("Incomplete history export");
