@@ -3,6 +3,8 @@ import { logger } from "./logger";
 import { ownerChatId } from "./owner-policy";
 import { startKalshiMonitor } from "./kalshi-monitor";
 import { activateSignalEvaluation } from "./kalshi-signal-store";
+import { SIGNAL_RULE_VERSION } from "./signal-evaluation";
+import { ROI_METHOD_VERSION } from "./roi-method";
 
 export function checkRuntimeConfiguration() {
   const required = ["OWNER_EMAIL", "CLERK_SECRET_KEY", "CLERK_PUBLISHABLE_KEY",
@@ -43,6 +45,8 @@ export async function startBotRuntime() {
   // Durable cutoff begins only after this environment is enabled and owns the
   // existing production lock. Restarts never move it; development never creates it.
   await activateSignalEvaluation();
+  logger.info({ signalRuleVersion: SIGNAL_RULE_VERSION, roiMethodVersion: ROI_METHOD_VERSION },
+    "Bot alert rule activated");
   startKalshiMonitor();
 }
 

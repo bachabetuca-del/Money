@@ -37,9 +37,9 @@ import { KalshiLifecycle } from "./kalshi-lifecycle";
 import { applyLifecycle } from "./kalshi-lifecycle-store";
 import { refreshStoredFees } from "./kalshi-fee-store";
 import { notificationRoiBasis, type RoiBasis } from "./telegram-notification-roi";
+import { TelegramHttpClient } from "./telegram-http";
 
 const KALSHI_API = "https://external-api.kalshi.com/trade-api/v2";
-const TELEGRAM_API = "https://api.telegram.org";
 const DEFAULT_THRESHOLD = 10_000;
 const POLL_INTERVAL_MS = 15_000;
 const SERIES_CACHE_MS = 60 * 60 * 1000;
@@ -213,11 +213,12 @@ const tradeNotifications = new TelegramTradeNotifications(tradeNotificationStore
   else logger.warn({ error: detail }, event === "failed" ? "Telegram notification will retry" : "Previous notification cleanup will retry");
 });
 
-const kalshiHttp = new KalshiHttpClient(fetch, Date.now, (retryAt, delayMs) => {
-  restPacer.limited();
-  lastError = new KalshiCooldownError(retryAt).message;
+const kalshiHttp = new KalshiHttpClient(fetch, Date.now, (retryAt, delayMs, reason) => {
+  if (reason === "rate_limit") restPacer.limited();
+  lastError = reason === "rate_limit" ? new KalshiCooldownError(retryAt).message
+    : "Kalshi: fallo temporal de conexión; recuperación automática en curso.";
   logger.warn({ retryAt: new Date(retryAt).toISOString(), delayMs },
-    "Kalshi rate limit: shared pause activated");
+    reason === "rate_limit" ? "Kalshi rate limit: shared pause activated" : "Kalshi connection: shared pause activated");
 }, async (url, priority) => {
   await restPacer.wait(url, priority);
   return kalshiAuth?.headers(new URL(url).pathname);
@@ -466,24 +467,13 @@ function botToken() {
   return process.env.TELEGRAM_BOT_TOKEN?.trim() ?? "";
 }
 
+const telegramHttp = new TelegramHttpClient(botToken);
+
 async function telegramRequest<T>(
   method: string,
   body?: Record<string, unknown>,
 ): Promise<TelegramResponse<T>> {
-  const token = botToken();
-  if (!token) throw new Error("Telegram bot token is not configured.");
-
-  const response = await fetch(`${TELEGRAM_API}/bot${token}/${method}`, {
-    method: body ? "POST" : "GET",
-    headers: body ? { "content-type": "application/json" } : undefined,
-    body: body ? JSON.stringify(body) : undefined,
-    signal: AbortSignal.timeout(15_000),
-  });
-  const result = (await response.json()) as TelegramResponse<T>;
-  if (!response.ok || !result.ok) {
-    throw new Error(result.description ?? `Telegram returned HTTP ${response.status}`);
-  }
-  return result;
+  return telegramHttp.call<T>(method, body);
 }
 
 async function telegramPhotoRequest<T>(
@@ -491,9 +481,6 @@ async function telegramPhotoRequest<T>(
   fields: Record<string, string>,
   png: Buffer,
 ): Promise<TelegramResponse<T>> {
-  const token = botToken();
-  if (!token) throw new Error("Telegram bot token is not configured.");
-
   const form = new FormData();
   for (const [key, value] of Object.entries(fields)) form.set(key, value);
   form.set(
@@ -501,16 +488,7 @@ async function telegramPhotoRequest<T>(
     new Blob([new Uint8Array(png)], { type: "image/png" }),
     "kalshi-market-chart.png",
   );
-  const response = await fetch(`${TELEGRAM_API}/bot${token}/${method}`, {
-    method: "POST",
-    body: form,
-    signal: AbortSignal.timeout(30_000),
-  });
-  const result = (await response.json()) as TelegramResponse<T>;
-  if (!response.ok || !result.ok) {
-    throw new Error(result.description ?? `Telegram returned HTTP ${response.status}`);
-  }
-  return result;
+  return telegramHttp.call<T>(method, form);
 }
 
 async function pollOnce() {

@@ -99,8 +99,47 @@ test("only one recovery probe runs and failed probes never leave a stuck lock", 
   assert.equal(calls, 2);
   finish(new Response(null, { status: 503 }));
   await assert.rejects(probe, KalshiHttpError);
-  assert.equal(client.isPaused, false);
+  assert.equal(client.isPaused, true);
+  now += 4000;
   await client.json(url);
+  assert.equal(calls, 3);
+});
+
+test("network failures pause every worker, release recovery probes and preserve rate-limit statistics", async () => {
+  let now = origin, calls = 0;
+  const reasons: string[] = [];
+  const client = new KalshiHttpClient(async () => {
+    if (++calls <= 2) throw new DOMException("timeout", "TimeoutError");
+    return ok();
+  }, () => now, (_, __, reason) => reasons.push(reason));
+  await assert.rejects(client.json(url), /connection/);
+  await assert.rejects(client.json(`${url}/other`), KalshiCooldownError);
+  assert.equal(calls, 1);
+  now += 2000;
+  await assert.rejects(client.json(url), /connection/);
+  now += 4000;
+  await client.json(url);
+  assert.equal(client.isPaused, false);
+  assert.equal(client.stats.limited, 0);
+  assert.deepEqual(reasons, ["connection", "connection"]);
+});
+
+test("temporary server failure respects Retry-After and invalid response bodies are not cached", async () => {
+  let now = origin, calls = 0;
+  const client = new KalshiHttpClient(async () => {
+    calls++;
+    if (calls === 1) return new Response(null, { status: 503, headers: { "retry-after": "60" } });
+    if (calls === 2) return new Response("broken json");
+    return ok();
+  }, () => now);
+  const metadata = "https://example.test/trade-api/v2/markets/test";
+  await assert.rejects(client.cachedJson(metadata), KalshiHttpError);
+  now += 59_999;
+  await assert.rejects(client.cachedJson(metadata), KalshiCooldownError);
+  now++;
+  await assert.rejects(client.cachedJson(metadata), /interrupted or invalid/);
+  now += 4000;
+  assert.deepEqual(await client.cachedJson(metadata), { trades: [] });
   assert.equal(calls, 3);
 });
 

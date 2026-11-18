@@ -7,8 +7,8 @@ export class KalshiHttpError extends Error {
 }
 
 export class KalshiCooldownError extends Error {
-  constructor(public readonly retryAt: number) {
-    super(`Kalshi: pausa temporal por límite de consultas. Se reintentará automáticamente desde ${new Date(retryAt).toLocaleString("es-US", { timeZone: "America/New_York", hour12: false })} ET.`);
+  constructor(public readonly retryAt: number, reason: "rate_limit" | "connection" = "rate_limit") {
+    super(`Kalshi: pausa temporal por ${reason === "rate_limit" ? "límite de consultas" : "fallo de conexión"}. Se reintentará automáticamente desde ${new Date(retryAt).toLocaleString("es-US", { timeZone: "America/New_York", hour12: false })} ET.`);
   }
 }
 
@@ -29,6 +29,7 @@ export class KalshiHttpClient {
   private failures = 0;
   private generation = 0;
   private probing = false;
+  private pauseReason: "rate_limit" | "connection" = "rate_limit";
   private cache = new Map<string, { until: number; value: Promise<unknown> }>();
   private requests = 0;
   private limited = 0;
@@ -38,7 +39,7 @@ export class KalshiHttpClient {
   constructor(
     private readonly request: typeof fetch = fetch,
     private readonly now: () => number = Date.now,
-    private readonly onPause: (retryAt: number, delayMs: number) => void = () => {},
+    private readonly onPause: (retryAt: number, delayMs: number, reason: "rate_limit" | "connection") => void = () => {},
     private readonly prepare?: (url: string, priority: ReadPriority) => Promise<Record<string, string> | undefined>,
   ) {}
 
@@ -83,7 +84,7 @@ export class KalshiHttpClient {
   async json<T>(url: string, priority: ReadPriority = "metadata"): Promise<T> {
     const start = this.now();
     if (start < this.retryAt || this.probing) {
-      throw new KalshiCooldownError(Math.max(this.retryAt, start + 1000));
+      throw new KalshiCooldownError(Math.max(this.retryAt, start + 1000), this.pauseReason);
     }
     // After a pause, let just one caller probe recovery instead of a worker burst.
     const probe = this.failures > 0;
@@ -92,14 +93,21 @@ export class KalshiHttpClient {
     try {
       const headers = this.prepare ? await this.prepare(url, priority) : undefined;
       // A queued, paced request must not slip through a newly activated pause.
-      if (this.now() < this.retryAt) throw new KalshiCooldownError(this.retryAt);
+      if (this.now() < this.retryAt) throw new KalshiCooldownError(this.retryAt, this.pauseReason);
       this.requests++;
       const path = new URL(url).pathname.replace(/^\/trade-api\/v2/, "");
       const route = path.replace(/\/(markets|events)\/(?!trades(?:$|\/))[^/]+$/, "/$1/:id")
         .replace(/\/(milestone|milestones)\/[^/]+$/, "/$1/:id");
       this.routes.set(route, (this.routes.get(route) ?? 0) + 1);
-      const response = await this.request(url, { headers, signal: AbortSignal.timeout(15_000) });
+      let response: Response;
+      try {
+        response = await this.request(url, { headers, signal: AbortSignal.timeout(15_000) });
+      } catch {
+        this.pauseConnection();
+        throw new Error("Kalshi connection timed out or failed; automatic recovery pending.");
+      }
       if (response.status === 429) {
+        this.pauseReason = "rate_limit";
         this.limited++;
         const now = this.now();
         this.failures = Math.min(this.failures + 1, 5);
@@ -108,14 +116,21 @@ export class KalshiHttpClient {
         const delay = Math.max(backoff, retryAfterMs(response.headers.get('retry-after'), now) ?? 0);
         this.retryAt = Math.max(this.retryAt, now + delay);
         await response.body?.cancel().catch(() => {});
-        this.onPause(this.retryAt, this.retryAt - now);
+        this.onPause(this.retryAt, this.retryAt - now, "rate_limit");
         throw new KalshiCooldownError(this.retryAt);
       }
       if (!response.ok) {
+        if (response.status >= 500) this.pauseConnection(retryAfterMs(response.headers.get("retry-after"), this.now()) ?? 0);
         await response.body?.cancel().catch(() => {});
         throw new KalshiHttpError(response.status);
       }
-      const result = await response.json() as T;
+      let result: T;
+      try {
+        result = await response.json() as T;
+      } catch {
+        this.pauseConnection();
+        throw new Error("Kalshi response interrupted or invalid; automatic recovery pending.");
+      }
       // An older in-flight success must not clear a newer caller's 429 pause.
       if (this.generation === generation) {
         this.failures = 0;
@@ -125,5 +140,15 @@ export class KalshiHttpClient {
     } finally {
       if (probe) this.probing = false;
     }
+  }
+
+  private pauseConnection(retryAfter = 0) {
+    // Do not relabel an active rate-limit pause or shorten its Retry-After.
+    if (this.now() >= this.retryAt) this.pauseReason = "connection";
+    this.failures = Math.min(this.failures + 1, 5);
+    this.generation++;
+    const delay = Math.max(retryAfter, Math.min(30_000, 2000 * 2 ** (this.failures - 1)));
+    this.retryAt = Math.max(this.retryAt, this.now() + delay);
+    this.onPause(this.retryAt, this.retryAt - this.now(), "connection");
   }
 }
