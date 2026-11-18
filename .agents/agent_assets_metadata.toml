@@ -42,3 +42,17 @@ mtime_ms = 1792754833239
 storage_uri = "gcs://replit-rams-assets-kirk/rams/assets/repl:217fd6cc-800e-4596-b158-396d253b647b/a6155b36-e077-4abb-8f45-7e1e7a454fef/fc90be34-11f6-4147-b09a-d71f54d045e5"
 storage_version_token = "1792754852908887"
 content_type = "image/png"
+
+[[outputs]]
+id = "WVBfq9fesqgMLnJoo4D9G"
+uri = "file://docs/cobertura-primera-prueba.md"
+type = "text"
+title = "Diagnóstico de cobertura de la primera prueba"
+description = "Comprobación de solo lectura del 18 de noviembre: falta el esquema de la prueba en producción y no hay una cohorte activa verificable."
+logical_id = "0449a871-efad-44f0-a000-a0ec9dfcfc9e"
+content_hash = "sha256:164b788d057ee5aed9b6e715727916574e7301fec0fb2679b1e254d317511ba5"
+size = 7332
+mtime_ms = 1794962289814
+storage_uri = "gcs://replit-rams-assets-kirk/rams/assets/repl:217fd6cc-800e-4596-b158-396d253b647b/0449a871-efad-44f0-a000-a0ec9dfcfc9e/781a14f0-572a-4e50-a506-9a90c04cdece"
+storage_version_token = "1794962344602395"
+content_type = "text/markdown"

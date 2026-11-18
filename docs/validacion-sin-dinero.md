@@ -86,3 +86,11 @@ Los cálculos agregados se hacen fuera del envío y se leen desde un informe gua
 Las pruebas de base de datos requieren trabajadores desactivados y usan tablas temporales aisladas. No inscriben señales reales, no envían mensajes ni órdenes.
 
 El funcionamiento del captador publicado y la cobertura real deben observarse después de publicar y activar la prueba; no se sustituyen por los resultados de fixtures. Esta entrega construye la infraestructura, no semanas de resultados ni una conclusión de rentabilidad.
+
+### Primera comprobación de producción
+
+La [revisión de cobertura del 18 de noviembre de 2026](cobertura-primera-prueba.md)
+no encontró las tablas de la prueba en producción. Por tanto, la evidencia era
+insuficiente para certificar cobertura: faltaba una cohorte publicada e iniciada
+voluntariamente por el dueño. Es un diagnóstico fechado, no una lectura del estado
+actual ni una conclusión sobre rentabilidad.
