@@ -90,21 +90,23 @@ export async function processPaperExecution(id: string, book: BookQuote | null, 
 export async function settlePaperBatch(runId: string, executor: PaperDb = db): Promise<number> {
   const rows = await executor.select({ id: executions.id, candidateId: executions.candidateId,
     evidence: executions.evidence, resolution: executions.resolution, result: settlements.result,
-    checkedAt: settlements.checkedAt, dueAt: executions.dueAt, error: settlements.error,
+    checkedAt: settlements.checkedAt, dueAt: executions.dueAt, error: settlements.error, terminal: settlements.terminal,
     side: sql<string>`${candidates.evidence}->>'side'` })
     .from(executions).innerJoin(candidates, eq(candidates.id, executions.candidateId))
     .innerJoin(settlements, eq(settlements.ticker, candidates.ticker))
-    .where(and(eq(executions.runId, runId), sql`${executions.status} IN ('full','partial')`, eq(settlements.terminal, true),
+    .where(and(eq(executions.runId, runId), sql`${executions.status} IN ('full','partial')`,
+      sql`(${settlements.terminal} = TRUE OR ${executions.resolution} IS NOT NULL)`,
       sql`${settlements.checkedAt} > ${executions.dueAt}`,
       sql`(${executions.resolution} IS NULL OR
         (${executions.resolution}->>'result') IS DISTINCT FROM
-          (CASE WHEN ${settlements.error} IS NULL THEN COALESCE(${settlements.result},'unsupported') ELSE 'verification_error' END))`))
+          (CASE WHEN ${settlements.terminal} = FALSE THEN 'not_terminal'
+            WHEN ${settlements.error} IS NULL THEN COALESCE(${settlements.result},'unsupported') ELSE 'verification_error' END))`))
     .orderBy(asc(executions.dueAt)).limit(100);
   for (const row of rows) {
     const fill = (row.evidence as Execution["evidence"]).fill;
     if (!fill) continue;
     const prior = row.resolution as SettlementRecord | null;
-    const result = row.error ? "verification_error" : row.result ?? "unsupported";
+    const result = !row.terminal ? "not_terminal" : row.error ? "verification_error" : row.result ?? "unsupported";
     const current = resolvePaper(fill, row.side, result, row.checkedAt.toISOString());
     const history = prior ? [...prior.history, { result: prior.result, checkedAt: prior.checkedAt,
       netProfitUsd: prior.netProfitUsd, payoutUsd: prior.payoutUsd }] : [];

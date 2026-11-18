@@ -4,6 +4,7 @@
   "private": true,
   "type": "module",
   "scripts": {
+    "test:paper": "esbuild src/lib/paper/paper.test.ts src/lib/paper/paper-db.test.ts --bundle --platform=node --format=esm --packages=external --alias:@workspace/db=../../lib/db/src/index.ts --alias:@workspace/api-zod=../../lib/api-zod/src/index.ts --outdir=../../lib/db/.local/paper-tests --out-extension:.js=.mjs && node --test --test-concurrency=1 ../../lib/db/.local/paper-tests/*test.mjs",
     "dev": "export NODE_ENV=development && pnpm run build && pnpm run start",
     "build": "node ./build.mjs",
     "start": "node --enable-source-maps ./dist/index.mjs",

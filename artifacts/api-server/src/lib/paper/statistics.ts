@@ -39,10 +39,13 @@ export type PairedObservation = Observation & { controlGame: string; controlCost
 export function pairedInterval(rows: PairedObservation[]): PaperInterval | undefined {
   const parent = new Map<string, string>();
   const find = (x: string): string => {
-    const p = parent.get(x);
-    if (!p) { parent.set(x, x); return x; }
-    if (p === x) return x;
-    const root = find(p); parent.set(x, root); return root;
+    if (!parent.has(x)) { parent.set(x, x); return x; }
+    let root = x;
+    while (parent.get(root) !== root) root = parent.get(root)!;
+    while (x !== root) {
+      const next = parent.get(x)!; parent.set(x, root); x = next;
+    }
+    return root;
   };
   for (const r of rows) parent.set(find(r.game), find(r.controlGame));
   const grouped = new Map<string, { c: number; p: number; cc: number; cp: number }>();

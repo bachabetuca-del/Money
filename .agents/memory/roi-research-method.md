@@ -66,3 +66,9 @@ Prospective evaluation is separate from retrospective ranking. Freeze qualifying
 **Why:** Recomputing a failed delivery from later results could make the same alert qualify using information unavailable at its original decision. Saving only after successful delivery would also lose that decision when delivery fails.
 
 **How to apply:** Admit only genuinely new live outbox entries after a durable activation boundary; never enroll legacy entries or replays later. Keep undelivered signals visible but outside post-alert returns. Evaluate confirmed deliveries using later official binary verification, not the scoreboard. Preserve the original fee estimate, including unknown costs, rather than repricing older signals with a newer model.
+
+Treat orderbook-based paper execution as a conservative, observational test, not an execution guarantee. Whole-contract entries and no assumed replacement of hypothetically consumed liquidity are deliberate assumptions, not exchange restrictions.
+
+**Why:** A fractional public trade or a later snapshot does not prove that the follower could obtain the same fill or that liquidity already used in the simulation was replenished. Removing those constraints can improve reported returns without adding evidence.
+
+**How to apply:** Change quantity precision or liquidity-replenishment assumptions only in a new predeclared cohort supported by contemporaneous evidence. Separate unavailable quotes from verified non-execution, and do not interpret matched observational controls as randomized causal evidence.

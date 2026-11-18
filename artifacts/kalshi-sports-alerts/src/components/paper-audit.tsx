@@ -12,7 +12,7 @@ export function PaperAudit() {
   return (
     <section className="ws-card pv-audit" aria-labelledby="pv-audit-h" data-testid="section-paper-audit">
       <header className="row">
-        <div><h3 id="pv-audit-h">Auditoría de avisos guardados</h3><p>Una fila por aviso almacenado: tiempos, cuentas y resultado oficial. Sirve para comprobar si se podía seguir a tiempo.</p></div>
+        <div><h3 id="pv-audit-h">Auditoría de avisos guardados</h3><p>Tiempos, cuentas y resultado oficial de avisos reales. Sin un libro guardado entonces, no se puede demostrar que su precio siguiera disponible.</p></div>
         {a && <div className="pv-chips"><span className="sg-tag" data-testid="text-audit-env">Entorno: {a.environment}</span><span className="sg-tag pending" data-testid="text-audit-screenshot-status">Captura: {a.screenshotStatus}</span><span className="time-text">{q.isFetching ? 'Actualizando…' : when(a.generatedAt)}</span></div>}
       </header>
       {q.isError && <div className="ws-notice error pv-pad" role="alert" data-testid="status-audit-error"><div><strong>{a ? 'No se pudo actualizar; última instantánea' : 'No se pudo cargar la auditoría'}</strong><p>{errorText(q.error, 'Error desconocido.')}</p></div><button className="button secondary" onClick={() => void q.refetch()} data-testid="button-retry-audit"><RefreshCw /> Reintentar</button></div>}
@@ -22,7 +22,7 @@ export function PaperAudit() {
           {a.notes.length > 0 && <ul className="sg-limits pv-pad" data-testid="list-audit-notes">{a.notes.map((n, i) => <li key={i}>{n}</li>)}</ul>}
           {Object.keys(a.screenshotArithmetic).length > 0 && (
             <div className="pv-pad">
-              <div className="pv-label">Cuentas de la captura de pantalla · aproximadas, no conciliadas</div>
+              <div className="pv-label">Comprobación algebraica de porcentajes guardados · no de 379 operaciones reales</div>
               <dl className="pv-review" data-testid="list-screenshot-arithmetic">{Object.entries(a.screenshotArithmetic).map(([k, v]) => <div key={k}><dt>{k}</dt><dd className="mono">{v.toLocaleString('es-US', { maximumFractionDigits: 4 })}</dd></div>)}</dl>
             </div>
           )}

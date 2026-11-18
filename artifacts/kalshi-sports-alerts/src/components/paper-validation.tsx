@@ -11,6 +11,7 @@ import { setUrlParams } from '@/lib/navigation';
 import { pct, usd, when } from '@/components/signal-evaluation';
 import { PaperProtocolForm, protocolLines } from '@/components/paper-protocol-form';
 import { PaperAudit } from '@/components/paper-audit';
+import { paperReason } from '@/lib/paper-labels';
 import './paper-validation.css';
 
 const RUN: Record<PaperRun['status'], string> = { draft: 'Borrador', active: 'En curso', paused: 'Detenida', finished: 'Terminada' };
@@ -60,7 +61,7 @@ export function PaperValidation() {
         <div>
           <div className="eyebrow">Validación sin dinero · libro de órdenes real</div>
           <h2 id="pv-title"><FlaskConical size={20} /> ¿Se podía seguir de verdad?</h2>
-          <p>Un ROI histórico atractivo no basta. Esta prueba simula, sin dinero, comprar cada aviso con retraso y contra el libro de órdenes que había en ese momento. Los resultados se fijan antes de verlos.</p>
+          <p>Un ROI histórico atractivo no basta. Esta prueba simula, sin dinero, comprar cada aviso con retraso y contra el libro de órdenes que había en ese momento. Las reglas se fijan antes de ver los resultados.</p>
         </div>
         <div className="sg-snap" data-testid="text-paper-snapshot">
           <span>{q.isFetching ? 'Actualizando…' : d ? `Instantánea ${when(d.generatedAt)}` : 'Sin instantánea'}</span>
@@ -100,7 +101,7 @@ export function PaperValidation() {
           {run && run.status !== 'draft' && (
             <>
               {d.holdoutHidden && <div className="ws-notice" role="status" data-testid="notice-holdout-hidden"><div><strong><EyeOff size={13} /> Tramo final oculto hasta {when(run.endsAt, 'el cierre fijado')}</strong><p>Los resultados de los últimos días se muestran solo como recuentos hasta la fecha de cierre, aunque la prueba esté detenida. Así no se puede ajustar la regla mirando el final.</p></div></div>}
-              <StatsBlock stats={d.stats} />
+              <StatsBlock stats={d.stats} run={run} />
               <Comparisons list={d.comparisons} />
               <Rows d={d} run={run} stale={stale} go={(p) => go({ runId: run.id, page: p })} />
             </>
@@ -131,14 +132,14 @@ function RunPanel({ run, d, confirm, setConfirm, pending, onAct, error }: { run:
         <div className="pv-actions">
           {run.status === 'draft' && <button className="button" disabled={!d.activationAllowed || pending} title={d.activationAllowed ? undefined : 'Solo en la versión publicada'} onClick={() => setConfirm('start')} data-testid="button-paper-start"><Play /> Iniciar</button>}
           {run.status === 'active' && <button className="button secondary" disabled={pending} onClick={() => setConfirm('pause')} data-testid="button-paper-pause"><Pause /> Detener</button>}
-          {run.status !== 'draft' && <><button className="button ghost" disabled={!!dl} onClick={() => void download('csv')} data-testid="button-paper-csv">{dl === 'csv' ? <LoaderCircle className="spin" /> : <Download />} CSV</button>
-            <button className="button ghost" disabled={!!dl} onClick={() => void download('json')} data-testid="button-paper-json">{dl === 'json' ? <LoaderCircle className="spin" /> : <Download />} JSON</button></>}
+          <button className="button ghost" disabled={!!dl} onClick={() => void download('csv')} data-testid="button-paper-csv">{dl === 'csv' ? <LoaderCircle className="spin" /> : <Download />} CSV</button>
+          <button className="button ghost" disabled={!!dl} onClick={() => void download('json')} data-testid="button-paper-json">{dl === 'json' ? <LoaderCircle className="spin" /> : <Download />} JSON</button>
         </div>
       </div>
       {run.status === 'draft' && !d.activationAllowed && <p className="pv-note" data-testid="text-paper-draft-blocked">Borrador guardado. No está activo: publica la aplicación e inícialo desde allí.</p>}
       {run.status === 'paused' && <p className="pv-note" data-testid="text-paper-paused">Una prueba detenida no se reanuda. Para una nueva cohorte, crea otro borrador.</p>}
       {run.workerError && <div className="ws-notice error" role="alert"><div><strong>Incidencia del registro</strong><p>{run.workerError}</p></div></div>}
-      {run.status === 'active' && <p className="pv-note">Último latido {when(run.heartbeatAt, 'sin latido todavía')} · {n(run.dropped)} avisos descartados por límites · {n(d.recorded)} registrados</p>}
+      {run.status === 'active' && <p className="pv-note">Último latido {when(run.heartbeatAt, 'sin latido todavía')} · {n(run.dropped)} observaciones no registradas · {n(d.recorded)} candidatos registrados</p>}
       {confirm && (
         <div className="pv-confirm" role="alertdialog" aria-label="Confirmar" data-testid="dialog-paper-confirm">
           <p>{confirm === 'start' ? `Iniciar fija la fecha de cierre (${p.runDays} días) y el tramo oculto final. El protocolo no se podrá cambiar.` : 'Detener es definitivo: la prueba no se puede reanudar. El tramo oculto sigue oculto hasta la fecha de cierre.'}</p>
@@ -157,16 +158,18 @@ function RunPanel({ run, d, confirm, setConfirm, pending, onAct, error }: { run:
   );
 }
 
-function StatsBlock({ stats }: { stats: PaperStats[] }) {
+function StatsBlock({ stats, run }: { stats: PaperStats[]; run: PaperRun }) {
   if (stats.length === 0) return <div className="pv-card ws-empty small" data-testid="empty-paper-stats"><h3>Evidencia insuficiente</h3><p>Todavía no hay oportunidades registradas. Eso no es un ROI de 0%.</p></div>;
   return (
     <div className="pv-card"><h3 className="pv-h3">Escenarios simulados</h3>
-      <p className="pv-sub">Cada fila combina grupo, fase, política de repetición y retraso. «Desconocida» significa que no hubo libro fiable: no se cuenta como pérdida, solo se muestra cómo cambiaría el ROI en los extremos.</p>
+      <p className="pv-sub">Cada fila combina grupo, fase, política de repetición y retraso. «Desconocida» indica que no se pudo verificar la entrada. No es una pérdida. La sensibilidad supone comprar al precio límite con la tarifa congelada: no representa resultados ni límites estadísticos.</p>
       <div className="pv-stats">
         {stats.map((s) => {
           const k = `${s.cohort}-${s.phase}-${s.policy}-${s.delaySeconds}`;
           return (
             <article key={k} className="pv-stat" data-testid={`card-paper-stats-${k}`}>
+              {s.cohort === 'alerts' && s.delaySeconds === run.protocol.delaySeconds && s.policy === run.protocol.repetitions &&
+                <small>Escenario principal predefinido</small>}
               <div className="pv-stat-tags"><span className="sg-tag">{s.cohort === 'alerts' ? 'Avisos' : 'Control'}</span><span className="sg-tag">{PHASE[s.phase] ?? s.phase}</span><span className="sg-tag">{s.policy === 'first' ? 'Primero' : 'Todos'}</span><span className="sg-tag">{s.delaySeconds} s</span></div>
               <b className={`pv-roi ${tone(s.netRoiPct)}`}>{pct(s.netRoiPct) ?? 'Evidencia insuficiente'}</b>
               <small>{s.netRoiPct != null ? `ROI neto · ${usd(s.netProfitUsd)} · ${ci(s.interval)}` : `${n(s.settled)} liquidadas`}</small>
@@ -175,12 +178,14 @@ function StatsBlock({ stats }: { stats: PaperStats[] }) {
                 <div><dt>Completa · parcial · nada</dt><dd>{n(s.full)} · {n(s.partial)} · {n(s.none)}</dd></div>
                 <div><dt>Desconocidas · pendientes</dt><dd>{n(s.unknown)} · {n(s.pending)}</dd></div>
                 <div><dt>Cobertura</dt><dd>{pct(s.coveragePct)?.replace('+', '')}</dd></div>
-                <div><dt>Partidos (aprox.)</dt><dd>{n(s.games)} ({n(s.approximateGames)})</dd></div>
+                <div><dt>Partidos liquidados · identidades aproximadas</dt><dd>{n(s.games)} · {n(s.approximateGames)}</dd></div>
                 <div><dt>Invertido · comisiones</dt><dd>{usd(s.deployedUsd, false)} · {usd(s.feesUsd, false)}</dd></div>
                 <div><dt>Comprometido · libre</dt><dd>{usd(s.committedUsd, false)} · {usd(s.freeCapitalUsd, false)}</dd></div>
                 <div><dt>Por aviso</dt><dd>{usd(s.profitPerAlertUsd) ?? 'sin dato'}</dd></div>
                 <div><dt>Sin el mejor partido</dt><dd>{pct(s.withoutBestGameRoiPct) ?? 'sin dato'}</dd></div>
-                <div><dt>Desconocidas si pierden · si ganan</dt><dd>{pct(s.unknownLossScenarioRoiPct) ?? 'n/d'} · {pct(s.unknownWinScenarioRoiPct) ?? 'n/d'}</dd></div>
+                <div><dt>Beneficio del mejor partido</dt><dd>{s.bestGameProfitUsd == null ? 'sin dato' : usd(s.bestGameProfitUsd)} · {pct(s.bestGameSharePct)} del beneficio neto</dd></div>
+                <div><dt>Ejecuciones aún sin liquidación válida</dt><dd>{n(s.unresolvedExecutions ?? 0)} · {pct(s.settledCoveragePct)} liquidadas</dd></div>
+                <div><dt>Hipótesis: desconocidas pierden · ganan al límite</dt><dd>{pct(s.unknownLossScenarioRoiPct) ?? 'n/d'} · {pct(s.unknownWinScenarioRoiPct) ?? 'n/d'}</dd></div>
                 {s.dateInterval && <div><dt>Por fechas</dt><dd>{ci(s.dateInterval)}</dd></div>}
               </dl>
             </article>
@@ -242,8 +247,8 @@ function OppRow({ r }: { r: PaperOpportunity }) {
     <Fragment>
       <tr data-testid={`row-paper-${r.id}`}>
         <td className="wrap"><b>{r.eventTitle}</b><br /><small>{r.marketTitle}</small><br /><span className="time-text">{when(r.observedAt)}</span></td>
-        <td className="r"><span className="sg-tag">{r.side}</span> <span className="mono" title="Precio observado en el aviso">{(r.price * 100).toFixed(0)}¢ obs.</span><br /><small>{pct(r.historicalRoiPct) ?? 'sin dato'} · {n(r.historicalGames)} part.</small></td>
-        <td><span className="sg-tag">{PHASE[r.phase] ?? r.phase}</span>{!r.eligible && <><br /><small>No elegible: {r.reason}</small></>}</td>
+        <td className="r"><span className="sg-tag">{r.side === 'yes' ? 'SÍ' : r.side === 'no' ? 'NO' : r.side}</span> <span className="mono" title="Precio observado en el aviso">{(r.price * 100).toLocaleString('es-US', { maximumFractionDigits: 2 })}¢ obs.</span><br /><small>{pct(r.historicalRoiPct) ?? 'sin dato'} · {n(r.historicalGames)} part.</small></td>
+        <td><span className="sg-tag">{PHASE[r.phase] ?? r.phase}</span>{r.reason !== 'telegram_eligible' && <><br /><small>{r.eligible ? 'Límite de la prueba' : 'No elegible'}: {paperReason(r.reason)}</small></>}</td>
         <td>{Object.entries(counts).map(([k, v]) => <span key={k} className={`sg-tag pv-ex ${k}`}>{EXEC[k as PaperExecution['status']] ?? k} {v}</span>)}{r.executions.length === 0 && <small>Ninguna</small>}</td>
         <td><button className="button ghost" aria-expanded={open} onClick={() => setOpen(!open)} data-testid={`button-paper-detail-${r.id}`}>{open ? 'Ocultar' : 'Detalle'}</button></td>
       </tr>
@@ -252,7 +257,7 @@ function OppRow({ r }: { r: PaperOpportunity }) {
         <div className="pv-execs">{r.executions.map((x, i) => (
           <div key={i} className="pv-exec" data-testid={`card-paper-exec-${r.id}-${i}`}>
             <div><span className={`sg-tag pv-ex ${x.status}`}>{EXEC[x.status]}</span> <span className="mono">{x.delaySeconds} s · {x.policy === 'first' ? 'primero' : 'todos'}</span></div>
-            <small>{x.reason}</small>
+            <small>{paperReason(x.reason)}</small>
             <dl>
               <div><dt>Previsto · capturado</dt><dd>{when(x.dueAt)} · {when(x.capturedAt)}</dd></div>
               <div><dt>Contratos · coste · comisión</dt><dd>{n(x.contracts)} · {usd(x.costUsd, false)} · {x.feeUsd != null ? usd(x.feeUsd, false) : 'desconocida'}</dd></div>

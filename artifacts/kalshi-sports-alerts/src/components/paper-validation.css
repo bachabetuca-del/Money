@@ -62,7 +62,9 @@
 .pv-execs { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 8px; white-space: normal; }
 .pv-exec { background: #f2f1e9; border: 1px solid #e5e3d9; border-radius: 9px; padding: 9px 11px; }
 .pv-pager { display: flex; justify-content: center; align-items: center; gap: 12px; padding: 12px; flex-wrap: wrap; }
-.pv-chips { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }
+.pv-chips { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; min-width: 0; max-width: 100%; }
+.pv-chips .sg-tag { white-space: normal; overflow-wrap: anywhere; max-width: 100%; line-height: 1.5; }
+.pv-audit > .row { flex-wrap: wrap; gap: 12px; }
 .pv-pad { padding: 0 20px 12px; margin: 0 0 4px; }
 .pv-audit .ws-notice.pv-pad { margin: 0 20px 12px; }
 .pv-label { font: 10px var(--app-font-mono); text-transform: uppercase; letter-spacing: .06em; color: #7b5a1b; }

@@ -40,7 +40,7 @@ export class PaperBook {
   private session = "";
   private heartbeatAt = 0;
   connect(session: string, now: number) {
-    this.invalidate(); this.session = session; this.sid = null; this.sequence = null; this.heartbeatAt = now;
+    this.books.clear(); this.session = session; this.sid = null; this.sequence = null; this.heartbeatAt = now;
   }
   pong(now: number) { this.heartbeatAt = now; }
   invalidate() { for (const book of this.books.values()) book.valid = false; }

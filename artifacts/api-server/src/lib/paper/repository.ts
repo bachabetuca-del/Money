@@ -9,7 +9,7 @@ import { notificationRoiBasis } from "../telegram-notification-roi";
 import type { PaperEvidence } from "./evidence";
 import type { PaperFill, Resolution } from "./execution";
 
-export type PaperDb = typeof db;
+export type PaperDb = Pick<typeof db, "select" | "insert" | "update" | "execute" | "transaction">;
 export type Candidate = Omit<typeof candidates.$inferSelect, "evidence"> & { evidence: PaperEvidence };
 export type ExecutionEvidence = {
   fill?: PaperFill; deliveryBook?: unknown; timing?: Record<string, unknown>;
@@ -141,6 +141,11 @@ export function toOpportunity(c: Candidate, fills: Execution[], hidden: boolean)
     evidence: { ...e },
     executions: fills.map(x => {
       const fill = x.evidence.fill, mask = hidden && c.phase === "holdout";
+      const publicEvidence: Record<string, unknown> = { ...x.evidence };
+      if (mask) {
+        delete publicEvidence.cashBeforeUsd;
+        delete publicEvidence.exposureBeforeUsd;
+      }
       return { delaySeconds: x.delaySeconds, policy: x.policy as "first" | "all",
         dueAt: x.dueAt.toISOString(), capturedAt: x.capturedAt?.toISOString() ?? null,
         status: x.status as PaperExecution["status"], reason: fill?.reason ?? "awaiting_capture",
@@ -148,7 +153,7 @@ export function toOpportunity(c: Candidate, fills: Execution[], hidden: boolean)
         averagePrice: fill?.averagePrice ?? null, bestAsk: fill?.bestAsk ?? null,
         settlement: mask ? "Tramo final oculto" : x.resolution?.result ?? "Pendiente",
         netProfitUsd: mask ? null : x.resolution?.netProfitUsd ?? null,
-        evidence: { ...x.evidence, ...(mask ? {} : { resolution: x.resolution }) } };
+        evidence: { ...publicEvidence, ...(mask ? {} : { resolution: x.resolution }) } };
     }),
   };
 }

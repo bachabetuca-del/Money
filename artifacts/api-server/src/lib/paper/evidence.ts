@@ -1,7 +1,8 @@
 import type { PaperRun } from "@workspace/api-zod";
 import type { NotificationJob } from "../telegram-trade-notifications";
 import type { NotificationRoi } from "../telegram-notification-roi";
-import { signalGameIdentity } from "../signal-evaluation";
+import { signalGameIdentity, SIGNAL_RULE_VERSION } from "../signal-evaluation";
+import { PAPER_VERSION } from "./protocol";
 import { marketType } from "../market-type";
 import { ROI_MONEY_BANDS } from "../roi-performance";
 import { inTradeRange, tradeRange } from "../kalshi-trade-bands";
@@ -35,9 +36,14 @@ export function candidateEvidence(run: PaperRun, job: NotificationJob, roi: Noti
   if (roi?.research?.includesCandidateGame) ex.push("candidate_game_in_reference");
   if (identity.gameIdentity !== "milestone") ex.push("approximate_game_identity");
   if (roi && roi.basis !== run.protocol.basis) ex.push("notification_rule_changed");
+  if (run.protocol.ruleVersion !== SIGNAL_RULE_VERSION || run.protocol.version !== PAPER_VERSION)
+    ex.push("protocol_version_changed");
   if (roi?.research?.terminal || ["finished", "final"].includes(roi?.research?.phase ?? "")) ex.push("market_already_terminal");
   if (!roi?.evidence || roi.evidence.feeType === null || roi.evidence.feeMultiplier === null)
     ex.push("fee_unknown");
+  if (roi?.evidence && (!roi.evidence.feeModel.scheduleAsOf ||
+      Date.parse(roi.evidence.feeModel.scheduleAsOf) > at.getTime()))
+    ex.push("fee_time_unverified");
   if (roi?.games == null || roi.games < run.protocol.minimumGames || roi.trades < run.protocol.minimumTrades)
     ex.push("historical_sample_insufficient");
   if (job.createdTime > at || job.queuedAt && job.queuedAt > at) ex.push("timestamp_inconsistent");

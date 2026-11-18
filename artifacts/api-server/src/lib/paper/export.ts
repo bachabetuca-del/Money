@@ -8,7 +8,7 @@ import type { PaperDashboard } from "@workspace/api-zod";
 export function csvCell(value: unknown) {
   let text = value == null ? "" : typeof value === "object" ? JSON.stringify(value) : String(value);
   // Formula injection protection for human names/tickers/evidence in spreadsheets.
-  if (/^[\s]*[=+\-@\t\r]/.test(text)) text = "'" + text;
+  if (typeof value === "string" && /^[\s]*[=+\-@\t\r]/.test(text)) text = "'" + text;
   return `"${text.replace(/"/g, '""')}"`;
 }
 export async function writePaperExport(id: string, format: "json" | "csv", write: (chunk: string) => Promise<void>, now = new Date(),
