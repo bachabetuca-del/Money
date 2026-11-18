@@ -191,6 +191,12 @@ paths:
       summary: Equal-stake hypothetical ROI from saved trades and official binary settlements
       parameters:
         - in: query
+          name: unit
+          schema: { type: string, enum: [game, execution], default: game }
+        - in: query
+          name: phase
+          schema: { $ref: "#/components/schemas/RoiPhase" }
+        - in: query
           name: coverage
           schema: { type: string, enum: [verified, all], default: verified }
         - in: query
@@ -210,7 +216,7 @@ paths:
           schema: { type: string, enum: [all, yes, no], default: all }
         - in: query
           name: minGames
-          schema: { type: integer, minimum: 1, maximum: 1000, default: 10 }
+          schema: { type: integer, minimum: 1, maximum: 1000, default: 50 }
         - in: query
           name: page
           schema: { type: integer, minimum: 1, maximum: 100000, default: 1 }
@@ -535,6 +541,8 @@ components:
       required: [basis, roiPct, grossRoiPct, netRoiPct, games, trades, historyAsOf, capturedAt]
       description: Historical comparison frozen before sending, not the current ranking or the later profit of this bet.
       properties:
+        methodVersion: { type: string }
+        phase: { $ref: "#/components/schemas/RoiPhase" }
         basis: { $ref: "#/components/schemas/RoiBasis" }
         roiPct: { type: number }
         grossRoiPct: { type: number }
@@ -600,6 +608,8 @@ components:
       required: [version, basis, minimumRoiPct, minimumGames, minimumTrades, coverage, window, sport, marketType, side, moneyBand, amountMin, amountMax, amountMinInclusive, amountMaxInclusive, oddsMin, oddsMax, stakeUsd]
       description: Immutable selection rule, including exact boundaries, at the first eligible delivery attempt.
       properties:
+        roiMethodVersion: { type: string }
+        historicalPhase: { $ref: "#/components/schemas/RoiPhase" }
         version: { type: string }
         basis: { $ref: "#/components/schemas/RoiBasis" }
         minimumRoiPct: { type: number }
@@ -748,10 +758,43 @@ components:
         sources:
           type: array
           items: { type: string }
+    RoiPhase:
+      type: string
+      enum: [prematch, nearStart, live, unknown]
+    RoiMethodology:
+      type: object
+      required: [version, unit, phase, rawExecutions, selectedEntries, repeatedExecutions, unknownPhaseExecutions, ambiguousIdentityExecutions, unclassifiedExecutions, description]
+      properties:
+        version: { type: string }
+        unit: { type: string, enum: [game, execution] }
+        phase: { $ref: "#/components/schemas/RoiPhase" }
+        rawExecutions: { type: integer }
+        selectedEntries: { type: integer }
+        repeatedExecutions: { type: integer }
+        unknownPhaseExecutions: { type: integer }
+        ambiguousIdentityExecutions: { type: integer }
+        unclassifiedExecutions: { type: integer }
+        description: { type: string }
+    RoiAudit:
+      type: object
+      required: [firstAt, lastAt, largestGameSharePct, withoutBestGameRoiPct, grossLower95Pct, grossUpper95Pct, earlierGames, laterGames, earlierRoiPct, laterRoiPct, chronologicalCutoff]
+      properties:
+        firstAt: { type: string }
+        lastAt: { type: string }
+        largestGameSharePct: { type: number }
+        withoutBestGameRoiPct: { type: [number, "null"] }
+        grossLower95Pct: { type: [number, "null"] }
+        grossUpper95Pct: { type: [number, "null"] }
+        earlierGames: { type: integer }
+        laterGames: { type: integer }
+        earlierRoiPct: { type: [number, "null"] }
+        laterRoiPct: { type: [number, "null"] }
+        chronologicalCutoff: { type: [string, "null"] }
     RoiLeaderboard:
       type: object
       required: [generatedAt, stakePerTrade, largeTradeThreshold, summary, rows, totalRows, page, pageSize, totalPages, groupBy, sortBy, window, band, direction, minGames, coverage, feeModel]
       properties:
+        methodology: { $ref: "#/components/schemas/RoiMethodology" }
         feeModel: { $ref: "#/components/schemas/RoiFeeModel" }
         generatedAt: { type: string, format: date-time }
         stakePerTrade: { type: number }
@@ -818,6 +861,7 @@ components:
       type: object
       required: [id, rank, label, sport, marketType, side, moneyBand, marketUrl, oddsMin, oddsMax, trades, games, markets, wins, losses, winRatePct, roiPct, profit, invested, recentRoiPct, recentTrades, sampleWarning, weekly, moneyBands, net, recentNet]
       properties:
+        audit: { $ref: "#/components/schemas/RoiAudit" }
         net: { $ref: "#/components/schemas/RoiNetEstimate" }
         recentNet: { $ref: "#/components/schemas/RoiNetEstimate" }
         id: { type: string }
@@ -925,6 +969,8 @@ components:
       type: object
       required: [side, level, reason, roiPct, trades, games, price, observedAt, oddsMin, oddsMax, net]
       properties:
+        methodVersion: { type: string }
+        phase: { $ref: "#/components/schemas/RoiPhase" }
         net: { $ref: "#/components/schemas/RoiNetEstimate" }
         side: { type: string, enum: [yes, no] }
         level: { type: string, enum: [good, medium, bad, insufficient] }

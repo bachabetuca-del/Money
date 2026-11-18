@@ -9,8 +9,11 @@ import type { ExplorerRoiSignalLevel } from './explorerRoiSignalLevel';
 import type { ExplorerRoiSignalReason } from './explorerRoiSignalReason';
 import type { ExplorerRoiSignalSide } from './explorerRoiSignalSide';
 import type { RoiNetEstimate } from './roiNetEstimate';
+import type { RoiPhase } from './roiPhase';
 
 export interface ExplorerRoiSignal {
+  methodVersion?: string;
+  phase?: RoiPhase;
   net: RoiNetEstimate;
   side: ExplorerRoiSignalSide;
   level: ExplorerRoiSignalLevel;

@@ -54,7 +54,7 @@ export function ruleText(r: SignalRule) {
   return {
     amount,
     odds: `${Math.round(r.oddsMin * 100)}–${Math.round(r.oddsMax * 100)}¢ · límite superior ${r.oddsMax === 1 ? 'incluido' : 'excluido'}`,
-    filter: `ROI ${r.basis === 'net' ? 'neto est.' : 'bruto'} ≥ ${pct(r.minimumRoiPct)} · ≥ ${r.minimumGames} partidos · ≥ ${r.minimumTrades} op. · historial ${r.coverage === 'verified' ? 'verificado' : r.coverage} · ventana ${r.window === 'all' ? 'completa' : r.window}`,
+    filter: `ROI ${r.basis === 'net' ? 'neto est.' : 'bruto'} ≥ ${pct(r.minimumRoiPct)} · ≥ ${r.minimumGames} partidos · ≥ ${r.minimumTrades} entradas · historial ${r.coverage === 'verified' ? 'verificado' : r.coverage} · ventana ${r.window === 'all' ? 'completa' : r.window}${r.roiMethodVersion ? ` · primera entrada por patrón/partido · fase ${r.historicalPhase} · método ${r.roiMethodVersion}` : ' · método original por ejecución'}`,
   };
 }
 

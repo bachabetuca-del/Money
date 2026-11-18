@@ -1,7 +1,7 @@
 import type { Request, Response } from "express";
 import { and, asc, eq, gt, lte, sql } from "drizzle-orm";
 import { db, kalshiAlertsTable as trades, kalshiGameStatusTable as games,
-  kalshiResultsTable as results, kalshiTradeHistoryTable as imports } from "@workspace/db";
+  kalshiResultsTable as results, kalshiTradeHistoryTable as imports, kalshiSettlementsTable as settlements } from "@workspace/db";
 import {
   buildHistoryExportParts, EXPORT_COLUMNS, exportMetadata, exportTrade, HISTORY_EXPORT_ROWS_PER_PART,
   serializeHistoryChunk,
@@ -88,10 +88,14 @@ export async function streamHistoryExport(
       const query = tx.select({
         trade: trades, startsAt: games.startsAt, state: games.state, gameResult: results.gameResult,
         historyPhase: imports.phase, historyMinimum: imports.captureMinimum,
+        milestoneId: games.milestoneId, statusSource: games.source, statusCheckedAt: games.checkedAt,
+        officialResult: settlements.result, settlementTerminal: settlements.terminal,
+        settlementCheckedAt: settlements.checkedAt, settlementError: settlements.error,
       }).from(trades)
         .leftJoin(games, eq(games.ticker, trades.ticker))
         .leftJoin(results, eq(results.ticker, trades.ticker))
         .leftJoin(imports, eq(imports.ticker, trades.ticker))
+        .leftJoin(settlements, eq(settlements.ticker, trades.ticker))
         .where(and(cursor ? gt(trades.tradeId, cursor) : undefined, snapshotFilter))
         .orderBy(asc(trades.tradeId));
       const rows = cursor === undefined && part

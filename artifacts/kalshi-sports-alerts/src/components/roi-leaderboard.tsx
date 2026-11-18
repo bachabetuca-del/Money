@@ -13,8 +13,10 @@ import {
   type GetKalshiLeaderboardWindow,
   type RoiCoverage,
   type RoiRankingRow,
+  type RoiPhase,
 } from '@workspace/api-client-react';
-import { errorText } from '@/components/history-export';
+import { errorText, saveBlob } from '@/components/history-export';
+import { RoiAuditSummary, RoiMethodSummary } from './roi-audit-summary';
 import { RoiCombinedTable } from './roi-combined-table';
 import { americanOddsRange, ROI_MARKET_NAMES } from '../lib/roi-display';
 import { RoiRowBreakdown } from './roi-row-breakdown';
@@ -50,6 +52,16 @@ const MIN_OPTS = [1, 5, 10, 20, 50];
 const COVERAGE: { v: GetKalshiLeaderboardCoverage; l: string }[] = [
   { v: 'verified', l: 'Solo historial final verificado' },
   { v: 'all', l: 'Incluir historiales parciales' },
+];
+const UNITS: { v: 'game' | 'execution'; l: string }[] = [
+  { v: 'game', l: 'Primera entrada por partido y patrón' },
+  { v: 'execution', l: 'Cada ejecución · comparación secundaria' },
+];
+const PHASES: { v: RoiPhase; l: string }[] = [
+  { v: 'prematch', l: 'Prepartido · al menos 10 min antes' },
+  { v: 'nearStart', l: 'Cerca del inicio · menos de 10 min' },
+  { v: 'live', l: 'En vivo confirmado' },
+  { v: 'unknown', l: 'Fase desconocida · solo exploración' },
 ];
 
 function pick<T extends string>(v: string | null, opts: { v: T }[], d: T): T {
@@ -88,12 +100,14 @@ function readInitial() {
   const mg = Number(p.get('lbMin'));
   return {
     groupBy,
+    unit: pick(p.get('lbUnit'), UNITS, 'game'),
+    phase: pick(p.get('lbPhase'), PHASES, 'prematch'),
     sortBy: pick(p.get('lbSort'), SORTS, 'roi'),
     window: pick(p.get('lbWin'), WINDOWS, 'all'),
     band: pick(p.get('lbBand'), BANDS, 'all'),
     direction: pick(p.get('lbDir'), DIRS, 'all'),
     coverage: pick(p.get('lbCoverage'), COVERAGE, 'verified'),
-    minGames: Number.isInteger(mg) && mg >= 1 && mg <= 1000 ? mg : groupBy === 'market' ? 1 : 10,
+    minGames: Number.isInteger(mg) && mg >= 1 && mg <= 1000 ? mg : groupBy === 'market' ? 1 : 50,
   };
 }
 
@@ -101,6 +115,7 @@ function writeUrl(f: ReturnType<typeof readInitial>) {
   const p = new URLSearchParams(window.location.search);
   p.set('lbGroup', f.groupBy); p.set('lbWin', f.window); p.set('lbBand', f.band); p.set('lbDir', f.direction); p.set('lbMin', String(f.minGames));
   p.set('lbCoverage', f.coverage); p.set('lbSort', f.sortBy);
+  p.set('lbUnit', f.unit); p.set('lbPhase', f.phase);
   window.history.replaceState(null, '', `${window.location.pathname}?${p.toString()}`);
 }
 
@@ -112,7 +127,7 @@ export function RoiLeaderboard() {
     setF((old) => {
       const next = { ...old, ...patch };
       if (patch.groupBy && patch.groupBy !== old.groupBy && patch.minGames === undefined) {
-        next.minGames = patch.groupBy === 'market' ? 1 : 10;
+        next.minGames = patch.groupBy === 'market' ? 1 : 50;
       }
       writeUrl(next);
       return next;
@@ -137,7 +152,8 @@ export function RoiLeaderboard() {
         <div>
           <div className="eyebrow">Ranking ROI · evidencia histórica</div>
           <h2><Trophy size={20} /> Ranking de ROI</h2>
-          <p>Compara deporte, mercado, lado, odds e importe con $100 hipotéticos por operación y liquidaciones oficiales. Bruto y neto estimado, con las mismas muestras.</p>
+          <p>Qué selecciones acertaron y cuánto habrían ganado o perdido: $100 por entrada y liquidación oficial.
+            Por defecto, una primera entrada por patrón y partido, separando el momento de la operación.</p>
         </div>
         <div className="lb-snap" data-testid="text-leaderboard-snapshot">
           {q.isFetching ? <><RefreshCw className="spin" size={12} /> Actualizando…</> : data ? <>Instantánea {when(data.generatedAt)}</> : 'Sin instantánea'}
@@ -171,6 +187,8 @@ export function RoiLeaderboard() {
             ))}
           </div>
         </div>
+        <Sel id="lb-unit" label="Contar" value={f.unit} opts={UNITS} onChange={(unit) => update({ unit })} />
+        <Sel id="lb-phase" label="Momento" value={f.phase} opts={PHASES} onChange={(phase) => update({ phase })} />
         <Sel id="lb-window" label="Periodo (fecha de ejecución)" value={f.window} opts={WINDOWS} onChange={(v) => update({ window: v })} />
         <Sel id="lb-band" label="Banda de tamaño" value={f.band} opts={BANDS} onChange={(v) => update({ band: v })} />
         <Sel id="lb-dir" label="Dirección" value={f.direction} opts={DIRS} onChange={(v) => update({ direction: v })} />
@@ -213,11 +231,20 @@ export function RoiLeaderboard() {
 
       {data && (
         <>
+          <RoiMethodSummary data={data} />
+          <button className="button secondary" disabled={stale} data-testid="button-export-roi-method"
+            onClick={() => saveBlob(new Blob([JSON.stringify({
+              scope: 'Página visible, no todo el historial. Resultados retrospectivos, no ganancias reales.',
+              parameters: params, methodology: data.methodology, feeModel: data.feeModel,
+              generatedAt: data.generatedAt, summary: data.summary, rows: data.rows,
+            }, null, 2)], { type: 'application/json' }), 'kalshi-roi-metodo-pagina.json')}>
+            Descargar cálculo y método · página visible
+          </button>
           <section className={`ws-card lb-card ${data.groupBy === 'segment' ? 'lb-combined-card' : ''} ${stale ? 'stale' : ''}`} aria-busy={stale} aria-labelledby="lb-table-title">
             <header className="row">
               <div>
                 <h3 id="lb-table-title">{GROUPS.find((g) => g.v === data.groupBy)?.l ?? 'Ranking'} · ordenado por {SORTS.find(s => s.v === data.sortBy)?.l}</h3>
-                <p>{data.totalRows.toLocaleString('es-US')} combinaciones con al menos {data.minGames} {data.minGames === 1 ? 'partido' : 'partidos'} · ${data.stakePerTrade} por operación{data.groupBy === 'segment' ? ' · YES y NO separados' : ' · reciente = últimos 7 días'}{data.band === 'large' ? ` · banda grande desde $${data.largeTradeThreshold.toLocaleString('en-US')}` : ''}</p>
+                <p>{data.totalRows.toLocaleString('es-US')} combinaciones con al menos {data.minGames} {data.minGames === 1 ? 'partido' : 'partidos'} · ${data.stakePerTrade} por entrada{data.groupBy === 'segment' ? ' · YES y NO separados' : ' · reciente = últimos 7 días'}{data.band === 'large' ? ` · banda grande desde $${data.largeTradeThreshold.toLocaleString('en-US')}` : ''}</p>
                 <p>Tarifas estimables: {data.summary.net.coveredTrades.toLocaleString('es-US')} de {data.summary.settledTrades.toLocaleString('es-US')} operaciones liquidadas. El filtro de Telegram se elige por separado en Ajustes.</p>
               </div>
               {stale && <span className="lb-tag" data-testid="status-leaderboard-stale">Cargando filtros nuevos…</span>}
@@ -260,8 +287,8 @@ export function RoiLeaderboard() {
             <summary>Cobertura y metodología <span>{data.summary.settledTrades.toLocaleString('es-US')} operaciones liquidadas · {data.summary.verifiedHistoryMarkets.toLocaleString('es-US')} mercados con historial verificado</span></summary>
             <div className="lb-methodology-body">
               <Coverage s={data.summary} />
-              <p className="lb-foot">Cada ejecución recibe $100 hipotéticos al precio de entrada de su lado (YES o NO), mantenidos hasta la liquidación binaria oficial. ROI = resultado hipotético total / invertido × 100. No son ganancias reales. Un ranking ordenado por resultado ya conocido elige ganadores a posteriori y no demuestra que se pudiera ejecutar al mismo precio.</p>
-              <p className="lb-foot">Operaciones pendientes, con liquidación no soportada o registros inválidos se excluyen; nunca cuentan como pérdidas. Por defecto también se excluyen los mercados cuyo historial final no está verificado. "Muestra pequeña" = menos de 10 partidos o menos de 30 operaciones; superar ese umbral no implica significancia estadística. Los partidos son estimados, no participantes únicos.</p>
+              <p className="lb-foot">Cada entrada recibe $100 hipotéticos al precio de su lado (YES o NO), hasta la liquidación binaria oficial. ROI bruto = ganancia total / compras × 100. ROI neto estimado = (ganancia − comisión) / (compras + comisión) × 100. Las tarifas actuales no son comisiones históricas reales ni prueban que se pudiera entrar a ese precio.</p>
+              <p className="lb-foot">Pendientes, liquidaciones no soportadas y registros inválidos nunca cuentan como pérdidas. Por defecto se excluyen historiales finales sin verificar. “Muestra pequeña” = menos de 50 partidos o de 30 entradas; superar el mínimo no demuestra ventaja. El análisis por partido exige identidad inequívoca de Kalshi y no borra operaciones idénticas con IDs distintos.</p>
             </div>
           </details>
           <p className="lb-foot">Odds americanas aproximadas, convertidas del precio del lado operado (NO usa su precio NO real). Tramos de 10¢: límite inferior incluido salvo 0¢ y superior excluido salvo 100¢. +100 equivale a 50¢; los extremos 0¢ y 100¢ se expresan como límites infinitos, no como cuotas disponibles.</p>
@@ -314,7 +341,7 @@ function Row({ r, data }: { r: RoiRankingRow; data: RoiLeaderboardData }) {
       <td className="r">{r.games} · {r.markets}</td>
       <td className="r"><span className="lb-pct" data-testid={`text-winrate-${r.id}`}>{pct(r.winRatePct, false)}</span><small className="lb-sub">{r.wins} / {r.losses} ganadas / perdidas</small></td>
     </tr>
-    {open && <tr className="lb-detail-row" id={domId('lb-detail', r.id)}><td colSpan={9}><RoiRowBreakdown row={r} minGames={data.minGames} /></td></tr>}
+    {open && <tr className="lb-detail-row" id={domId('lb-detail', r.id)}><td colSpan={9}><RoiAuditSummary audit={r.audit} /><RoiRowBreakdown row={r} minGames={data.minGames} /></td></tr>}
     </Fragment>
   );
 }

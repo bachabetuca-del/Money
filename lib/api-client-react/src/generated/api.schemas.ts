@@ -5,6 +5,16 @@
  * API specification
  * OpenAPI spec version: 0.1.0
  */
+export type RoiPhase = typeof RoiPhase[keyof typeof RoiPhase];
+
+
+export const RoiPhase = {
+  prematch: 'prematch',
+  nearStart: 'nearStart',
+  live: 'live',
+  unknown: 'unknown',
+} as const;
+
 /**
  * Explicit Telegram filter basis. Existing settings remain gross; an omitted update never changes the saved choice.
  */
@@ -20,6 +30,8 @@ export const RoiBasis = {
  * Historical comparison frozen before sending, not the current ranking or the later profit of this bet.
  */
 export interface TelegramNoticeRoi {
+  methodVersion?: string;
+  phase?: RoiPhase;
   basis: RoiBasis;
   roiPct: number;
   grossRoiPct: number;
@@ -162,6 +174,8 @@ export const SignalRuleMoneyBand = {
  * Immutable selection rule, including exact boundaries, at the first eligible delivery attempt.
  */
 export interface SignalRule {
+  roiMethodVersion?: string;
+  historicalPhase?: RoiPhase;
   version: string;
   basis: RoiBasis;
   minimumRoiPct: number;
@@ -401,6 +415,47 @@ export interface RoiNetEstimate {
   missingTrades: number;
 }
 
+export type RoiMethodologyUnit = typeof RoiMethodologyUnit[keyof typeof RoiMethodologyUnit];
+
+
+export const RoiMethodologyUnit = {
+  game: 'game',
+  execution: 'execution',
+} as const;
+
+export interface RoiMethodology {
+  version: string;
+  unit: RoiMethodologyUnit;
+  phase: RoiPhase;
+  rawExecutions: number;
+  selectedEntries: number;
+  repeatedExecutions: number;
+  unknownPhaseExecutions: number;
+  ambiguousIdentityExecutions: number;
+  unclassifiedExecutions: number;
+  description: string;
+}
+
+export interface RoiAudit {
+  firstAt: string;
+  lastAt: string;
+  largestGameSharePct: number;
+  /** @nullable */
+  withoutBestGameRoiPct: number | null;
+  /** @nullable */
+  grossLower95Pct: number | null;
+  /** @nullable */
+  grossUpper95Pct: number | null;
+  earlierGames: number;
+  laterGames: number;
+  /** @nullable */
+  earlierRoiPct: number | null;
+  /** @nullable */
+  laterRoiPct: number | null;
+  /** @nullable */
+  chronologicalCutoff: string | null;
+}
+
 export type RoiLeaderboardCoverage = typeof RoiLeaderboardCoverage[keyof typeof RoiLeaderboardCoverage];
 
 
@@ -562,6 +617,7 @@ export interface RoiMoneyPerformance {
 }
 
 export interface RoiRankingRow {
+  audit?: RoiAudit;
   net: RoiNetEstimate;
   recentNet: RoiNetEstimate;
   id: string;
@@ -605,6 +661,7 @@ export interface RoiRankingRow {
 }
 
 export interface RoiLeaderboard {
+  methodology?: RoiMethodology;
   feeModel: RoiFeeModel;
   generatedAt: string;
   stakePerTrade: number;
@@ -701,6 +758,8 @@ export const ExplorerRoiSignalReason = {
 } as const;
 
 export interface ExplorerRoiSignal {
+  methodVersion?: string;
+  phase?: RoiPhase;
   net: RoiNetEstimate;
   side: ExplorerRoiSignalSide;
   level: ExplorerRoiSignalLevel;
@@ -1348,6 +1407,8 @@ export const GetKalshiExplorerRoiScope = {
 } as const;
 
 export type GetKalshiLeaderboardParams = {
+unit?: GetKalshiLeaderboardUnit;
+phase?: RoiPhase;
 coverage?: GetKalshiLeaderboardCoverage;
 groupBy?: GetKalshiLeaderboardGroupBy;
 sortBy?: GetKalshiLeaderboardSortBy;
@@ -1365,6 +1426,14 @@ minGames?: number;
  */
 page?: number;
 };
+
+export type GetKalshiLeaderboardUnit = typeof GetKalshiLeaderboardUnit[keyof typeof GetKalshiLeaderboardUnit];
+
+
+export const GetKalshiLeaderboardUnit = {
+  game: 'game',
+  execution: 'execution',
+} as const;
 
 export type GetKalshiLeaderboardCoverage = typeof GetKalshiLeaderboardCoverage[keyof typeof GetKalshiLeaderboardCoverage];
 

@@ -6,11 +6,14 @@
  * OpenAPI spec version: 0.1.0
  */
 import type { RoiBasis } from './roiBasis';
+import type { RoiPhase } from './roiPhase';
 
 /**
  * Historical comparison frozen before sending, not the current ranking or the later profit of this bet.
  */
 export interface TelegramNoticeRoi {
+  methodVersion?: string;
+  phase?: RoiPhase;
   basis: RoiBasis;
   roiPct: number;
   grossRoiPct: number;

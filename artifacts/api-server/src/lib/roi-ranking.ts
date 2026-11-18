@@ -1,4 +1,6 @@
 import type { RoiCoverage, RoiRankingRow, RoiLeaderboard } from "@workspace/api-zod";
+import type { RoiPhase } from "@workspace/api-zod";
+import { auditRoiRows } from "./roi-audit";
 import { marketType, type MarketType } from "./market-type";
 import {
   accumulatePerformance, moneyPerformance, weeklyPerformance, roiPct, ROI_STAKE,
@@ -18,6 +20,9 @@ export const ROI_TYPE_LABELS: Record<MarketType, string> = {
 
 /** One DB aggregate, not one observation per independent bettor or game. */
 export type RoiRollup = {
+  phase?: RoiPhase; identityVerified?: boolean; inputValid?: boolean;
+  firstTradeId?: string; firstPrice?: number; firstFee?: number | null;
+  officialResult?: string | null; firstIsRecent?: boolean;
   ticker: string; sport: string; eventTitle: string | null; marketTitle: string | null;
   gameId: string; marketUrl: string; bucket: number; side: "yes" | "no" | "unknown";
   moneyBand: RoiMoneyBand; weekStart: string;
@@ -42,6 +47,7 @@ function bucketLabel(bucket: number) {
 }
 
 type Accumulator = {
+  observations: RoiRollup[];
   id: string; label: string; sport: string | null; marketType: string | null;
   side: "yes" | "no" | null;
   moneyBand: RoiMoneyBand | null;
@@ -55,7 +61,7 @@ type Accumulator = {
 /** Ranking operates on all saved aggregates, never the graph's 5,000-row sample. */
 export function buildRoiRanking(
   rollups: RoiRollup[], groupBy: RoiGroup, minGames: number,
-  options: { sortBy?: RoiSort; now?: Date; since?: Date | null } = {},
+  options: { sortBy?: RoiSort; now?: Date; since?: Date | null; separatePatterns?: boolean } = {},
 ) {
   const now = options.now ?? new Date();
   const groups = new Map<string, Accumulator>();
@@ -94,10 +100,11 @@ export function buildRoiRanking(
     const id = groupBy === "sport" ? r.sport : groupBy === "marketType" ? type :
       groupBy === "odds" ? String(r.bucket) : groupBy === "market" ? r.ticker :
       groupBy === "amount" ? r.moneyBand :
-      JSON.stringify([r.sport, type, r.side, r.bucket]);
+      JSON.stringify([r.sport, type, r.side, r.bucket, ...(options.separatePatterns ? [r.moneyBand, r.phase] : [])]);
     let group = groups.get(id);
     if (!group) {
       group = {
+        observations: [],
         id, label: groupBy === "sport" ? r.sport :
           groupBy === "marketType" ? ROI_TYPE_LABELS[type] :
           groupBy === "odds" ? bucketLabel(r.bucket) :
@@ -125,6 +132,7 @@ export function buildRoiRanking(
     group.fees += costs.fees; group.feeTrades += costs.feeTrades;
     group.recentFees += recentCosts.fees; group.recentFeeTrades += recentCosts.feeTrades;
     group.games.add(r.gameId); group.markets.add(r.ticker);
+    group.observations.push(r);
     accumulatePerformance(group.weeks, r.weekStart, r);
     accumulatePerformance(group.amounts, r.moneyBand, r);
   }
@@ -135,6 +143,7 @@ export function buildRoiRanking(
       b.games.size - a.games.size || b.trades - a.trades || a.id.localeCompare(b.id))
     .map((g, i) => ({
       id: g.id, rank: i + 1, label: g.label, sport: g.sport, marketType: g.marketType, side: g.side, moneyBand: g.moneyBand,
+      audit: auditRoiRows(g.observations),
       marketUrl: g.marketUrl, oddsMin: g.oddsMin, oddsMax: g.oddsMax,
       trades: g.trades, games: g.games.size, markets: g.markets.size,
       wins: g.wins, losses: g.trades - g.wins, winRatePct: rounded(100 * g.wins / g.trades),
@@ -142,7 +151,7 @@ export function buildRoiRanking(
       net: netEstimate(g.profit, g.trades, g),
       recentNet: netEstimate(g.recentProfit, g.recentTrades, { fees: g.recentFees, feeTrades: g.recentFeeTrades }),
       recentRoiPct: roiPct(g.recentProfit, g.recentTrades), recentTrades: g.recentTrades,
-      sampleWarning: g.games.size < 10 || g.trades < 30,
+      sampleWarning: g.games.size < 50 || g.trades < 30,
       weekly: weeklyPerformance(g.weeks, now, options.since ?? null),
       moneyBands: moneyPerformance(g.amounts, minGames),
     }));

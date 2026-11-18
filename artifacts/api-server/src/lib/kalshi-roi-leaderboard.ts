@@ -6,8 +6,11 @@ import { buildRoiRanking, ROI_STAKE, type RoiGroup, type RoiRollup, type RoiSort
 import { HISTORY_AUDIT_VERSION } from "./kalshi-market-history";
 import { feeModel, feeSnapshotIsCurrent, FEE_MODEL_VERSION, type FeeSnapshot } from "./kalshi-fees";
 import { readStoredFees } from "./kalshi-fee-store";
+import { ROI_METHOD_VERSION, selectRoiEntries, type RoiUnit } from "./roi-method";
+import type { RoiPhase } from "@workspace/api-zod";
 
 type Options = {
+  unit?: RoiUnit; phase?: RoiPhase;
   groupBy: RoiGroup; window: "all" | "30d" | "7d";
   band: "all" | "large" | "medium" | "small"; direction: "all" | "yes" | "no";
   minGames: number; page: number;
@@ -34,6 +37,16 @@ export async function loadRoiRollups(
       SELECT ${JSON.stringify(feeSnapshotIsCurrent(feeSnapshot, now) ? feeSnapshot : null)}::jsonb AS rules
     ), base AS (
       SELECT a.*, s.result, s.terminal, s.checked_at, s.error,
+        g.milestone_id IS NOT NULL AS identity_verified,
+        CASE
+          WHEN g.milestone_id IS NULL THEN 'unknown'
+          WHEN g.checked_at <= a.created_time AND g.checked_at >= a.created_time - interval '120 seconds'
+            AND NOT g.delayed AND g.error IS NULL AND g.state = 'finished' THEN 'unknown'
+          WHEN g.checked_at <= a.created_time AND g.checked_at >= a.created_time - interval '120 seconds'
+            AND NOT g.delayed AND g.error IS NULL AND g.state = 'live' AND g.source = 'live' THEN 'live'
+          WHEN g.starts_at IS NOT NULL AND a.created_time <= g.starts_at - interval '10 minutes' THEN 'prematch'
+          WHEN g.starts_at IS NOT NULL AND a.created_time < g.starts_at THEN 'nearStart'
+          ELSE 'unknown' END AS phase,
         g.event_ticker IS NOT NULL AND (f.rules->'series'->split_part(a.ticker, '-', 1)) IS NOT NULL AS fee_known,
         coalesce(f.rules->'events'->g.event_ticker->>'feeType',
           f.rules->'series'->split_part(a.ticker, '-', 1)->>'feeType') AS fee_type,
@@ -61,9 +74,12 @@ export async function loadRoiRollups(
         ${since ? sql`AND a.created_time >= ${since}` : sql``}
     ), classified AS (
       SELECT *,
+        (price > 0 AND price <= 1 AND count > 0 AND count <> 'NaN'::numeric
+          AND abs(notional - price * count) <= 0.010001 AND side IN ('yes','no')) AS input_valid,
         CASE WHEN NOT (price > 0 AND price <= 1 AND count > 0 AND count <> 'NaN'::numeric
             AND abs(notional - price * count) <= 0.010001) OR side = 'unknown'
           OR (terminal = true AND coalesce(result, '') NOT IN ('yes', 'no')) THEN 'excluded'
+          WHEN error IS NOT NULL THEN 'pending'
           WHEN terminal = true AND result IN ('yes','no') AND history_verified = false
             AND ${options.coverage !== "all"} THEN 'incomplete'
           WHEN terminal = true AND result IN ('yes','no') THEN 'settled'
@@ -79,11 +95,23 @@ export async function loadRoiRollups(
           THEN ceil(7.0 * fee_multiplier * (1 - price) * 10000) / 10000
           ELSE NULL END AS entry_fee
       FROM classified
+    ), ordered AS (
+      SELECT *, row_number() OVER (
+        PARTITION BY ticker, CASE WHEN price > 0 AND price <= 1 THEN least(9, floor(price * 10))::int ELSE -1 END,
+          category, side, money_band, week_start, phase, input_valid
+        ORDER BY created_time, trade_id
+      ) AS entry_order FROM priced
     )
     SELECT ticker, max(sport) AS sport, max(event_title) AS "eventTitle",
       max(market_title) AS "marketTitle", max(game_id) AS "gameId", max(market_url) AS "marketUrl",
       CASE WHEN price > 0 AND price <= 1 THEN least(9, floor(price * 10))::int ELSE -1 END AS bucket, category, side,
       money_band AS "moneyBand", week_start AS "weekStart",
+      phase, bool_and(identity_verified) AS "identityVerified", input_valid AS "inputValid",
+      max(trade_id) FILTER (WHERE entry_order = 1) AS "firstTradeId",
+      max(price) FILTER (WHERE entry_order = 1)::float8 AS "firstPrice",
+      max(entry_fee) FILTER (WHERE entry_order = 1)::float8 AS "firstFee",
+      bool_or(created_time >= ${recent}) FILTER (WHERE entry_order = 1) AS "firstIsRecent",
+      max(result) AS "officialResult",
       count(*)::int AS trades,
       count(*) FILTER (WHERE category = 'settled' AND side = result)::int AS wins,
       coalesce(sum(CASE WHEN category = 'settled'
@@ -99,8 +127,9 @@ export async function loadRoiRollups(
       min(created_time) AS "firstAt", max(created_time) AS "lastAt", max(checked_at) AS "checkedAt",
       bool_or(error IS NOT NULL) AS error
       , bool_and(history_verified) AS "historyVerified", bool_or(history_error) AS "historyError"
-    FROM priced GROUP BY ticker,
-      CASE WHEN price > 0 AND price <= 1 THEN least(9, floor(price * 10))::int ELSE -1 END, category, side, money_band, week_start
+    FROM ordered GROUP BY ticker,
+      CASE WHEN price > 0 AND price <= 1 THEN least(9, floor(price * 10))::int ELSE -1 END,
+      category, side, money_band, week_start, phase, input_valid
   `);
   return {
     generatedAt: now.toISOString(),
@@ -121,7 +150,7 @@ export async function getRoiSnapshot(options: Options, now = new Date()) {
   const threshold = Math.max(10_000, settings?.minimum ?? 10_000);
   // Presentation grouping/pagination reuse the same short-lived, filter-isolated data.
   const key = JSON.stringify([options.window, options.band, options.direction, threshold, options.coverage ?? "verified",
-    FEE_MODEL_VERSION, fees?.asOf, fees?.validUntil, feeSnapshotIsCurrent(fees, now)]);
+    ROI_METHOD_VERSION, FEE_MODEL_VERSION, fees?.asOf, fees?.validUntil, feeSnapshotIsCurrent(fees, now)]);
   const snapshot = await snapshots.get(key, () => loadRoiRollups(options, threshold, now, db, fees));
   return { snapshot, threshold, fees };
 }
@@ -129,8 +158,9 @@ export async function getRoiSnapshot(options: Options, now = new Date()) {
 export async function getRoiLeaderboard(options: Options, now = new Date()): Promise<RoiLeaderboard> {
   const { snapshot, threshold } = await getRoiSnapshot(options, now);
   const asOf = new Date(snapshot.generatedAt), sortBy = options.sortBy ?? "roi";
-  const { rows, summary } = buildRoiRanking(snapshot.rows, options.groupBy, options.minGames, {
-    sortBy, now: asOf, since: windowStart(options.window, asOf),
+  const selected = selectRoiEntries(snapshot.rows, options.unit ?? "game", options.phase ?? "prematch");
+  const { rows, summary } = buildRoiRanking(selected.rows, options.groupBy, options.minGames, {
+    sortBy, now: asOf, since: windowStart(options.window, asOf), separatePatterns: options.unit !== "execution",
   });
   const pageSize = 25, totalPages = Math.ceil(rows.length / pageSize);
   const page = Math.max(1, Math.min(options.page, totalPages || 1));
@@ -138,6 +168,7 @@ export async function getRoiLeaderboard(options: Options, now = new Date()): Pro
     ...options, sortBy, largeTradeThreshold: threshold, coverage: options.coverage ?? "verified",
     page, totalPages, totalRows: rows.length, pageSize, stakePerTrade: ROI_STAKE,
     feeModel: snapshot.feeModel,
+    methodology: selected.methodology,
     generatedAt: new Date(snapshot.generatedAt), summary, rows: rows.slice((page - 1) * pageSize, page * pageSize),
   };
 }

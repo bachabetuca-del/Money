@@ -3,7 +3,11 @@ name: ROI research and forward evaluation
 description: Interpretation, historical coverage and prospective evidence boundaries for ROI research.
 ---
 
-Use equal hypothetical stakes per observed execution, held to official final binary market settlement, as the default research comparison—not volume-weighted trader profitability. The user delegated the choice to our recommendation to assess whether an approach could make money.
+Use equal hypothetical stakes on the first valid entry per game and exact sport/type/side/price-band/money-band/phase pattern as the principal historical comparison, selected by execution time then ID before settlement filtering. Keep per-execution results explicitly secondary.
+
+**Why:** The user asked for a legitimate, verifiable ROI after an external audit showed that repeated public executions and late-game observations can inflate apparent performance. This changes the research unit, not the payout formula or the original equal-stake cost convention.
+
+**How to apply:** Require unambiguous milestone identity. Never substitute a later settled winner for an earlier pending/incomplete selection. Separate scheduled pregame timing from contemporaneously confirmed live status; an elapsed start time or later final score does not prove historical live state. Unknown stays unknown, not a profitable fallback. Broad groupings sum multiple patterns and are not a single bet per game. Preserve old frozen evidence and prospective cohort protocols; evaluate a different rule only in an explicitly activated new cohort.
 
 Require at least 50 distinct verified settled games for the market explorer's comparable ROI eligibility and new Telegram ROI signals, rather than 10.
 
@@ -27,7 +31,7 @@ Finish resumable current-version final audits before starting more legacy import
 
 Keep the primary comparison side-specific, following the user's compact table reference with American odds and wins/total. Aggregate sport or market views may combine directions, but must not be presented as one YES or NO strategy.
 
-**Why:** The user wants to compare distinct sport, market, direction and odds combinations. Pooling opposite directions can hide their different returns or inflate the apparent sample supporting a single strategy. “Muestras” means observed executions, not independent games or traders.
+**Why:** The user wants to compare distinct sport, market, direction and odds combinations. Pooling opposite directions can hide their different returns or inflate the apparent sample supporting a single strategy. “Muestras” must name the selected research unit, not imply independent games or traders.
 
 **How to apply:** Keep the primary table compact without weakening verified-history eligibility or sample-size warnings. Treat changes in display format separately from changes in the underlying research method.
 

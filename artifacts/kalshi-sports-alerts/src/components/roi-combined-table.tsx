@@ -5,6 +5,8 @@ import { americanOddsRange, oddsBoundaryText, ROI_MARKET_NAMES, roiSportLabel } 
 import { RoiRowBreakdown } from './roi-row-breakdown';
 import { domId } from '../lib/roi-breakdown';
 import { RoiNetValue } from './roi-costs';
+import { RoiAuditSummary } from './roi-audit-summary';
+import { bandLabel } from '../lib/roi-breakdown';
 
 type Sort = 'roi' | 'netRoi' | 'winRate';
 
@@ -42,7 +44,8 @@ export function RoiCombinedTable({ rows, sortBy = 'roi', minGames }: { rows: Roi
                         <span className="sr-only"> · ver semanas y rangos de importe</span>
                       </button>
                     </th>
-                    <td>{r.marketType ? ROI_MARKET_NAMES[r.marketType] ?? r.marketType : 'Sin clasificar'}</td>
+                    <td>{r.marketType ? ROI_MARKET_NAMES[r.marketType] ?? r.marketType : 'Sin clasificar'}
+                      {r.moneyBand && <small className="lb-cell-sub">Operación pública: {bandLabel(r.moneyBand)}</small>}</td>
                     <td><span className={`lb-side ${r.side ?? ''}`} data-testid={`text-side-${r.id}`}>{r.side?.toUpperCase() ?? 'n/d'}</span></td>
                     <td className="lb-american-odds" title={oddsBoundaryText(r.oddsMin, r.oddsMax)} data-testid={`text-odds-${r.id}`}>
                       {americanOddsRange(r.oddsMin, r.oddsMax)}
@@ -57,17 +60,17 @@ export function RoiCombinedTable({ rows, sortBy = 'roi', minGames }: { rows: Roi
                      <td className="r lb-roi" data-testid={`text-net-roi-${r.id}`}><RoiNetValue net={r.net} /></td>
                     <td className="r">
                       <span className="lb-sample" data-testid={`text-samples-${r.id}`}>
-                        {r.sampleWarning && <span className="lb-sample-warning" data-testid={`status-sample-${r.id}`} title="Muestra pequeña: menos de 10 partidos o 30 operaciones">
+                        {r.sampleWarning && <span className="lb-sample-warning" data-testid={`status-sample-${r.id}`} title="Muestra pequeña: menos de 50 partidos o 30 entradas">
                           <AlertTriangle size={12} aria-hidden="true" /><span className="sr-only">Muestra pequeña. </span>
                         </span>}
-                        {r.trades.toLocaleString('es-US')} op.
+                        {r.trades.toLocaleString('es-US')} entradas
                       </span>
                       <span className="lb-cell-sub" data-testid={`text-games-${r.id}`}>{r.games.toLocaleString('es-US')} {r.games === 1 ? 'partido' : 'partidos'}</span>
                     </td>
                   </tr>
                   {isOpen && (
                     <tr className="lb-detail-row" id={domId('lb-detail', r.id)}>
-                       <td colSpan={8}><RoiRowBreakdown row={r} minGames={minGames} /></td>
+                       <td colSpan={8}><RoiAuditSummary audit={r.audit} /><RoiRowBreakdown row={r} minGames={minGames} /></td>
                     </tr>
                   )}
                 </Fragment>
@@ -77,7 +80,7 @@ export function RoiCombinedTable({ rows, sortBy = 'roi', minGames }: { rows: Roi
         </table>
       </div>
       <div className="lb-table-note">
-        <span>Bruto y neto usan las mismas muestras. Aciertos = % y ganadas / total. Muestras = operaciones liquidadas y partidos distintos, no partidos independientes. Toca el deporte para ver ROI semanal y rangos de importe.</span>
+        <span>Bruto y neto usan las mismas entradas liquidadas. Aciertos = ganadas / entradas; cada partido puede aparecer en patrones distintos: son entradas, no partidos independientes. Toca el deporte para comprobar concentración, fechas, incertidumbre y comparación cronológica.</span>
         {rows.some(r => r.sampleWarning) && <span className="lb-sample-legend"><AlertTriangle size={12} aria-hidden="true" /> Muestra pequeña</span>}
         <span className="lb-scroll-hint">Desliza para ver todas las columnas.</span>
       </div>

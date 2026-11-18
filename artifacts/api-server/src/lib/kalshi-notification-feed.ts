@@ -72,6 +72,9 @@ export function notificationFeedRow(row: Record<string, unknown>, now = new Date
       row.game_starts_at, now,
     ),
     roi: frozen ? {
+      ...(frozen.rule.roiMethodVersion ? {
+        methodVersion: frozen.rule.roiMethodVersion, phase: frozen.rule.historicalPhase,
+      } : {}),
       basis: frozen.rule.basis, roiPct: frozen.historicalRoiPct,
       grossRoiPct: frozen.historicalGrossRoiPct, netRoiPct: frozen.historicalNetRoiPct,
       games: frozen.historicalGames, trades: frozen.historicalTrades,

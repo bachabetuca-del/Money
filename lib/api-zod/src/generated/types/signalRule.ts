@@ -6,6 +6,7 @@
  * OpenAPI spec version: 0.1.0
  */
 import type { RoiBasis } from './roiBasis';
+import type { RoiPhase } from './roiPhase';
 import type { SignalRuleCoverage } from './signalRuleCoverage';
 import type { SignalRuleMoneyBand } from './signalRuleMoneyBand';
 import type { SignalRuleSide } from './signalRuleSide';
@@ -15,6 +16,8 @@ import type { SignalRuleWindow } from './signalRuleWindow';
  * Immutable selection rule, including exact boundaries, at the first eligible delivery attempt.
  */
 export interface SignalRule {
+  roiMethodVersion?: string;
+  historicalPhase?: RoiPhase;
   version: string;
   basis: RoiBasis;
   minimumRoiPct: number;

@@ -52,7 +52,7 @@ test('a high ROI on a small sample remains gray and explicitly qualified', () =>
 });
 test('legend explains exact thresholds, sample gate and the difference from predictions', () => {
   const html = renderToStaticMarkup(<RoiColorLegend />);
-  for (const text of ['Verde', 'Amarillo', 'Rojo', 'Gris', '≥ +10%', '50 partidos distintos', '30 operaciones', 'resolución oficial', 'probabilidad de ganar']) {
+  for (const text of ['Verde', 'Amarillo', 'Rojo', 'Gris', '≥ +10%', '50 partidos distintos', '30 entradas', 'resolución oficial', 'probabilidad de ganar']) {
     assert.ok(html.includes(text), text);
   }
   assert.match(html, /0% a &lt; \+10%/);

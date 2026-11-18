@@ -5,6 +5,7 @@ import { sql, type SQLWrapper } from "drizzle-orm";
 import { GetKalshiLeaderboardResponse, GetKalshiLeaderboardQueryParams, GetKalshiExplorerQueryParams, GetKalshiExplorerRoiQueryParams, GetKalshiExplorerRoiResponse, SaveKalshiSettingsBody } from "@workspace/api-zod";
 import { getRoiLeaderboard, loadRoiRollups } from "./kalshi-roi-leaderboard";
 import { buildRoiRanking } from "./roi-ranking";
+import { selectRoiEntries } from "./roi-method";
 import { HISTORY_AUDIT_VERSION } from "./kalshi-market-history";
 import { loadRoiReferencePrices } from "./kalshi-roi-reference-prices";
 import { tradeRange } from "./kalshi-trade-bands";
@@ -12,6 +13,57 @@ import { buildExplorerRoi, ROI_COLOR_POLICY } from "./explorer-roi";
 import { createFeeSnapshot, estimateHypotheticalEntryFee, feeModel } from "./kalshi-fees";
 
 after(() => pool.end());
+
+test("SQL first-entry evidence survives aggregation and chooses the losing first line, not the later winner", async () => {
+  assert.equal(process.env.BOT_WORKERS_ENABLED, "false");
+  const at = new Date("2026-11-18T12:00:00Z");
+  await db.transaction(async tx => {
+    const executor: Pick<typeof db, "execute"> = {
+      execute: <TRow extends Record<string, unknown> = Record<string, unknown>>(query: SQLWrapper | string) =>
+        tx.execute<TRow>(sql`
+          WITH kalshi_alerts AS (
+            SELECT 'KXNFLSPREAD-G-' || selection AS ticker, trade_id, 'Football'::text AS sport,
+              'A vs B'::text AS event_title, 'A spread'::text AS market_title,
+              'https://example.test'::text AS market_url, .4::numeric AS price, 15000::numeric AS count,
+              6000::numeric AS notional, 'yes'::text AS outcome_side, 'bid'::text AS book_side,
+              created_time::timestamptz
+            FROM (VALUES ('a','LOSE','2026-11-17T10:00:00Z'), ('b','LOSE','2026-11-17T10:00:00Z'),
+              ('c','WIN','2026-11-17T11:00:00Z'), ('d','LIVE','2026-11-17T14:00:00Z'),
+              ('e','UNKNOWN','2026-11-17T14:00:00Z'))
+              v(trade_id, selection, created_time)
+          ), kalshi_market_settlements AS (
+            SELECT DISTINCT ticker, CASE WHEN ticker LIKE '%LOSE' THEN 'no' ELSE 'yes' END AS result,
+              true AS terminal, ${at}::timestamptz AS checked_at, null::text AS error FROM kalshi_alerts
+          ), kalshi_game_status AS (
+            SELECT DISTINCT ticker, 'GAME'::text AS milestone_id, 'EVENT'::text AS event_ticker,
+              '2026-11-17T13:00:00Z'::timestamptz AS starts_at,
+              CASE WHEN ticker LIKE '%LIVE' THEN '2026-11-17T13:59:30Z'::timestamptz ELSE ${at}::timestamptz END AS checked_at,
+              false AS delayed, null::text AS error,
+              CASE WHEN ticker LIKE '%LIVE' THEN 'live' ELSE 'finished' END AS state,
+              'live'::text AS source FROM kalshi_alerts
+          ), kalshi_trade_history AS (
+            SELECT DISTINCT ticker, 'complete'::text AS phase, true AS final_pass,
+              ${at}::timestamptz AS audited_at, null::text AS error, ${HISTORY_AUDIT_VERSION} AS audit_version,
+              1000::numeric AS capture_minimum, null::timestamptz AS since_at,
+              ${at}::timestamptz AS snapshot_at FROM kalshi_alerts
+          ) SELECT * FROM (${typeof query === "string" ? sql.raw(query) : query.getSQL()}) checked
+        `),
+    };
+    const raw = await loadRoiRollups({ groupBy: "segment", window: "all", band: "all", direction: "all",
+      minGames: 1, page: 1 }, 10000, at, executor);
+    assert.equal(raw.rows.reduce((s, r) => s + r.trades, 0), 5);
+    const first = selectRoiEntries(raw.rows);
+    assert.equal(first.methodology.unknownPhaseExecutions, 1, "The later finished feed cannot prove historical live state");
+    assert.equal(first.rows.length, 1);
+    assert.equal(first.rows[0].firstTradeId, "a");
+    assert.equal(first.rows[0].profit, -100);
+    assert.equal(first.rows[0].wins, 0);
+    assert.equal(first.rows[0].firstPrice, .4);
+    assert.equal(selectRoiEntries(raw.rows, "game", "live").rows[0].firstTradeId, "d");
+    const all = selectRoiEntries(raw.rows, "execution");
+    assert.equal(all.rows.reduce((s, r) => s + r.profit, 0), -50);
+  }, { accessMode: "read only" });
+});
 
 test("ROI color references: latest valid trade per side and band, exact boundaries, read-only", async () => {
   assert.equal(process.env.BOT_WORKERS_ENABLED, "false");
@@ -145,7 +197,7 @@ test("read-only PostgreSQL fixtures verify exact money boundaries, New York week
       execute: <TRow extends Record<string, unknown> = Record<string, unknown>>(query: SQLWrapper | string) =>
         tx.execute<TRow>(sql`
           WITH kalshi_alerts AS (
-            SELECT v.*, 'Football'::text AS sport, 'Fixture game'::text AS event_title,
+            SELECT v.*, ticker AS trade_id, 'Football'::text AS sport, 'Fixture game'::text AS event_title,
               'Team A wins'::text AS market_title, 'https://example.test/game'::text AS market_url
             FROM (VALUES ${values}) v(ticker, notional, price, count, created_time, outcome_side, book_side)
           ), kalshi_market_settlements AS (
@@ -154,7 +206,9 @@ test("read-only PostgreSQL fixtures verify exact money boundaries, New York week
             FROM kalshi_alerts
           ), kalshi_game_status AS (
             SELECT ticker, CASE WHEN ticker LIKE 'LARGE%' THEN 'GAME-B' ELSE 'GAME-A' END AS milestone_id,
-              'EVENT'::text AS event_ticker FROM kalshi_alerts
+              'EVENT'::text AS event_ticker, ${at}::timestamptz AS checked_at,
+              null::timestamptz AS starts_at, false AS delayed, null::text AS error,
+              'unknown'::text AS state, 'unknown'::text AS source FROM kalshi_alerts
           ), kalshi_trade_history AS (
             SELECT ticker, CASE WHEN ticker IN ('PARTIAL', 'PENDING') THEN 'pending' ELSE 'complete' END AS phase,
               true AS final_pass, ${at}::timestamptz AS audited_at, null::text AS error,

@@ -72,11 +72,11 @@ export function RoiColorLegend({ minimumGames = 50, minimumTrades = 30, greenMin
     </div>
     <details>
       <summary>Cómo se asignan los colores</summary>
-      <p>Se compara el mismo deporte, tipo de apuesta, lado SÍ/NO, rango de odds y banda de dinero.
-        Se necesitan al menos {minimumGames} partidos distintos y {minimumTrades} operaciones con histórico verificado y resolución oficial.</p>
+      <p>Se compara el mismo deporte, tipo de apuesta, lado SÍ/NO, rango de odds, banda de dinero y fase.
+        Primera entrada por patrón y partido: al menos {minimumGames} partidos distintos y {minimumTrades} entradas con histórico verificado y resolución oficial. Una fase desconocida no recibe color favorable.</p>
       <p>El rango de odds se toma de la última operación guardada de cada lado y banda, no de una cotización en vivo.
         Se usa todo el histórico verificado; el filtro de 1 h / 24 h afecta a la gráfica, no a esta comparación.</p>
-      <p>Los colores son rangos visuales de ROI simulado con $100 por operación, antes de comisiones.
+      <p>Los colores son rangos visuales de ROI simulado con $100 por primera entrada, antes de comisiones.
         No representan el resultado del partido actual, una probabilidad de ganar ni una recomendación de apuesta.</p>
     </details>
   </section>;
@@ -93,7 +93,8 @@ export function MarketRoiDetail({ view, direction }: { view: RoiView; direction:
         return <div key={side}>
           <b>{sideLabel(side)}</b>
           <span>Bruto: {s.roiPct === null ? 'no disponible' : pct(s.roiPct)} · Neto estimado: <RoiNetValue net={s.net} /></span>
-          <span>{s.games.toLocaleString('es-US')} partidos · {s.trades.toLocaleString('es-US')} operaciones</span>
+          <span>{s.games.toLocaleString('es-US')} partidos · {s.trades.toLocaleString('es-US')} {s.methodVersion ? 'primeras entradas' : 'operaciones'}</span>
+          {s.phase && <span>Momento: {s.phase === 'prematch' ? 'Prepartido ≥10 min' : s.phase === 'nearStart' ? 'Antes del inicio <10 min' : s.phase === 'live' ? 'En vivo confirmado' : 'Desconocido · sin comparación elegible'}</span>}
           {s.price !== null && <>
             <span>Odds del grupo: {americanOddsRange(s.oddsMin, s.oddsMax)} <span className="mr-boundary">({oddsBoundaryText(s.oddsMin, s.oddsMax)})</span></span>
             <span className="mr-reference">Última operación de este lado y banda: {(s.price * 100).toLocaleString('es-US', { maximumFractionDigits: 2 })}¢ · {timeLabel(s.observedAt)}</span>
@@ -102,8 +103,8 @@ export function MarketRoiDetail({ view, direction }: { view: RoiView; direction:
         </div>;
       })}
     </div>}
-    <p>Mismo deporte, tipo, lado, odds y banda de dinero. Histórico completo verificado;
-      no es el ROI de este partido ni una predicción. $100 simulados por operación; bruto antes de comisiones y neto después de la comisión estimada. Los colores siguen usando el bruto.</p>
+    <p>Mismo deporte, tipo, lado, odds, banda de dinero y fase. Primera entrada por patrón y partido con histórico verificado;
+      no es el ROI de este partido ni una predicción. $100 simulados por entrada; bruto antes de comisiones y neto después de la comisión estimada. Los colores siguen usando el bruto.</p>
     <RoiFeeMethodology model={view.feeModel} />
     {view.historyAsOf && <p className="mr-asof">Histórico calculado: {timeLabel(view.historyAsOf)} · actualización cada minuto</p>}
   </section>;

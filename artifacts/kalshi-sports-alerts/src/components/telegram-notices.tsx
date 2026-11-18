@@ -87,6 +87,9 @@ export function NoticeCard({ notice, now }: { notice: TelegramNotice; now?: numb
           <div><dt>Última comprobación del partido</dt><dd>{etTime(game.checkedAt)}</dd></div>
           {roi.other && <div><dt>Otra base de ROI</dt><dd>{roi.other}</dd></div>}
           {notice.roi && <div><dt>Historial hasta</dt><dd>{etTime(notice.roi.historyAsOf)}</dd></div>}
+          {notice.roi && <div><dt>Método al enviar</dt><dd>{notice.roi.methodVersion
+            ? `Primera entrada por patrón y partido · ${notice.roi.phase === 'prematch' ? 'prepartido ≥10 min' : notice.roi.phase === 'nearStart' ? 'antes del inicio <10 min' : notice.roi.phase === 'live' ? 'en vivo confirmado' : 'fase desconocida'} · ${notice.roi.methodVersion}`
+            : 'Original por ejecución; no recalculado con el método nuevo'}</dd></div>}
           <div><dt>Ticker</dt><dd className="mono">{notice.ticker}</dd></div>
           <div><dt>Operación</dt><dd className="mono">{notice.tradeId}</dd></div>
         </dl>

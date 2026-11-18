@@ -8,7 +8,7 @@ import { publicDirection } from "./telegram-trade-direction";
 import { NOTIFICATION_MIN_ROI_PCT, qualifiesForNotificationRoi, type NotificationRoi } from "./telegram-notification-roi";
 import type { NotificationJob } from "./telegram-trade-notifications";
 
-export const SIGNAL_RULE_VERSION = "comparable-roi-15pct-50-games-v3";
+export const SIGNAL_RULE_VERSION = "first-game-phase-roi-15pct-50-games-v4";
 export const SIGNAL_FEE_ASSUMPTIONS = "Una entrada taker hipotética de $100, cantidad teórica 100/precio, " +
   "comisión cuadrática 0,07 × multiplicador × contratos × precio × (1−precio). " +
   "Precisión de comisión 6 decimales y débito directo redondeado hacia arriba a $0,0001. " +
@@ -42,6 +42,7 @@ export function buildSignalEvidence(job: NotificationJob, roi: NotificationRoi, 
     observedAt: job.createdTime.toISOString(), queuedAt: job.queuedAt.toISOString(), capturedAt: now.toISOString(),
     price: job.price, notional: job.notional, contracts: job.count,
     rule: {
+      ...(roi.methodVersion ? { roiMethodVersion: roi.methodVersion, historicalPhase: roi.phase } : {}),
       version: SIGNAL_RULE_VERSION, basis: roi.basis, minimumRoiPct: NOTIFICATION_MIN_ROI_PCT,
       minimumGames: ROI_COLOR_POLICY.minimumGames, minimumTrades: ROI_COLOR_POLICY.minimumTrades,
       coverage: "verified", window: "all", sport: job.sport, marketType: type, side, moneyBand: band,
@@ -63,6 +64,9 @@ export function frozenNotification(evidence: SignalEvidence, job: NotificationJo
     notional: evidence.notional, outcomeSide: evidence.rule.side, createdTime: new Date(evidence.observedAt),
   };
   const roi: NotificationRoi = {
+    ...(evidence.rule.roiMethodVersion ? {
+      methodVersion: evidence.rule.roiMethodVersion, phase: evidence.rule.historicalPhase,
+    } : {}),
     basis: evidence.rule.basis, roiPct: evidence.historicalRoiPct,
     grossRoiPct: evidence.historicalGrossRoiPct, netRoiPct: evidence.historicalNetRoiPct,
     games: evidence.historicalGames, trades: evidence.historicalTrades,

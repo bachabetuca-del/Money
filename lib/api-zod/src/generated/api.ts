@@ -492,6 +492,8 @@ export const GetKalshiNotificationsResponse = zod.object({
   "checkedAt": zod.string().nullable()
 }).describe('Current saved game context, refreshed independently of the original trade and ROI. No status is inferred from elapsed kickoff time or a closed individual bet.'),
   "roi": zod.union([zod.object({
+  "methodVersion": zod.string().optional(),
+  "phase": zod.enum(['prematch', 'nearStart', 'live', 'unknown']).optional(),
   "basis": zod.enum(['gross', 'net']).describe('Explicit Telegram filter basis. Existing settings remain gross; an omitted update never changes the saved choice.'),
   "roiPct": zod.number(),
   "grossRoiPct": zod.number(),
@@ -603,6 +605,8 @@ export const GetKalshiSignalsResponse = zod.object({
   "notional": zod.number().min(getKalshiSignalsResponseRowsItemEvidenceNotionalMin),
   "contracts": zod.number().gt(getKalshiSignalsResponseRowsItemEvidenceContractsExclusiveMin),
   "rule": zod.object({
+  "roiMethodVersion": zod.string().optional(),
+  "historicalPhase": zod.enum(['prematch', 'nearStart', 'live', 'unknown']).optional(),
   "version": zod.string(),
   "basis": zod.enum(['gross', 'net']).describe('Explicit Telegram filter basis. Existing settings remain gross; an omitted update never changes the saved choice.'),
   "minimumRoiPct": zod.number(),
@@ -696,6 +700,8 @@ export const GetKalshiExplorerRoiResponse = zod.object({
   "markets": zod.array(zod.object({
   "ticker": zod.string(),
   "signals": zod.array(zod.object({
+  "methodVersion": zod.string().optional(),
+  "phase": zod.enum(['prematch', 'nearStart', 'live', 'unknown']).optional(),
   "net": zod.object({
   "roiPct": zod.number().nullable(),
   "profit": zod.number().nullable(),
@@ -722,13 +728,14 @@ export const GetKalshiExplorerRoiResponse = zod.object({
 /**
  * @summary Equal-stake hypothetical ROI from saved trades and official binary settlements
  */
+export const getKalshiLeaderboardQueryUnitDefault = `game`;
 export const getKalshiLeaderboardQueryCoverageDefault = `verified`;
 export const getKalshiLeaderboardQueryGroupByDefault = `segment`;
 export const getKalshiLeaderboardQuerySortByDefault = `roi`;
 export const getKalshiLeaderboardQueryWindowDefault = `all`;
 export const getKalshiLeaderboardQueryBandDefault = `all`;
 export const getKalshiLeaderboardQueryDirectionDefault = `all`;
-export const getKalshiLeaderboardQueryMinGamesDefault = 10;
+export const getKalshiLeaderboardQueryMinGamesDefault = 50;
 export const getKalshiLeaderboardQueryMinGamesMax = 1000;
 
 export const getKalshiLeaderboardQueryPageDefault = 1;
@@ -737,6 +744,8 @@ export const getKalshiLeaderboardQueryPageMax = 100000;
 
 
 export const GetKalshiLeaderboardQueryParams = zod.object({
+  "unit": zod.enum(['game', 'execution']).default(getKalshiLeaderboardQueryUnitDefault),
+  "phase": zod.enum(['prematch', 'nearStart', 'live', 'unknown']).optional(),
   "coverage": zod.enum(['verified', 'all']).default(getKalshiLeaderboardQueryCoverageDefault),
   "groupBy": zod.enum(['sport', 'marketType', 'odds', 'segment', 'market', 'amount']).default(getKalshiLeaderboardQueryGroupByDefault),
   "sortBy": zod.enum(['roi', 'netRoi', 'winRate']).default(getKalshiLeaderboardQuerySortByDefault),
@@ -775,6 +784,18 @@ export const getKalshiLeaderboardResponseRowsItemMoneyBandsItemNetMissingTradesM
 
 
 export const GetKalshiLeaderboardResponse = zod.object({
+  "methodology": zod.object({
+  "version": zod.string(),
+  "unit": zod.enum(['game', 'execution']),
+  "phase": zod.enum(['prematch', 'nearStart', 'live', 'unknown']),
+  "rawExecutions": zod.number().int(),
+  "selectedEntries": zod.number().int(),
+  "repeatedExecutions": zod.number().int(),
+  "unknownPhaseExecutions": zod.number().int(),
+  "ambiguousIdentityExecutions": zod.number().int(),
+  "unclassifiedExecutions": zod.number().int(),
+  "description": zod.string()
+}).optional(),
   "feeModel": zod.object({
   "version": zod.string(),
   "documentationReviewedOn": zod.string(),
@@ -831,6 +852,19 @@ export const GetKalshiLeaderboardResponse = zod.object({
   "historyExcludedTrades": zod.number().int()
 }),
   "rows": zod.array(zod.object({
+  "audit": zod.object({
+  "firstAt": zod.string(),
+  "lastAt": zod.string(),
+  "largestGameSharePct": zod.number(),
+  "withoutBestGameRoiPct": zod.number().nullable(),
+  "grossLower95Pct": zod.number().nullable(),
+  "grossUpper95Pct": zod.number().nullable(),
+  "earlierGames": zod.number().int(),
+  "laterGames": zod.number().int(),
+  "earlierRoiPct": zod.number().nullable(),
+  "laterRoiPct": zod.number().nullable(),
+  "chronologicalCutoff": zod.string().nullable()
+}).optional(),
   "net": zod.object({
   "roiPct": zod.number().nullable(),
   "profit": zod.number().nullable(),

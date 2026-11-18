@@ -5,10 +5,13 @@ import { publicDirection } from "./telegram-trade-direction";
 import { inTradeRange, tradeRange } from "./kalshi-trade-bands";
 import { ROI_MONEY_BANDS, rawNetRoiPct, validatedFees } from "./roi-performance";
 import type { RoiBasis, SignalEvidence } from "@workspace/api-zod";
+import type { RoiPhase } from "@workspace/api-zod";
+import { ROI_METHOD_VERSION, selectRoiEntries } from "./roi-method";
 export type { RoiBasis } from "@workspace/api-zod";
 
 export const NOTIFICATION_MIN_ROI_PCT = 15;
 export type NotificationRoi = {
+  methodVersion?: string; phase?: RoiPhase;
   roiPct: number; games: number; trades: number;
   basis: RoiBasis; grossRoiPct: number; netRoiPct: number | null;
   /** Only the production lookup supplies this provenance; plain historical
@@ -44,10 +47,11 @@ export function qualifiesForNotificationRoi(roi: NotificationRoi | null): roi is
 /** Same exact comparison and equal-stake formula as the ranking, before display
  * rounding. Build once per historical snapshot, then look up each live execution.
  * Each amount band has its own history, independent of dashboard filters. */
-export function buildNotificationRoiLookup(history: RoiRollup[], basis: RoiBasis = "gross") {
+export function buildNotificationRoiLookup(history: RoiRollup[], basis: RoiBasis = "gross", phase?: RoiPhase) {
   notificationRoiBasis(basis);
   const groups = new Map<string, { profit: number; trades: number; games: Set<string>; fees: number; feeTrades: number; latestCheck: string | null }>();
-  for (const row of history) {
+  const comparison = phase ? selectRoiEntries(history, "game", phase).rows : history;
+  for (const row of comparison) {
     if (row.category !== "settled" || row.historyVerified !== true || row.historyError ||
         !ROI_MONEY_BANDS.includes(row.moneyBand) || !["yes", "no"].includes(row.side) ||
         !Number.isInteger(row.bucket) || row.bucket < 0 || row.bucket > 9 ||
@@ -71,12 +75,15 @@ export function buildNotificationRoiLookup(history: RoiRollup[], basis: RoiBasis
     if (!band || !trade.sport || side === "unknown" || bucket === null || type === "other") return null;
     const group = groups.get(JSON.stringify([band, trade.sport, type, side, bucket]));
     if (!group) return null;
+    // Never let a game's own already-known outcomes justify its new signal.
+    if (phase && (phase === "unknown" || candidateGameId && group.games.has(candidateGameId))) return null;
     const grossRoiPct = 100 * group.profit / (group.trades * ROI_STAKE);
     const netRoiPct = rawNetRoiPct(group.profit, group.trades, group);
     const roiPct = basis === "net" ? netRoiPct : grossRoiPct;
     if (roiPct === null) return null;
     return {
       roiPct, basis, grossRoiPct, netRoiPct,
+      ...(phase ? { methodVersion: ROI_METHOD_VERSION, phase } : {}),
       games: group.games.size, trades: group.trades,
       ...(candidateGameId ? { research: {
         includesCandidateGame: group.games.has(candidateGameId), latestHistoricalCheck: group.latestCheck,

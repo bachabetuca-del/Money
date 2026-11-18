@@ -10,9 +10,13 @@ import type { GetKalshiLeaderboardCoverage } from './getKalshiLeaderboardCoverag
 import type { GetKalshiLeaderboardDirection } from './getKalshiLeaderboardDirection';
 import type { GetKalshiLeaderboardGroupBy } from './getKalshiLeaderboardGroupBy';
 import type { GetKalshiLeaderboardSortBy } from './getKalshiLeaderboardSortBy';
+import type { GetKalshiLeaderboardUnit } from './getKalshiLeaderboardUnit';
 import type { GetKalshiLeaderboardWindow } from './getKalshiLeaderboardWindow';
+import type { RoiPhase } from './roiPhase';
 
 export type GetKalshiLeaderboardParams = {
+unit?: GetKalshiLeaderboardUnit;
+phase?: RoiPhase;
 coverage?: GetKalshiLeaderboardCoverage;
 groupBy?: GetKalshiLeaderboardGroupBy;
 sortBy?: GetKalshiLeaderboardSortBy;

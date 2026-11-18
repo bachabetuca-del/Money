@@ -13,9 +13,11 @@ import type { RoiLeaderboardDirection } from './roiLeaderboardDirection';
 import type { RoiLeaderboardGroupBy } from './roiLeaderboardGroupBy';
 import type { RoiLeaderboardSortBy } from './roiLeaderboardSortBy';
 import type { RoiLeaderboardWindow } from './roiLeaderboardWindow';
+import type { RoiMethodology } from './roiMethodology';
 import type { RoiRankingRow } from './roiRankingRow';
 
 export interface RoiLeaderboard {
+  methodology?: RoiMethodology;
   feeModel: RoiFeeModel;
   generatedAt: Date;
   stakePerTrade: number;

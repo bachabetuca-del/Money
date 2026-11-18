@@ -70,7 +70,8 @@ export function notificationText(trade: NotificationTrade, roi?: NotificationRoi
     ...(roi ? [
       `<b>ROI histórico ${roi.basis === "net" ? "neto est." : "bruto"}: ${pct(roi.roiPct)}</b>`,
       roi.basis === "net" ? `Bruto: ${pct(roi.grossRoiPct)}` : `Neto estimado: ${pct(roi.netRoiPct)}`,
-      `Base: ${roi.games.toLocaleString("es-ES")} partidos · ${roi.trades.toLocaleString("es-ES")} operaciones`,
+      `Base: ${roi.games.toLocaleString("es-ES")} partidos · ${roi.trades.toLocaleString("es-ES")} ${roi.methodVersion ? "primeras entradas" : "operaciones"}`,
+      ...(roi.methodVersion ? [`Momento comparable: ${roi.phase === "prematch" ? "prepartido ≥10 min" : roi.phase === "nearStart" ? "antes del inicio <10 min" : "en vivo confirmado"}`] : []),
       "",
     ] : []),
     `<b>Monto observado:</b> ${amount}`,
@@ -78,7 +79,7 @@ export function notificationText(trade: NotificationTrade, roi?: NotificationRoi
     `Operación: ${time} · Nueva York`,
     "",
     "<i>No confirma una compra o venta. ROI histórico, no garantizado.</i>",
-    ...(roi ? ["<blockquote expandable>Simulación: $100 por operación hasta liquidación. Neto con comisión taker actual; sin deslizamiento ni todos los costes personales. No son ganancias del trader.</blockquote>"] : []),
+    ...(roi ? [`<blockquote expandable>Simulación: $100 por ${roi.methodVersion ? "primera entrada de cada patrón y partido" : "operación"} hasta liquidación oficial. Neto con comisión taker actual; sin deslizamiento ni todos los costes personales. No son ganancias del trader.${roi.methodVersion ? ` Método: ${escapeHtml(roi.methodVersion)}.` : ""}</blockquote>`] : []),
   ].join("\n");
 }
 

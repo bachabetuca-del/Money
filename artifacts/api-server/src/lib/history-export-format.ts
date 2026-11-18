@@ -17,6 +17,9 @@ export type HistoryExportRow = {
 export type HistoryEnrichment = {
   startsAt: Date | null; state: string | null; gameResult: string | null;
   historyPhase: string | null; historyMinimum: number | null;
+  milestoneId?: string | null; statusSource?: string | null; statusCheckedAt?: Date | null;
+  officialResult?: string | null; settlementTerminal?: boolean | null; settlementCheckedAt?: Date | null;
+  settlementError?: string | null;
 };
 
 export function valueBand(usd: number) {
@@ -36,6 +39,13 @@ export function exportTrade(t: HistoryExportRow, extra: HistoryEnrichment) {
     game_starts_at_utc: extra.startsAt?.toISOString() ?? null,
     game_state: extra.state, final_score: extra.gameResult,
     history_import_phase: extra.historyPhase, history_capture_minimum_usd: extra.historyMinimum,
+    game_milestone_id: extra.milestoneId ?? null,
+    game_status_source: extra.statusSource ?? null,
+    game_status_checked_at_utc: extra.statusCheckedAt?.toISOString() ?? null,
+    official_market_result: extra.officialResult ?? null,
+    official_settlement_terminal: extra.settlementTerminal ?? null,
+    official_settlement_checked_at_utc: extra.settlementCheckedAt?.toISOString() ?? null,
+    official_settlement_error: extra.settlementError ?? null,
   };
 }
 
@@ -44,6 +54,8 @@ export const EXPORT_COLUMNS = [
   "executed_at_utc", "saved_at_utc", "public_direction", "raw_outcome_side", "raw_book_side",
   "execution_price_usd", "contracts", "value_usd", "value_band", "block_trade", "market_url",
   "game_starts_at_utc", "game_state", "final_score", "history_import_phase", "history_capture_minimum_usd",
+  "game_milestone_id", "game_status_source", "game_status_checked_at_utc", "official_market_result",
+  "official_settlement_terminal", "official_settlement_checked_at_utc", "official_settlement_error",
 ] as const;
 
 /** Quote every cell and neutralize spreadsheet formulas, without changing JSON. */
@@ -82,7 +94,7 @@ export function buildHistoryExportParts(totalTrades: number, snapshotAt: string)
 
 export function exportMetadata(total: number, markets: number, from: string | null, to: string | null, at: string) {
   return {
-    schemaVersion: 1, source: "Fieldnote / Kalshi public sports trades",
+    schemaVersion: 2, source: "Fieldnote / Kalshi public sports trades",
     exportedAt: at, scope: "All executions stored in this application's database; all bands and game states",
     totalTrades: total, totalMarkets: markets, earliestExecutionAt: from, latestExecutionAt: to,
     currency: "USD", timezone: "UTC", order: "trade_id ascending, not execution time",
@@ -92,6 +104,9 @@ export function exportMetadata(total: number, markets: number, from: string | nu
       value_usd: "Executed-side price multiplied by contracts; each record is an individual public execution.",
       saved_at_utc: "When this application imported the record, not when it executed.",
       final_score: "Saved sports score when available; null means unavailable, not a tied or unfinished game.",
+      official_market_result: "Official market resolution from the stored Kalshi settlement, not inferred from score. ROI requires terminal true, no error and a supported yes/no result. Null is unknown, never a loss.",
+      game_starts_at_utc: "Stored milestone schedule, not proof of actual kickoff. A past schedule alone does not prove an execution was live.",
+      game_status_checked_at_utc: "Time of the last stored status observation, not necessarily the status at trade execution. A later observation must not be used to reconstruct a past live state.",
       history_import_phase: "Import progress per market. complete refers to the stored import's configured coverage, not every exchange execution.",
       history_capture_minimum_usd: "Historical import threshold; older imports can have a different minimum.",
     },
