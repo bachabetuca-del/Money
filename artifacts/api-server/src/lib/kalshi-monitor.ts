@@ -198,11 +198,15 @@ const telegramDashboard = new TelegramDashboard(telegramDashboardStore, {
   context: getTradeContext,
   history: ticker => { gameStatusMonitor.prefer(ticker); return marketHistory.status(ticker); },
 });
+const notificationDecisions: Record<string, number> = {};
 const tradeNotifications = new TelegramTradeNotifications(tradeNotificationStore, {
   request: telegramRequest, context: getTradeContext, active: canMonitorMarket,
   roi: getTradeNotificationRoi,
   observe: event => {
     paperRuntime.observe(event);
+    if (event.stage === "decision" && event.reason) {
+      notificationDecisions[event.reason] = (notificationDecisions[event.reason] ?? 0) + 1;
+    }
     if (event.stage === "confirmed") logger.info({
       tradeId: event.job.tradeId, executionAt: event.job.createdTime.toISOString(),
       queuedAt: event.job.queuedAt?.toISOString(), confirmationAt: event.at.toISOString(),
@@ -785,6 +789,8 @@ export function startKalshiMonitor() {
     void refreshAccountQuota();
     logger.info({ http: kalshiHttp.stats, budget: restPacer.stats, recovery: recoveryWorker.stats,
       historyJobs: marketHistory.activeJobs, lifecycleQueued: lifecycleWorker.queued }, "Kalshi acquisition health");
+    logger.info({ decisions: { ...notificationDecisions } }, "Telegram notification decisions (last minute)");
+    for (const reason of Object.keys(notificationDecisions)) delete notificationDecisions[reason];
   }, 60_000);
   setInterval(() => {
     if (monitorInitialized) void recoveryWorker.persistHealthy(tradeStream?.live ?? false)

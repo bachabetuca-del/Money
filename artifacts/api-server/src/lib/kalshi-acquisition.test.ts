@@ -57,12 +57,12 @@ test("route-specific costs pace the following request rather than allowing an id
 });
 
 test("metadata cache coalesces workers, supports invalidation and never caches trade pages or failures", async () => {
-  let calls = 0, failing = false;
+  let calls = 0, failing = false, clock = 0;
   const client = new KalshiHttpClient(async () => {
     calls++;
     if (failing) return new Response(null, { status: 503 });
     return Response.json({ market: { ticker: "X" } });
-  });
+  }, () => clock);
   const market = "https://example.test/trade-api/v2/markets/X";
   await Promise.all([client.cachedJson(market, "live"), client.cachedJson(market, "metadata")]);
   assert.equal(calls, 1);
@@ -76,6 +76,11 @@ test("metadata cache coalesces workers, supports invalidation and never caches t
   failing = true;
   await assert.rejects(client.cachedJson(market));
   failing = false;
+  // Failed responses are not cached, but the existing transport cooldown
+  // still applies. Advance an injected clock rather than bypassing protection.
+  await assert.rejects(client.cachedJson(market), /pausa temporal/);
+  assert.equal(calls, 5);
+  clock += 2000;
   await client.cachedJson(market);
   assert.equal(calls, 6);
 });

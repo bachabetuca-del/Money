@@ -12,14 +12,26 @@ export function telegramTimeoutMs(method: string, body?: Record<string, unknown>
   return Math.max(30_000, (Math.min(50, Math.max(0, seconds || 0)) + 20) * 1000);
 }
 
-/** Shared transport for polling, dashboard and alerts. Never retries a POST:
+type Circuit = { retryAt: number; failures: number; generation: number; probing: boolean };
+const circuit = (): Circuit => ({ retryAt: 0, failures: 0, generation: 0, probing: false });
+
+export class TelegramRetryError extends Error {
+  constructor(message: string, readonly retryAfterMs: number) {
+    super(message);
+    this.name = "TelegramRetryError";
+  }
+}
+
+/** Separate failure circuits for commands, dashboard and message delivery.
+ * Telegram's explicit flood limits remain shared across all three.
+ * Never retries a POST:
  * a timeout can happen after Telegram accepted a message. The durable outbox
  * owns notification retries, not this transport. */
 export class TelegramHttpClient {
-  private retryAt = 0;
-  private failures = 0;
-  private generation = 0;
-  private probing = false;
+  private rateLimitUntil = 0;
+  private readonly polling = circuit();
+  private readonly dashboard = circuit();
+  private readonly delivery = circuit();
 
   constructor(
     private readonly token: () => string,
@@ -30,13 +42,16 @@ export class TelegramHttpClient {
   async call<T>(method: string, body?: Record<string, unknown> | FormData): Promise<TelegramResult<T>> {
     const token = this.token();
     if (!token) throw new Error("Telegram bot token is not configured.");
-    if (this.now() < this.retryAt || this.probing) {
-      const seconds = Math.max(1, Math.ceil((this.retryAt - this.now()) / 1000));
-      throw new Error(`Telegram connection paused; retry after ${seconds}`);
+    const lane = method === "getUpdates" ? this.polling :
+      method === "sendMessage" ? this.delivery : this.dashboard;
+    const retryAt = Math.max(lane.retryAt, this.rateLimitUntil);
+    if (this.now() < retryAt || lane.probing) {
+      const delay = Math.max(1000, retryAt - this.now());
+      throw new TelegramRetryError(`Telegram connection paused; retry after ${Math.ceil(delay / 1000)}`, delay);
     }
-    const probe = this.failures > 0;
-    if (probe) this.probing = true;
-    const generation = this.generation;
+    const probe = lane.failures > 0;
+    if (probe) lane.probing = true;
+    const generation = lane.generation;
     const multipart = body instanceof FormData;
     try {
       let response: Response;
@@ -52,23 +67,29 @@ export class TelegramHttpClient {
           await response.body?.cancel().catch(() => {});
           throw new Error("Telegram temporary server failure");
         }
-        result = await response.json() as TelegramResult<T>;
+        try {
+          result = await response.json() as TelegramResult<T>;
+        } catch (error) {
+          // Even a non-JSON flood response must pause every lane.
+          if (response.status !== 429) throw error;
+          result = { ok: false };
+        }
       } catch (error) {
-        this.failures = Math.min(5, this.failures + 1);
-        this.retryAt = Math.max(this.retryAt, this.now() + Math.min(60_000, 5000 * 2 ** (this.failures - 1)));
-        this.generation++;
+        lane.failures = Math.min(5, lane.failures + 1);
+        lane.retryAt = Math.max(lane.retryAt, this.now() + Math.min(60_000, 5000 * 2 ** (lane.failures - 1)));
+        lane.generation++;
         // Never propagate fetch URLs: they contain the bot token.
         const code = error instanceof Error && error.name === "TimeoutError" ? "timeout" : "connection or response failure";
-        throw new Error(`Telegram ${code} (${method}); retry after ${Math.ceil((this.retryAt - this.now()) / 1000)}`);
+        const delay = lane.retryAt - this.now();
+        throw new TelegramRetryError(`Telegram ${code} (${method}); retry after ${Math.ceil(delay / 1000)}`, delay);
       }
       if (response.status === 429 || result.parameters?.retry_after) {
         const seconds = Number(result.parameters?.retry_after);
-        const delay = Math.max(1000, Number.isFinite(seconds) ? seconds * 1000 : 0,
-          retryAfterMs(response.headers.get("retry-after"), this.now()) ?? 30_000);
-        this.retryAt = Math.max(this.retryAt, this.now() + delay);
-        this.failures = Math.min(5, this.failures + 1);
-        this.generation++;
-        throw new Error(`Telegram rate limit; retry after ${Math.ceil(delay / 1000)}`);
+        const headerDelay = retryAfterMs(response.headers.get("retry-after"), this.now());
+        const delay = Math.max(1000, Number.isFinite(seconds) && seconds > 0 ? seconds * 1000 :
+          headerDelay ?? 30_000, headerDelay ?? 0);
+        this.rateLimitUntil = Math.max(this.rateLimitUntil, this.now() + delay);
+        throw new TelegramRetryError(`Telegram rate limit; retry after ${Math.ceil(delay / 1000)}`, delay);
       }
       if (!response.ok || !result.ok) {
         // Description can include user-supplied content; log only status/code.
@@ -78,13 +99,13 @@ export class TelegramHttpClient {
           .find(text => result.description?.toLowerCase().includes(text));
         throw new Error(known ?? `Telegram request rejected (HTTP ${response.status})`);
       }
-      if (this.generation === generation) {
-        this.failures = 0;
-        this.retryAt = 0;
+      if (lane.generation === generation) {
+        lane.failures = 0;
+        lane.retryAt = 0;
       }
       return result;
     } finally {
-      if (probe) this.probing = false;
+      if (probe) lane.probing = false;
     }
   }
 }

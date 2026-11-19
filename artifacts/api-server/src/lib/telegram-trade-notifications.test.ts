@@ -9,6 +9,7 @@ import type { RoiRollup } from "./roi-ranking";
 import { shouldCaptureTrade } from "./kalshi-trade-bands";
 import { buildSignalEvidence, SIGNAL_FEE_ASSUMPTIONS } from "./signal-evaluation";
 import { feeModel } from "./kalshi-fees";
+import { TelegramHttpClient, TelegramRetryError } from "./telegram-http";
 
 const clock = new Date("2026-10-22T21:00:00Z");
 const settings = { enabled: true, chatId: "notification-test" };
@@ -67,6 +68,7 @@ class MemoryNotifications implements NotificationStore {
   }
 }
 class FakeNotificationsApi implements NotificationApi {
+  observe?: NotificationApi["observe"];
   calls: { method: string; body: Record<string, unknown> }[] = [];
   id = 900;
   failSend: string | null = null;
@@ -86,7 +88,7 @@ class FakeNotificationsApi implements NotificationApi {
     if (this.failContext) throw new Error("Market metadata temporarily unavailable.");
     return { eventTitle: "New England & Chicago", marketTitle: "Chicago wins" };
   }
-  async request<T>(method: string, body: Record<string, unknown>) {
+  async request<T>(method: string, body: Record<string, unknown>): Promise<{ result?: T }> {
     this.calls.push({ method, body });
     await new Promise(resolve => setTimeout(resolve, 1));
     if (method === "sendMessage") {
@@ -185,6 +187,99 @@ test("delivery failure preserves the previous notice and persists a retry", asyn
   await worker.tick(settings);
   assert.ok(store.row(settings.chatId, "trade-2").sentAt);
   assert.ok(store.row(settings.chatId, "trade-1").removedAt);
+});
+
+test("a market waiting for metadata does not block an eligible alert behind it", async () => {
+  const { store, api, worker } = setup();
+  store.add({ ...sample("missing-details"), ticker: "MISSING" });
+  store.add(sample("ready"));
+  api.context = async (ticker?: string) => {
+    if (ticker === "MISSING") throw new Error("Market metadata temporarily unavailable.");
+    return { eventTitle: "New England & Chicago", marketTitle: "Chicago wins" };
+  };
+  await worker.tick(settings);
+  assert.equal(store.row(settings.chatId, "missing-details").sentAt, undefined);
+  assert.equal(store.row(settings.chatId, "missing-details").attempts, 1);
+  assert.ok(store.row(settings.chatId, "ready").sentAt);
+  assert.equal(api.calls.filter(call => call.method === "sendMessage").length, 1);
+});
+
+test("ROI lookup failure for one market retries it without blocking the next market", async () => {
+  const { store, api, worker } = setup();
+  store.add({ ...sample("no-roi-yet"), ticker: "RETRY" });
+  store.add(sample("ready"));
+  const lookup = api.roi.bind(api);
+  api.roi = async (trade, basis) => {
+    if (trade.ticker === "RETRY") throw new Error("Historical ROI temporarily unavailable.");
+    return lookup(trade, basis);
+  };
+  await worker.tick(settings);
+  assert.equal(store.row(settings.chatId, "no-roi-yet").skippedAt, undefined);
+  assert.equal(store.row(settings.chatId, "no-roi-yet").attempts, 1);
+  assert.ok(store.row(settings.chatId, "ready").sentAt);
+});
+
+test("decision diagnostics distinguish absent history from failed eligibility and eligible sends", async () => {
+  const { store, api, worker } = setup();
+  const reasons: string[] = [];
+  api.observe = event => {
+    if (event.stage === "decision" && event.reason) reasons.push(event.reason);
+  };
+  store.add(sample("no-history"));
+  api.roiResult = null;
+  await worker.tick(settings);
+  store.add(sample("below-cutoff"));
+  api.roiResult = grossRoi({ roiPct: 14.99, games: 100, trades: 100 });
+  await worker.tick(settings);
+  store.add(sample("good"));
+  api.roiResult = grossRoi({ roiPct: 15, games: 50, trades: 50 });
+  await worker.tick(settings);
+  assert.deepEqual(reasons, ["no_comparable_history", "roi_or_sample", "eligible"]);
+});
+
+test("transport retry delay is not multiplied by prior queue failures", async () => {
+  const { store, api, worker, advance } = setup();
+  store.add({ ...sample(), attempts: 20 });
+  const original = api.request.bind(api);
+  let fail = true;
+  api.request = async (method, body) => {
+    if (fail) { fail = false; throw new TelegramRetryError("Telegram connection paused; retry after 5", 5000); }
+    return original(method, body);
+  };
+  await worker.tick(settings);
+  assert.equal(store.row(settings.chatId, "trade-1").retryAt.getTime(), clock.getTime() + 5000);
+  advance(5000);
+  await worker.tick(settings);
+  assert.ok(store.row(settings.chatId, "trade-1").sentAt);
+});
+
+test("a graph timeout cannot suppress a real worker send; flood limits still preserve the old notice", async () => {
+  const { store, api, worker, now, advance } = setup();
+  let mode: "graph-fails" | "limited" | "healthy" = "graph-fails";
+  let sends = 0;
+  const transport = new TelegramHttpClient(() => "fake", async url => {
+    if (String(url).endsWith("/editMessageMedia")) throw new DOMException("timeout", "TimeoutError");
+    if (mode === "limited") return Response.json({ ok: false, parameters: { retry_after: 8 } }, { status: 429 });
+    if (String(url).endsWith("/sendMessage")) sends++;
+    return Response.json({ ok: true, result: { message_id: 900 + sends } });
+  }, () => now().getTime());
+  api.request = (method, body) => transport.call(method, body);
+  await assert.rejects(transport.call("editMessageMedia", new FormData()), /timeout/);
+  store.add(sample("first"));
+  await worker.tick(settings);
+  assert.ok(store.row(settings.chatId, "first").sentAt);
+  store.add(sample("second"));
+  mode = "limited";
+  await worker.tick(settings);
+  assert.equal(store.row(settings.chatId, "first").removedAt, undefined);
+  assert.equal(store.row(settings.chatId, "second").sentAt, undefined);
+  assert.equal(sends, 1);
+  mode = "healthy";
+  advance(8000);
+  await worker.tick(settings);
+  assert.ok(store.row(settings.chatId, "second").sentAt);
+  assert.ok(store.row(settings.chatId, "first").removedAt);
+  assert.equal(sends, 2);
 });
 
 test("cleanup errors retry deletion without resending a delivered alert", async () => {

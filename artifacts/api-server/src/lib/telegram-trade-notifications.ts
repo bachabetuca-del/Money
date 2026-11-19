@@ -4,6 +4,7 @@ import { NOTIFICATION_MIN_ROI_PCT, notificationRoiBasis, qualifiesForNotificatio
 import { shouldCaptureTrade } from "./kalshi-trade-bands";
 import type { SignalEvidence } from "@workspace/api-zod";
 import { frozenNotification } from "./signal-evaluation";
+import { TelegramRetryError } from "./telegram-http";
 
 export type NotificationTrade = MarketCardTrade & { tradeId: string; ticker: string; marketUrl: string; sport?: string };
 export type NotificationJob = NotificationTrade & {
@@ -109,6 +110,7 @@ export class TelegramTradeNotifications {
         const job = await this.store.next(chatId, this.now());
         if (!job) break;
         this.observe({ stage: "dequeued", job });
+        let sendStarted = false;
         try {
           let frozen = job.evidence ? frozenNotification(job.evidence, job) : null;
           let trade = frozen?.trade ?? job;
@@ -129,9 +131,10 @@ export class TelegramTradeNotifications {
             this.observe({ stage: "roi_started", job: trade });
             const currentRoi = await this.api.roi(trade, basis);
             this.observe({ stage: "roi_complete", job: trade });
+            const accepted = qualifiesForNotificationRoi(currentRoi) && currentRoi.basis === basis;
             this.observe({ stage: "decision", job: trade, roi: currentRoi,
-              accepted: qualifiesForNotificationRoi(currentRoi) && currentRoi.basis === basis,
-              reason: "roi_or_sample" });
+              accepted, reason: accepted ? "eligible" : !currentRoi ? "no_comparable_history" :
+                currentRoi.basis !== basis ? "basis_mismatch" : "roi_or_sample" });
             if (!qualifiesForNotificationRoi(currentRoi) || currentRoi.basis !== basis) {
               await this.store.skipped(job, this.now());
               this.log("filtered", job.tradeId);
@@ -142,7 +145,10 @@ export class TelegramTradeNotifications {
               const evidence = await this.store.capture(trade, roi, this.now());
               // A final settlement or stale eligibility found before capture
               // cannot be turned into a forward signal or delivered as one.
-              if (!evidence) { await this.store.skipped(job, this.now()); continue; }
+              if (!evidence) {
+                this.observe({ stage: "decision", job: trade, accepted: false, reason: "capture_ineligible" });
+                await this.store.skipped(job, this.now()); continue;
+              }
               frozen = frozenNotification(evidence, job);
               trade = frozen.trade; roi = frozen.roi;
             }
@@ -157,6 +163,7 @@ export class TelegramTradeNotifications {
             continue;
           }
           this.observe({ stage: "send_started", job: trade });
+          sendStarted = true;
           const result = await this.api.request<{ message_id: number; date?: number }>("sendMessage", {
             chat_id: chatId,
             text: notificationText(trade, roi),
@@ -173,11 +180,18 @@ export class TelegramTradeNotifications {
         } catch (error) {
           const message = error instanceof Error ? error.message : "Notification delivery failed.";
           const requestedDelay = Number(message.match(/retry after (\d+)/i)?.[1] ?? 0) * 1000;
-          const delay = Math.max(requestedDelay, 15_000 * 2 ** Math.min(job.attempts, 5));
+          // The transport already applies bounded backoff. Do not compound it
+          // with queue attempts (including pauses where no request was made).
+          const delay = error instanceof TelegramRetryError ? Math.max(1000, error.retryAfterMs) :
+            Math.max(requestedDelay, Math.min(60_000, 15_000 * 2 ** Math.min(job.attempts, 2)));
           this.observe({ stage: "failed", job, reason: "notification_retry", retryAfterMs: delay });
           await this.store.failed(chatId, job.tradeId, message, new Date(this.now().getTime() + delay));
           this.log("failed", message);
-          break;
+          // Do not hammer a paused transport, including with cleanup calls.
+          if (error instanceof TelegramRetryError) return;
+          // Unavailable metadata/ROI for one market must not hold up others.
+          // After a send attempt, stop: acceptance can be ambiguous on timeout.
+          if (sendStarted) break;
         }
       }
       const keep = await this.store.latestMessageId(chatId);

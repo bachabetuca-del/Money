@@ -9,6 +9,12 @@ Send push-enabled short notifications for newly observed individual public sport
 
 **How to apply:** Keep the graph as one independently updated message, plus a separate brief notification with readable game/bet names and the Kalshi link. Keep dashboard creations/replacements silent as well. Evaluate the value of an individual trade, never the sum of a graph interval or multiple small trades. Do not replay the saved history to populate the notification queue.
 
+Polling and graph-refresh outages must not pause alert delivery. Only explicit Telegram flood limits should impose a shared pause.
+
+**Why:** Production showed alert retries caused by polling/graph connection pauses, even when no alert send had failed. A working menu is not proof of working notifications, and a broken graph is not proof that messages cannot be delivered.
+
+**How to apply:** Preserve failure isolation when revising transport or recovery. Respect Telegram's retry instructions across workers; never loosen ROI eligibility to compensate for delivery problems.
+
 Keep only the latest notification. Confirm and save delivery of a new notice before deleting the previous notice. Never delete the dashboard or trade history.
 
 **Why:** The user explicitly chose “Keep only the latest notification (recommended)” to restore phone alerts without restoring chat clutter.
