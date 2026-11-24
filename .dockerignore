@@ -1,0 +1,30 @@
+# Credentials and local environment files
+.env
+.env.*
+**/.env
+**/.env.*
+*.pem
+*.key
+*.p12
+*.pfx
+*.crt
+secrets/
+credentials/
+
+# Git, Replit-local state, dependencies, and build output
+.git/
+.cache/
+.local/
+node_modules/
+**/node_modules/
+dist/
+**/dist/
+coverage/
+tmp/
+temp/
+*.log
+*.tsbuildinfo
+npm-debug.log*
+pnpm-debug.log*
+yarn-error.log*
+.DS_Store

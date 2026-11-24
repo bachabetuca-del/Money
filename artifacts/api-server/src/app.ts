@@ -6,6 +6,7 @@ import { logger } from "./lib/logger";
 import { clerkMiddleware } from "@clerk/express";
 import { publishableKeyFromHost } from "@clerk/shared/keys";
 import { CLERK_PROXY_PATH, clerkProxyMiddleware, getClerkProxyHost } from "./middlewares/clerkProxyMiddleware";
+import path from "node:path";
 
 const app: Express = express();
 
@@ -42,5 +43,29 @@ app.use(
   })),
 );
 app.use("/api", router);
+
+if (process.env.SERVE_WEB === "true") {
+  const webRoot = path.resolve(
+    process.cwd(),
+    "artifacts/kalshi-sports-alerts/dist/public",
+  );
+  const webIndex = path.join(webRoot, "index.html");
+  const serveWebFiles = express.static(webRoot, { index: false });
+
+  app.use((req, res, next) => {
+    if (req.path === "/api" || req.path.startsWith("/api/")) {
+      next();
+      return;
+    }
+
+    serveWebFiles(req, res, next);
+  });
+
+  app.get(/^(?!\/api(?:\/|$)).*/, (_req, res, next) => {
+    res.sendFile(webIndex, (error) => {
+      if (error) next(error);
+    });
+  });
+}
 
 export default app;
